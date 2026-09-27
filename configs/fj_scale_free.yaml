@@ -1,0 +1,14 @@
+name: fj_scale_free
+seed: 42
+network:
+  topology: barabasi_albert
+  n: 50
+  m: 3
+opinions:
+  distribution: bimodal
+  mean: 1.2
+  std: 0.4
+baseline:
+  model: friedkin_johnsen
+  steps: 100
+  stubbornness: 1.0
