@@ -57,14 +57,72 @@ class ModelSpec(BaseModel):
     temperature: float = 0.7
 
 
+class TopicConfig(BaseModel):
+    """The statement agents take a position on. +2 = strongly support, -2 = strongly oppose."""
+
+    name: str = "euthanasia"
+    statement: str = "Euthanasia should be legal for terminally ill adults who clearly request it."
+
+
+class FeedConfig(BaseModel):
+    """How many neighbour posts an agent reads per day (Wang: a random number)."""
+
+    min_posts: int = Field(1, ge=0)
+    max_posts: int = Field(5, ge=1)
+
+
+class RecommenderConfig(BaseModel):
+    """Wang et al. §3.3: only show neighbours whose opinion is within `threshold`."""
+
+    enabled: bool = True
+    threshold: float = Field(2.0, gt=0)
+
+
+class ScorerConfig(BaseModel):
+    """Fixed classifier mapping a post to [-2, 2] (Chuang et al.). Same model for all agents."""
+
+    name: str
+    api_base: str | None = None
+    temperature: float = 0.0
+
+
+class SimulationConfig(BaseModel):
+    days: int = Field(5, gt=0)
+    feed: FeedConfig = FeedConfig()
+    recommender: RecommenderConfig = RecommenderConfig()
+    # Which value drives metrics, the recommender and the next prompt:
+    #   "self"       = the belief the agent reports (Wang et al.)
+    #   "classifier" = the scorer's rating of the agent's post (Chuang et al.)
+    opinion_source: Literal["self", "classifier"] = "self"
+    # Chuang et al.: confirmation bias must be prompted explicitly
+    bias: Literal["none", "confirmation"] = "none"
+    memory_words: int = Field(60, gt=0)
+
+
+class LLMSettings(BaseModel):
+    cache_dir: Path = Path(".cache/llm")
+    max_concurrency: int = Field(4, gt=0, description="parallel requests per provider")
+    max_tokens: int = Field(400, gt=0)
+
+
 class ExperimentConfig(BaseModel):
     name: str
     seed: int = 0
     network: NetworkConfig
     opinions: InitialOpinions = InitialOpinions()
     baseline: BaselineConfig | None = None
+    topic: TopicConfig = TopicConfig()
+    simulation: SimulationConfig = SimulationConfig()
     models: list[ModelSpec] = []
+    scorer: ScorerConfig | None = None
+    llm: LLMSettings = LLMSettings()
     output_dir: Path = Path("runs")
+
+    @model_validator(mode="after")
+    def _check_scorer(self) -> ExperimentConfig:
+        if self.simulation.opinion_source == "classifier" and self.scorer is None:
+            raise ValueError("opinion_source 'classifier' requires a `scorer` section")
+        return self
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> ExperimentConfig:

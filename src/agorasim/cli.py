@@ -1,19 +1,70 @@
-"""Command line: `agorasim baseline configs/bc_small_world.yaml`."""
+"""Command line: `agorasim run configs/quick.yaml`, `agorasim baseline ...`, `agorasim ping ...`."""
 
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 
 import typer
+from dotenv import load_dotenv
 
 from agorasim.baselines import run_baseline
 from agorasim.config import ExperimentConfig
 from agorasim.metrics import all_metrics
 from agorasim.networks import build_network, initial_opinions
-from agorasim.runs import new_run_dir, save_metrics, save_trajectory
+from agorasim.runs import RunWriter, new_run_dir, save_metrics, save_trajectory, update_meta
 
 app = typer.Typer(no_args_is_help=True, help="agorasim: LLM-agent opinion dynamics")
+load_dotenv()  # API keys from .env, if present
+
+METRIC_KEYS = ("polarization", "global_disagreement", "neighbor_correlation")
+
+
+def _print_change(first: dict, last: dict) -> None:
+    for k in METRIC_KEYS:
+        typer.echo(f"  {k:22s} {first[k]:+.3f} -> {last[k]:+.3f}")
+
+
+@app.command()
+def run(config: Path, days: int = typer.Option(None, help="override simulation.days")):
+    """Run an LLM-agent simulation from a YAML config."""
+    from agorasim.engine import Simulation
+
+    cfg = ExperimentConfig.from_yaml(config)
+    if days:
+        cfg.simulation.days = days
+    run_dir = new_run_dir(cfg)
+    writer = RunWriter(run_dir)
+    simulation = Simulation(cfg)
+    models = sorted({a.model.name for a in simulation.agents})
+    typer.echo(
+        f"{cfg.name}: {len(simulation.agents)} agents on {cfg.network.topology}, "
+        f"{cfg.simulation.days} days, models: {', '.join(models)}"
+    )
+    t0 = time.time()
+
+    def progress(day: int, m: dict) -> None:
+        typer.echo(
+            f"  day {day:3d}  pol {m['polarization']:.3f}  dis {m['global_disagreement']:.3f}  "
+            f"nci {m['neighbor_correlation']:+.3f}  errors {int(m['errors'])}  "
+            f"[{time.time() - t0:.0f}s]"
+        )
+
+    try:
+        history = asyncio.run(simulation.run(writer, progress))
+    finally:
+        writer.close()
+    c = simulation.client
+    update_meta(
+        run_dir,
+        finished=True,
+        seconds=round(time.time() - t0, 1),
+        llm_calls=c.calls,
+        cache_hits=c.cache_hits,
+    )
+    _print_change(history[0], history[-1])
+    typer.echo(f"saved to {run_dir}")
 
 
 @app.command()
@@ -34,10 +85,8 @@ def baseline(config: Path, every: int = typer.Option(10, help="metrics every N s
     save_trajectory(run_dir, traj)
     save_metrics(run_dir, rows)
 
-    first, last = rows[0], rows[-1]
     typer.echo(f"{cfg.baseline.model} on {cfg.network.topology} (N={cfg.network.n})")
-    for k in ("polarization", "global_disagreement", "neighbor_correlation"):
-        typer.echo(f"  {k:22s} {first[k]:+.3f} -> {last[k]:+.3f}")
+    _print_change(rows[0], rows[-1])
     typer.echo(f"saved to {run_dir}")
 
 
@@ -46,8 +95,10 @@ def ping(model: str, prompt: str = "In one sentence: is remote work good for soc
     """Send one prompt to any model (checks keys / endpoints)."""
     from agorasim.llm import LLMClient
 
-    resp = asyncio.run(LLMClient().complete(model, [{"role": "user", "content": prompt}]))
-    typer.echo(f"[{resp.model}{' (cached)' if resp.cached else ''}] {resp.text}")
+    resp = asyncio.run(
+        LLMClient().complete(model, [{"role": "user", "content": prompt}], use_cache=False)
+    )
+    typer.echo(f"[{resp.model}] {resp.text}")
 
 
 if __name__ == "__main__":
