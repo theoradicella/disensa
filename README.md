@@ -1,55 +1,106 @@
 # agorasim
 
-Opinion dynamics with LLM agents on social networks, where different agents run on
-**different language models**. Extends Wang et al. (COLING 2025) with a multi-model
-ensemble and individual-level trajectory inspection.
+Opinion dynamics with LLM agents on social networks, where different agents can run on
+**different language models**. It extends the Social Simulation Framework of Wang et al.
+(COLING 2025, arXiv:2409.19338), which used one LLM for every agent, with:
+
+- a **multi-model ensemble**: each agent's reasoning comes from a model you choose
+  (Claude, GPT, Grok, DeepSeek, Llama, Gemma, Mistral, Qwen, …);
+- **individual-level inspection**: every agent's reading, reasoning and posts are logged, so
+  you can trace how and why a single agent moved;
+- **network rewiring** (optional): agents unfollow people they disagree with;
+- an **interactive d3 viewer** for every run.
 
 ## Setup
 
 ```bash
-uv sync                      # core + dev tools
-uv sync --extra analysis     # + DuckDB, statsmodels, ruptures, plotting
-cp .env.example .env         # add API keys you need
+uv sync --extra analysis     # dependencies incl. analysis tools
+cp .env.example .env         # only if you use paid APIs
 ```
 
-## Usage
+For free local models, install [Ollama](https://ollama.com) and pull a few:
 
 ```bash
-uv run agorasim baseline configs/bc_small_world.yaml   # numeric baseline + metrics
-uv run agorasim ping ollama/llama3.1                   # check a model is reachable
-uv run pytest
+ollama pull llama3.2:3b && ollama pull llama3.1:8b && ollama pull qwen2.5:7b
+OLLAMA_NUM_PARALLEL=4 OLLAMA_MAX_LOADED_MODELS=3 ollama serve
+uv run agorasim ping ollama_chat/llama3.2:3b      # check it answers
 ```
 
-Runs are written to `runs/<timestamp>_<name>_s<seed>/`:
-`meta.json` (config + git commit), `trajectory.parquet` (step, agent, opinion),
-`metrics.parquet`.
+## Quick start
+
+```bash
+uv run agorasim run configs/demo_fake.yaml        # offline fake models, a few seconds
+uv run agorasim run configs/quick.yaml            # 10 agents, 5 days, Ollama, a few minutes
+uv run agorasim inspect runs/<run_dir>            # per-model behaviour + largest opinion shifts
+uv run agorasim inspect runs/<run_dir> --agent 3  # one agent's day-by-day story
+uv run agorasim viz runs/<run_dir>                # open the interactive viewer
+```
+
+| Config | What it is |
+|---|---|
+| `demo_fake.yaml`, `demo_fake_rewiring.yaml` | Offline demos (fake models); try the whole pipeline for free |
+| `quick.yaml` | Smallest real run on Ollama, for checking prompts |
+| `wang/{small_world,scale_free,random}.yaml` | Wang et al. replication, one model, 50 agents × 30 days |
+| `mixed_local.yaml` | Three open-weight models from three labs, on Ollama |
+| `mixed_api.yaml` | Claude, GPT, Grok, DeepSeek through their APIs (paid) |
+| `bc_small_world.yaml`, `fj_scale_free.yaml` | Numeric baselines (`agorasim baseline`) |
+
+`--days N` overrides the number of days for a quick try.
+
+## How a run works
+
+1. **Network**: Erdős–Rényi, Watts–Strogatz or Barabási–Albert, seeded.
+2. **Agents**: each gets a persona (gender, age, education, Big Five poles, initial
+   opinion on [-2, 2]) and a model (`assignment`: balanced, random, or clustered by community).
+3. **Day 0**: every agent writes a first post about the topic.
+4. **Each day**: an agent reads a few posts from its neighbours (optionally only those
+   within the recommender threshold), then returns its reasoning, new belief, new post and an
+   updated memory in one call. A fixed scorer model rates every post on [-2, 2].
+5. **End of day**: optional rewiring; metrics are recorded.
+
+Everything is cached on disk, so re-running the same config costs nothing.
+
+## Run outputs
+
+`runs/<timestamp>_<name>_s<seed>/`
+
+| File | Contents |
+|---|---|
+| `meta.json` | config, git commit, timing, call counts |
+| `agents.parquet` | persona, model, degree per agent |
+| `opinions.parquet` | per day and agent: self-reported belief, scorer rating, opinion used |
+| `metrics.parquet` | per day: polarization, global disagreement, neighbour correlation, per-model means |
+| `events.jsonl` | per day and agent: feed, reasoning, post, memory, raw reply, errors; rewiring events |
+| `edges.jsonl` | the network on day 0 and on every day it changed |
+| `viewer.html` | written by `agorasim viz` |
 
 ## Layout
 
 ```
 src/agorasim/
   config.py     typed YAML experiment configs (Pydantic)
-  networks.py   Erdős–Rényi / Watts–Strogatz / Barabási–Albert, initial opinions
+  networks.py   graphs and initial opinions
   baselines.py  DeGroot, bounded confidence, Deffuant, Friedkin–Johnsen
   metrics.py    polarization, global disagreement, neighbour correlation (Wang et al. §4.2)
-  llm.py        one async client for every provider (LiteLLM) + disk cache + fake backend
-  runs.py       run directories and Parquet output
+  personas.py   Wang-style personas
+  prompts.py    every prompt, in one place
+  llm.py        one async client for all providers (LiteLLM) + cache + JSON repair
+  fake_llm.py   deterministic offline backend
+  engine.py     the simulation loop
+  ensemble.py   model assignment
+  rewiring.py   unfollow/follow dynamics
+  analysis.py   timelines, opinion shifts, per-model summaries, change points
+  export.py     run → d3 viewer
   cli.py        `agorasim` command
 ```
 
-## Models
-
-Any LiteLLM model string works: `anthropic/…`, `openai/…`, `xai/…`, `deepseek/…`,
-`ollama/…` (local), or `openai/<model>` with `api_base` pointing at a vLLM server (INDACO).
-`fake/<anything>` is a deterministic offline backend for tests.
-
 ## Roadmap
 
-- [x] M0 — skeleton, configs, LLM client, caching
-- [x] M1 — networks, numeric baselines, metrics
-- [ ] M2 — single-model LLM replication of Wang et al. (personas, memory, classifier scoring)
-- [ ] M3 — multi-model ensemble
-- [ ] M4 — rewiring + recommender
-- [ ] M5 — individual trajectory tooling
-- [ ] M6 — INDACO: vLLM + SLURM sweeps
-- [ ] M7 — d3 visualization
+- [x] M0 skeleton, configs, LLM client
+- [x] M1 networks, numeric baselines, metrics
+- [x] M2 LLM agents, Wang et al. loop, scorer
+- [x] M3 multi-model ensemble
+- [x] M4 rewiring
+- [x] M5 individual trajectory tooling
+- [x] M7 d3 viewer
+- [ ] M6 INDACO: vLLM + SLURM sweeps (point `api_base` at a vLLM server)

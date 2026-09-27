@@ -1,6 +1,6 @@
 [project]
 name = "agorasim"
-version = "0.0.1"
+version = "0.1.0"
 description = "Multi-model LLM-agent opinion dynamics on social networks"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,6 +19,9 @@ dependencies = [
     "tenacity>=8.2",
     "python-dotenv>=1.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/theoradicella/agorasim"
 
 [project.optional-dependencies]
 analysis = [
