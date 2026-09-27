@@ -89,3 +89,13 @@ def test_invalid_config_is_a_400(server):
 def test_unknown_run_is_a_404(server):
     assert call(f"{server}/api/runs/nope")[0] == 404
     assert call(f"{server}/api/runs/..%2Fetc")[0] == 404
+
+
+def test_landing_and_lab_pages(server):
+    with urllib.request.urlopen(f"{server}/") as r:
+        landing = r.read().decode()
+    with urllib.request.urlopen(f"{server}/lab") as r:
+        lab = r.read().decode()
+    assert 'href="/lab"' in landing and "<canvas" in landing
+    assert 'id="form"' in lab
+    assert "agorasim" not in landing.lower()

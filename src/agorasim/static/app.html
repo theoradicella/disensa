@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>agorasim</title>
+<title>Opinion Lab</title>
 <script src="/d3.min.js"></script>
 <style>
 :root {
@@ -45,8 +45,10 @@ aside {
   background: var(--surface); border-right: 1px solid var(--line);
   height: 100vh; position: sticky; top: 0; display: flex; flex-direction: column;
 }
-.brand { padding: 16px 18px 10px; display: flex; align-items: baseline; gap: 8px; }
+.brand { padding: 14px 16px 10px; display: flex; align-items: baseline; gap: 8px; }
 .brand b { font-size: 18px; letter-spacing: -0.01em; }
+.brand .home { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; align-self: center; }
+.brand .home:hover { background: var(--accent-soft); }
 .brand span { color: var(--muted); font-size: 12px; }
 .tabs { display: flex; gap: 4px; padding: 0 12px 10px; border-bottom: 1px solid var(--line); }
 .tab { flex: 1; background: none; border: 0; padding: 7px 8px; border-radius: 8px; color: var(--ink-2); }
@@ -163,7 +165,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 <body>
 <div class="shell">
   <aside>
-    <div class="brand"><b>agorasim</b><span>LLM-agent opinion dynamics</span></div>
+    <div class="brand"><a class="home" href="/" aria-label="Back to the start page"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="4" cy="5" r="2" fill="#2a78d6"/><circle cx="13" cy="4" r="1.6" fill="#2a78d6" opacity=".7"/><circle cx="9" cy="10" r="2.2" fill="#1c5cab"/><circle cx="4" cy="14" r="1.4" fill="#2a78d6" opacity=".6"/><circle cx="14" cy="13" r="1.8" fill="#2a78d6" opacity=".85"/></svg></a><b>Lab</b><span>LLM-agent opinion dynamics</span></div>
     <div class="tabs" role="tablist">
       <button class="tab" id="tab-new" role="tab" aria-selected="true">New run</button>
       <button class="tab" id="tab-runs" role="tab" aria-selected="false">Runs</button>
@@ -1023,7 +1025,7 @@ window.AGORASIM_DATA = /*__AGORASIM_DATA__*/null;
   });
 
   async function init() {
-    try { OPTIONS = await api("/api/options"); } catch (e) { $("form-error").textContent = "Cannot reach the agorasim server. Start it with `uv run agorasim app`."; }
+    try { OPTIONS = await api("/api/options"); } catch (e) { $("form-error").textContent = "Cannot reach the local server. Start it again from Terminal."; }
     if (OPTIONS.ollama_error) { $("ollama-note").hidden = false; $("ollama-note").textContent = OPTIONS.ollama_error + " Offline test models still work."; }
     OPTIONS.presets.forEach((p) => $("preset").appendChild(new Option(p.file.replace(/\.yaml$/, ""), p.file)));
     const start = OPTIONS.presets.find((p) => p.file === "demo_camps.yaml");

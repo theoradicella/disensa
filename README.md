@@ -32,6 +32,8 @@ uv run agorasim ping ollama_chat/llama3.2:3b      # check it answers
 uv run agorasim app          # opens http://127.0.0.1:8765
 ```
 
+The start page (a swarm of agents that scatters from your cursor) leads to the lab at `/lab`.
+
 Pick a preset or set everything by hand (engine, topology, initial opinions, models,
 recommender, rewiring, numeric algorithm), press **Run simulation**, and watch it live.
 Nodes are shaded from pale blue (oppose) to deep blue (support) and drift left to right with
