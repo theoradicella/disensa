@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Opinion Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
 <style>
 :root {
   color-scheme: light;
@@ -16,7 +19,7 @@
 html, body { height: 100%; margin: 0; }
 body {
   min-height: 100vh; background: var(--page); overflow: hidden;
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 16px/1.5 "Geist", "Helvetica Neue", Arial, sans-serif;
 }
 canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 .layout {
@@ -26,27 +29,31 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 /* the sphere is drawn on the canvas, centred on this box */
 .ball { width: min(62vh, 78vw); aspect-ratio: 1; max-width: 100%; }
 .enter {
-  pointer-events: auto; display: inline-flex; align-items: center; gap: 12px;
-  border: 0; border-radius: 999px; padding: 15px 30px 15px 32px;
-  background: var(--accent); color: #fff; font: 600 17px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
-  letter-spacing: 0.01em; cursor: pointer; text-decoration: none;
-  box-shadow: 0 10px 30px rgba(28, 92, 171, 0.25);
-  transition: transform .25s ease, background .2s ease, box-shadow .25s ease;
+  pointer-events: auto; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 184px; padding: 14px 28px; border-radius: 6px; border: 1px solid #0d366b;
+  background: #104281; color: #fff; text-decoration: none; cursor: pointer;
+  font: 500 15px/1 "Geist", "Helvetica Neue", Arial, sans-serif; letter-spacing: 0.02em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 1px 2px rgba(13, 54, 107, 0.2),
+    0 8px 24px -8px rgba(13, 54, 107, 0.35);
+  transition: background .18s ease, box-shadow .18s ease, transform .18s ease;
 }
-.enter:hover { background: var(--accent-hover); transform: translateY(-2px); box-shadow: 0 16px 40px rgba(28, 92, 171, 0.32); }
-.enter:focus-visible { outline: 3px solid #0b0b0b; outline-offset: 4px; }
-.enter .arrow { transition: transform .25s ease; }
-.enter:hover .arrow { transform: translateX(4px); }
+.enter:hover {
+  background: #1c5cab;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(13, 54, 107, 0.2),
+    0 12px 28px -8px rgba(13, 54, 107, 0.45);
+}
+.enter:active { transform: translateY(1px); }
+.enter:focus-visible { outline: 2px solid #0b0b0b; outline-offset: 3px; }
 .fade { position: fixed; inset: 0; background: var(--page); opacity: 0; pointer-events: none; transition: opacity .45s ease; }
 .leaving .fade { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .enter, .enter .arrow, .fade { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .enter, .fade { transition: none; } }
 </style>
 </head>
 <body>
 <canvas id="swarm" aria-hidden="true"></canvas>
 <div class="layout">
   <div class="ball" id="ball"></div>
-  <a class="enter" id="enter" href="/lab">Enter the lab <span class="arrow" aria-hidden="true">→</span></a>
+  <a class="enter" id="enter" href="/lab">Enter the lab</a>
 </div>
 <div class="fade" aria-hidden="true"></div>
 
