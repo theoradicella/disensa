@@ -101,5 +101,68 @@ def ping(model: str, prompt: str = "In one sentence: is remote work good for soc
     typer.echo(f"[{resp.model}] {resp.text}")
 
 
+@app.command()
+def inspect(
+    run_dir: Path,
+    agent: int = typer.Option(None, help="show one agent's day-by-day story"),
+    min_delta: float = typer.Option(0.5, help="smallest opinion change counted as a shift"),
+    top: int = typer.Option(10, help="how many of the largest shifts to list"),
+    csv: bool = typer.Option(False, help="also write shifts.csv / model_summary.csv"),
+):
+    """Inspect a finished run: per-model behaviour and the largest opinion shifts, or one agent."""
+    import pandas as pd
+
+    from agorasim.analysis import (
+        agent_timeline,
+        change_points,
+        load_run,
+        model_summary,
+        opinion_shifts,
+    )
+
+    pd.set_option("display.width", 160, "display.max_colwidth", 80)
+    run = load_run(run_dir)
+
+    if agent is not None:
+        a = run.agents[run.agents["agent"] == agent].iloc[0]
+        typer.echo(
+            f"Agent {agent}: {a['age']}-year-old {a['gender']}, {a['education']}, "
+            f"model {a['model']}"
+        )
+        tl = agent_timeline(run, agent)
+        cps = change_points(tl["opinion"].to_numpy())
+        for _, r in tl.iterrows():
+            flag = "  <- change point" if r["day"] in cps else ""
+            fm = (
+                ""
+                if pd.isna(r["feed_mean"])
+                else f" read {r['read_from']} (mean {r['feed_mean']:+.2f})"
+            )
+            typer.echo(f"\nday {r['day']:3d}  opinion {r['opinion']:+.2f}{fm}{flag}")
+            if r["reasoning"]:
+                typer.echo(f"  thinks: {r['reasoning']}")
+            typer.echo(f"  posts:  {r['post']}")
+            if r["error"]:
+                typer.echo(f"  ERROR:  {r['error']}")
+        return
+
+    m = run.metrics
+    typer.echo(f"{run.meta['config']['name']}: {len(run.agents)} agents, {run.days} days")
+    _print_change(m.iloc[0].to_dict(), m.iloc[-1].to_dict())
+    summary = model_summary(run, min_delta)
+    typer.echo("\nPer model:")
+    typer.echo(summary.round(3).to_string(index=False))
+    shifts = opinion_shifts(run, min_delta)
+    typer.echo(f"\n{len(shifts)} shifts of at least {min_delta}; largest {top}:")
+    if len(shifts):
+        big = shifts.reindex(shifts["delta"].abs().sort_values(ascending=False).index).head(top)
+        cols = ["day", "agent", "model", "before", "after", "direction", "n_read", "reasoning"]
+        typer.echo(big[cols].round(2).to_string(index=False))
+    if csv:
+        shifts.to_csv(run.path / "shifts.csv", index=False)
+        summary.to_csv(run.path / "model_summary.csv", index=False)
+        typer.echo(f"\nwrote shifts.csv and model_summary.csv to {run.path}")
+
+
 if __name__ == "__main__":
     app()
