@@ -1,8 +1,9 @@
-"""Turn a finished run into the data the d3 viewer needs, and write a self-contained viewer.
+"""Turn a run into the data the viewer needs, and write a self-contained viewer file.
 
-`agorasim viz <run>` writes <run>/viewer.html: one file with the run's data embedded, so it
-opens straight from disk (no server). Node positions are computed once here from the day-0
-network (seeded), so the layout stays put while opinions and edges change over the days.
+The app (static/app.html) fetches this payload from the local server. `agorasim viz <run>`
+instead writes <run>/viewer.html: the same page with d3 and the run's data embedded, so it
+opens straight from disk, offline, with no server. `positions` is a seeded starting layout;
+the page then runs a live force layout on top of it.
 """
 
 from __future__ import annotations
@@ -49,6 +50,8 @@ def build_payload(run: RunData) -> dict:
 
     posts: list[list[dict | None]] = [[None] * len(agents) for _ in range(run.days + 1)]
     for r in run.posts.itertuples(index=False):
+        if int(r.day) > run.days:  # a live run can log posts before that day's opinions
+            continue
         posts[int(r.day)][int(r.agent)] = {
             "post": r.post or "",
             "reasoning": r.reasoning or "",
@@ -68,7 +71,9 @@ def build_payload(run: RunData) -> dict:
 
     return {
         "name": cfg["name"],
-        "topic": cfg.get("topic", {}).get("statement", ""),
+        "topic": ""
+        if run.meta.get("engine") == "numeric"
+        else cfg.get("topic", {}).get("statement", ""),
         "topology": cfg["network"]["topology"],
         "seed": cfg["seed"],
         "days": run.days,
@@ -101,8 +106,11 @@ def _embed(payload: dict) -> str:
 
 def write_viewer(run_dir: str | Path) -> Path:
     run = load_run(run_dir)
-    template = resources.files("agorasim").joinpath("viewer.html").read_text(encoding="utf-8")
-    html = template.replace("/*__AGORASIM_DATA__*/null", _embed(build_payload(run)))
+    static = resources.files("agorasim").joinpath("static")
+    template = static.joinpath("app.html").read_text(encoding="utf-8")
+    d3_js = static.joinpath("d3.min.js").read_text(encoding="utf-8")
+    html = template.replace('<script src="/d3.min.js"></script>', f"<script>{d3_js}</script>", 1)
+    html = html.replace("/*__AGORASIM_DATA__*/null", _embed(build_payload(run)), 1)
     out = Path(run_dir) / "viewer.html"
     out.write_text(html, encoding="utf-8")
     return out

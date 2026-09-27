@@ -26,7 +26,19 @@ OLLAMA_NUM_PARALLEL=4 OLLAMA_MAX_LOADED_MODELS=3 ollama serve
 uv run agorasim ping ollama_chat/llama3.2:3b      # check it answers
 ```
 
-## Quick start
+## The app
+
+```bash
+uv run agorasim app          # opens http://127.0.0.1:8765
+```
+
+Pick a preset or set everything by hand (engine, topology, initial opinions, models,
+recommender, rewiring, numeric algorithm), press **Run simulation**, and watch it live.
+Nodes are shaded from pale blue (oppose) to deep blue (support) and drift left to right with
+their opinion, so camps separate on screen. The **Runs** tab lists past runs to replay.
+Start with the `demo_camps` preset: offline, a few seconds.
+
+## Command line
 
 ```bash
 uv run agorasim run configs/demo_fake.yaml        # offline fake models, a few seconds
@@ -38,7 +50,9 @@ uv run agorasim viz runs/<run_dir>                # open the interactive viewer
 
 | Config | What it is |
 |---|---|
+| `demo_camps.yaml` | Offline demo where the population splits into camps |
 | `demo_fake.yaml`, `demo_fake_rewiring.yaml` | Offline demos (fake models); try the whole pipeline for free |
+| `numeric_bc.yaml` | Classic bounded confidence, opens in the app like any run |
 | `quick.yaml` | Smallest real run on Ollama, for checking prompts |
 | `wang/{small_world,scale_free,random}.yaml` | Wang et al. replication, one model, 50 agents × 30 days |
 | `mixed_local.yaml` | Three open-weight models from three labs, on Ollama |
@@ -72,7 +86,7 @@ Everything is cached on disk, so re-running the same config costs nothing.
 | `metrics.parquet` | per day: polarization, global disagreement, neighbour correlation, per-model means |
 | `events.jsonl` | per day and agent: feed, reasoning, post, memory, raw reply, errors; rewiring events |
 | `edges.jsonl` | the network on day 0 and on every day it changed |
-| `viewer.html` | written by `agorasim viz` |
+| `viewer.html` | written by `agorasim viz`: one offline file with the viewer and data |
 
 ## Layout
 
@@ -90,7 +104,10 @@ src/agorasim/
   ensemble.py   model assignment
   rewiring.py   unfollow/follow dynamics
   analysis.py   timelines, opinion shifts, per-model summaries, change points
-  export.py     run → d3 viewer
+  numeric.py    numeric baselines in the run format
+  export.py     run → viewer data / offline viewer file
+  app.py        local web app server
+  static/       the app page + vendored d3
   cli.py        `agorasim` command
 ```
 
@@ -103,4 +120,5 @@ src/agorasim/
 - [x] M4 rewiring
 - [x] M5 individual trajectory tooling
 - [x] M7 d3 viewer
+- [x] Web app: configure, run and watch simulations live
 - [ ] M6 INDACO: vLLM + SLURM sweeps (point `api_base` at a vLLM server)

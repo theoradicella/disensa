@@ -164,6 +164,17 @@ def inspect(
         typer.echo(f"\nwrote shifts.csv and model_summary.csv to {run.path}")
 
 
+@app.command(name="app")
+def app_cmd(
+    port: int = typer.Option(8765, help="port on 127.0.0.1"),
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="open it in your browser"),
+):
+    """Open the web app: configure runs, start them, and watch them live."""
+    from agorasim.app import serve
+
+    serve(port=port, open_browser=open_browser)
+
+
 @app.command()
 def viz(
     run_dir: Path,

@@ -44,7 +44,8 @@ def test_viewer_embeds_data_safely(tmp_path):
     out = write_viewer(run_dir)
     html = out.read_text()
     assert "/*__AGORASIM_DATA__*/null" not in html
-    m = re.search(r"const DATA = (.*?);\n", html, re.S)
+    m = re.search(r"window.AGORASIM_DATA = (.*?);\n", html, re.S)
     assert json.loads(m.group(1))["name"] == "v"
-    # a post containing </script> must not break out of the script tag
-    assert html.count("</script>") == 2
+    # model text containing </script> must not break out of the script tag
+    assert html.count("</script>") == html.count("<script")
+    assert 'src="/d3.min.js"' not in html  # d3 inlined, so the file works offline

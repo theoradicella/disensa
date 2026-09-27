@@ -52,7 +52,12 @@ class RunData:
 
 def load_run(path: str | Path) -> RunData:
     path = Path(path)
-    events = [json.loads(line) for line in open(path / "events.jsonl", encoding="utf-8")]
+    events = []
+    for line in open(path / "events.jsonl", encoding="utf-8"):
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:  # a run still in progress may end mid-line
+            break
     posts = pd.DataFrame([e for e in events if e.get("type", "post") == "post"])
     rewires = pd.DataFrame(
         [e for e in events if e.get("type") == "rewire"],
@@ -60,7 +65,10 @@ def load_run(path: str | Path) -> RunData:
     )
     snapshots = []
     for line in open(path / "edges.jsonl", encoding="utf-8"):
-        s = json.loads(line)
+        try:
+            s = json.loads(line)
+        except json.JSONDecodeError:
+            break
         snapshots.append((s["day"], [tuple(e) for e in s["edges"]]))
     return RunData(
         path=path,

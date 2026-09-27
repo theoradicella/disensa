@@ -42,8 +42,11 @@ src/agorasim/
   ensemble.py   model assignment strategies
   rewiring.py   unfollow/follow network dynamics
   analysis.py   loading runs, trajectories, shift detection and attribution
-  export.py     run → JSON, embedded into viewer.html (the d3 viewer)
-  viewer.html   single-file d3 viewer template (model text via textContent only)
+  numeric.py    numeric baselines written in the run format (so they open in the app)
+  export.py     run → JSON for the page; `viz` embeds it (and d3) into one offline file
+  app.py        `agorasim app`: local stdlib HTTP server + JSON API, runs in threads
+  static/       app.html (the whole UI: config form, runs list, viewer) + vendored d3.min.js;
+                model text is untrusted: insert with textContent only
   cli.py        `agorasim` command
 ```
 
@@ -56,7 +59,8 @@ uv run agorasim run configs/demo_fake.yaml     # offline, seconds
 uv run agorasim run configs/quick.yaml         # Ollama, minutes
 uv run agorasim inspect runs/<run_dir>         # per-model table + largest opinion shifts
 uv run agorasim inspect runs/<run_dir> --agent 7
-uv run agorasim viz runs/<run_dir>             # open the d3 viewer
+uv run agorasim app                            # web app: configure, run, watch live
+uv run agorasim viz runs/<run_dir>             # single offline viewer file for one run
 ```
 
 ## Not done yet

@@ -9,6 +9,7 @@ Behaviour is chosen by the model name: fake/<behaviour>
   conformist   moves strongly towards everyone it reads
   stubborn     barely moves
   contrarian   moves away from what it reads
+  tribal       only listens to posts within 0.7, so the population splits into camps
   anything else  bounded confidence (only listens to posts within 1.5)
 """
 
@@ -26,6 +27,7 @@ BEHAVIOURS = {  # name: (mu, epsilon)
     "conformist": (0.5, 4.0),
     "stubborn": (0.05, 4.0),
     "contrarian": (-0.2, 4.0),
+    "tribal": (0.35, 0.7),  # only listens to people who already agree: splits into camps
 }
 DEFAULT = (0.3, 1.5)
 
