@@ -164,5 +164,21 @@ def inspect(
         typer.echo(f"\nwrote shifts.csv and model_summary.csv to {run.path}")
 
 
+@app.command()
+def viz(
+    run_dir: Path,
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="open it in your browser"),
+):
+    """Write <run>/viewer.html (the d3 viewer, data embedded) and open it."""
+    import webbrowser
+
+    from agorasim.export import write_viewer
+
+    out = write_viewer(run_dir)
+    typer.echo(f"wrote {out}")
+    if open_browser:
+        webbrowser.open(out.resolve().as_uri())
+
+
 if __name__ == "__main__":
     app()
