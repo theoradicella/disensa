@@ -110,3 +110,25 @@ async def test_bad_model_output_is_logged_not_fatal(tmp_path):
     await sim.run()
     assert np.allclose(sim.opinions(), before)  # beliefs unchanged
     assert sim.day_metrics()["errors"] == 20 * (cfg.simulation.days + 1)
+
+
+async def test_rewiring_run_logs_edges_and_conserves_them(tmp_path):
+    cfg = make_cfg(
+        tmp_path,
+        simulation={
+            "days": 6,
+            "recommender": {"enabled": False},
+            "rewiring": {"enabled": True, "probability": 0.5, "unfollow_threshold": 0.8},
+        },
+    )
+    run_dir = new_run_dir(cfg)
+    writer = RunWriter(run_dir)
+    sim = Simulation(cfg)
+    m0 = sim.graph.number_of_edges()
+    history = await sim.run(writer)
+    writer.close()
+    assert sim.graph.number_of_edges() == m0
+    assert sum(h["rewired"] for h in history) > 0
+    snapshots = [json.loads(line) for line in open(run_dir / "edges.jsonl")]
+    assert snapshots[0]["day"] == 0 and len(snapshots) > 1
+    assert all(len(s["edges"]) == m0 for s in snapshots)

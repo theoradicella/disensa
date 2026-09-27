@@ -34,6 +34,7 @@ from agorasim.prompts import (
     system_prompt,
     update_prompt,
 )
+from agorasim.rewiring import rewire_step
 from agorasim.runs import RunWriter
 
 
@@ -84,6 +85,8 @@ class Simulation:
         ]
         self.client = client or LLMClient(cfg.llm.cache_dir, cfg.llm.max_concurrency)
         self.day = 0
+        self.rewired = 0
+        self.rewire_rng = np.random.default_rng(cfg.seed + 3_000)
         self.writer: RunWriter | None = None
 
     # ------------------------------------------------------------------ helpers
@@ -160,6 +163,7 @@ class Simulation:
         ops = self.opinions()
         m = all_metrics(self.graph, ops)
         m["errors"] = sum(a.errors for a in self.agents)
+        m["rewired"] = self.rewired
         models = [a.model for a in self.agents]
         if len({x.name for x in models}) > 1:
             m["model_homophily"] = model_homophily(self.graph, models)
@@ -190,6 +194,7 @@ class Simulation:
                 self.writer.event(
                     {
                         "day": 0,
+                        "type": "post",
                         "agent": a.id,
                         "model": a.model.name,
                         "feed": [],
@@ -249,6 +254,7 @@ class Simulation:
                 self.writer.event(
                     {
                         "day": self.day,
+                        "type": "post",
                         "agent": a.id,
                         "model": a.model.name,
                         "feed": [{"author": j, "post": p} for j, p in feed],
@@ -266,7 +272,24 @@ class Simulation:
         self._record_state()
 
     def after_day(self) -> None:
-        """Hook for end-of-day network changes (rewiring)."""
+        """End-of-day network changes: opinion-driven rewiring, if enabled."""
+        self.rewired = 0
+        if not self.sim.rewiring.enabled:
+            return
+        changes = rewire_step(self.graph, self.opinions(), self.sim.rewiring, self.rewire_rng)
+        self.rewired = len(changes)
+        if changes and self.writer:
+            self.writer.edges(self.day, sorted(self.graph.edges()))
+            for c in changes:
+                self.writer.event(
+                    {
+                        "day": self.day,
+                        "type": "rewire",
+                        "agent": c.agent,
+                        "dropped": c.dropped,
+                        "added": c.added,
+                    }
+                )
 
     async def run(
         self, writer: RunWriter | None = None, progress: Callable[[int, dict], None] | None = None

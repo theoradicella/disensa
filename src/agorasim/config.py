@@ -86,10 +86,21 @@ class ScorerConfig(BaseModel):
     temperature: float = 0.0
 
 
+class RewiringConfig(BaseModel):
+    """End-of-day unfollow/follow dynamics (see rewiring.py). Off by default, as in Wang."""
+
+    enabled: bool = False
+    probability: float = Field(0.1, ge=0, le=1, description="chance an agent rewires per day")
+    unfollow_threshold: float = Field(1.5, ge=0)
+    follow: Literal["similar", "random"] = "similar"
+    follow_threshold: float = Field(0.5, ge=0)
+
+
 class SimulationConfig(BaseModel):
     days: int = Field(5, gt=0)
     feed: FeedConfig = FeedConfig()
     recommender: RecommenderConfig = RecommenderConfig()
+    rewiring: RewiringConfig = RewiringConfig()
     # Which value drives metrics, the recommender and the next prompt:
     #   "self"       = the belief the agent reports (Wang et al.)
     #   "classifier" = the scorer's rating of the agent's post (Chuang et al.)
