@@ -22,6 +22,7 @@ import numpy as np
 
 from agorasim import OPINION_MAX, OPINION_MIN
 from agorasim.config import ExperimentConfig, ModelSpec
+from agorasim.ensemble import assign_models, model_homophily
 from agorasim.llm import LLMClient
 from agorasim.metrics import all_metrics
 from agorasim.networks import build_network, initial_opinions
@@ -61,15 +62,6 @@ def _clip(v: float) -> float:
     return float(np.clip(v, OPINION_MIN, OPINION_MAX))
 
 
-def assign_models_random(models: list[ModelSpec], n: int, seed: int) -> list[ModelSpec]:
-    """Each agent draws a model with probability proportional to its weight."""
-    if not models:
-        raise ValueError("config needs at least one entry under `models`")
-    w = np.array([m.weight for m in models], dtype=float)
-    idx = np.random.default_rng(seed + 2_000).choice(len(models), size=n, p=w / w.sum())
-    return [models[i] for i in idx]
-
-
 class Simulation:
     def __init__(
         self,
@@ -85,7 +77,7 @@ class Simulation:
         n = self.graph.number_of_nodes()
         x0 = initial_opinions(cfg.opinions, n, seed=cfg.seed)
         self.personas = generate_personas(x0, cfg.seed)
-        models = assignment or assign_models_random(cfg.models, n, cfg.seed)
+        models = assignment or assign_models(cfg.models, self.graph, cfg.assignment, cfg.seed)
         self.agents = [
             AgentState(persona=p, model=m, belief=p.initial_opinion)
             for p, m in zip(self.personas, models, strict=True)
@@ -165,8 +157,15 @@ class Simulation:
         self.writer.metrics({"day": self.day, **self.day_metrics()})
 
     def day_metrics(self) -> dict[str, float]:
-        m = all_metrics(self.graph, self.opinions())
+        ops = self.opinions()
+        m = all_metrics(self.graph, ops)
         m["errors"] = sum(a.errors for a in self.agents)
+        models = [a.model for a in self.agents]
+        if len({x.name for x in models}) > 1:
+            m["model_homophily"] = model_homophily(self.graph, models)
+            for name in sorted({x.name for x in models}):
+                mask = np.array([x.name == name for x in models])
+                m[f"mean_opinion[{name}]"] = float(ops[mask].mean())
         return m
 
     # ------------------------------------------------------------------ simulation

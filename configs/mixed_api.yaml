@@ -1,0 +1,24 @@
+# Multi-model ensemble through APIs (costs money). Put keys in .env first:
+# ANTHROPIC_API_KEY, OPENAI_API_KEY, XAI_API_KEY, DEEPSEEK_API_KEY
+# Model names change often: check each provider's current model list before running.
+name: mixed_api
+seed: 1
+network: {topology: watts_strogatz, n: 20, k: 4, beta: 0.1}
+opinions: {distribution: uniform}
+topic:
+  name: euthanasia
+  statement: Euthanasia should be legal for terminally ill adults who clearly request it.
+simulation:
+  days: 10
+  feed: {min_posts: 1, max_posts: 4}
+  recommender: {enabled: true, threshold: 2.0}
+  opinion_source: self
+assignment: balanced
+models:
+  - {name: anthropic/claude-haiku-4-5}
+  - {name: openai/gpt-4o-mini}
+  - {name: xai/grok-3-mini}
+  - {name: deepseek/deepseek-chat}
+scorer:
+  name: ollama_chat/qwen2.5:7b   # scorer stays local and outside the agents' labs
+llm: {max_concurrency: 4}

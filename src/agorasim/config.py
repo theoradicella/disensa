@@ -114,6 +114,8 @@ class ExperimentConfig(BaseModel):
     topic: TopicConfig = TopicConfig()
     simulation: SimulationConfig = SimulationConfig()
     models: list[ModelSpec] = []
+    # how agents are mapped to models, see ensemble.py
+    assignment: Literal["balanced", "random", "clustered"] = "balanced"
     scorer: ScorerConfig | None = None
     llm: LLMSettings = LLMSettings()
     output_dir: Path = Path("runs")

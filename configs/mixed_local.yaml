@@ -1,0 +1,23 @@
+# Multi-model ensemble on your Mac: three open-weight models from three labs, 20 agents.
+# Pull first:  ollama pull llama3.1:8b && ollama pull gemma2:9b && ollama pull mistral:7b && ollama pull qwen2.5:7b
+# Start with:  OLLAMA_NUM_PARALLEL=4 OLLAMA_MAX_LOADED_MODELS=4 ollama serve
+name: mixed_local
+seed: 1
+network: {topology: watts_strogatz, n: 20, k: 4, beta: 0.1}
+opinions: {distribution: uniform}
+topic:
+  name: euthanasia
+  statement: Euthanasia should be legal for terminally ill adults who clearly request it.
+simulation:
+  days: 10
+  feed: {min_posts: 1, max_posts: 4}
+  recommender: {enabled: true, threshold: 2.0}
+  opinion_source: self
+assignment: balanced   # balanced | random | clustered
+models:
+  - {name: ollama_chat/llama3.1:8b}   # Meta
+  - {name: ollama_chat/gemma2:9b}     # Google
+  - {name: ollama_chat/mistral:7b}    # Mistral
+scorer:
+  name: ollama_chat/qwen2.5:7b        # Alibaba: a lab none of the agents come from
+llm: {max_concurrency: 4}
