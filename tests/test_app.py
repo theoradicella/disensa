@@ -104,3 +104,12 @@ def test_landing_and_lab_pages(server):
         r"<[^>]+>", " ", re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", landing, flags=re.S)
     )
     assert "agorasim" not in visible.lower()
+
+
+def test_docs_page(server):
+    with urllib.request.urlopen(f"{server}/docs") as r:
+        docs = r.read().decode()
+    for section in ("introduction", "algorithms", "topologies", "metrics", "parameters"):
+        assert f'id="{section}"' in docs and f'href="#{section}"' in docs
+    with urllib.request.urlopen(f"{server}/") as r:
+        assert 'href="/docs"' in r.read().decode()

@@ -47,7 +47,7 @@ src/agorasim/
   numeric.py    numeric baselines written in the run format (so they open in the app)
   export.py     run → JSON for the page; `viz` embeds it (and d3) into one offline file
   app.py        `agorasim app`: local stdlib HTTP server + JSON API, runs in threads
-  static/       landing.html (start page at /), app.html (the lab at /lab: header that expands into
+  static/       landing.html (start page at /), docs.html (/docs), app.html (the lab at /lab: header that expands into
                 the new-run form and runs list, plus the viewer), vendored d3.min.js. The project name is not shown in the UI for now;
                 model text is untrusted: insert with textContent only
   cli.py        `agorasim` command

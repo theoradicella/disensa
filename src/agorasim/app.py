@@ -5,6 +5,7 @@ a landing page at / and the lab at /lab, plus a JSON API:
 
   GET  /                       landing page (static/landing.html)
   GET  /lab                    the lab: configure, run, watch (static/app.html)
+  GET  /docs                   documentation (static/docs.html)
   GET  /api/options              topologies, algorithms, installed Ollama models, presets
   GET  /api/runs                 past and running runs, newest first
   POST /api/runs                 {"engine": "llm"|"numeric", "config": {...}} -> {"id": ...}
@@ -249,7 +250,12 @@ def make_handler(manager: RunManager, config_dir: Path):
 
         def do_GET(self):  # noqa: N802
             path = self.path.split("?", 1)[0]
-            pages = {"/": "landing.html", "/index.html": "landing.html", "/lab": "app.html"}
+            pages = {
+                "/": "landing.html",
+                "/index.html": "landing.html",
+                "/lab": "app.html",
+                "/docs": "docs.html",
+            }
             if path in pages:
                 html = STATIC.joinpath(pages[path]).read_text(encoding="utf-8")
                 return self._send(200, html.encode(), "text/html; charset=utf-8")
