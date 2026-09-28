@@ -159,14 +159,18 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
     return h;
   }
 
+  // The plane reaches EXT times further than before at the same dot spacing, and fades out
+  // radially, so it has no visible edge. Only points inside the fade circle are kept.
+  const EXT = 1.9, FADE_IN = 0.6;
   function makePoints() {
-    const n = 4200;
-    const g = Math.round(Math.sqrt(n));
+    const g = Math.round(Math.sqrt(4200) * EXT);
     pts = [];
     for (let i = 0; i < g; i++) {
       for (let j = 0; j < g; j++) {
+        const gx = ((i / (g - 1)) * 2 - 1) * EXT, gz = ((j / (g - 1)) * 2 - 1) * EXT;
+        if (Math.hypot(gx, gz) > EXT) continue;
         pts.push({
-          gx: (i / (g - 1)) * 2 - 1, gz: (j / (g - 1)) * 2 - 1,
+          gx, gz,
           ox: 0, oy: 0, vx: 0, vy: 0, // screen-space push away from the pointer
           size: 0.85 + Math.random() * 0.45,
         });
@@ -204,7 +208,7 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
       const x = p.gx * SIZE, z = p.gz * SIZE;
       const r = Math.hypot(p.gx, p.gz);
       // the travelling wave, calmer towards the edges
-      const wave = reduce ? 0 : (0.07 * Math.sin(r * 6 - sec * 2.2) + 0.035 * Math.sin((p.gx + p.gz) * 3 - sec * 1.4)) * (1 - r * 0.4);
+      const wave = reduce ? 0 : (0.07 * Math.sin(r * 6 - sec * 2.2) + 0.035 * Math.sin((p.gx + p.gz) * 3 - sec * 1.4)) * Math.max(0, 1 - r * 0.35);
       const hA = height(ph.from, p.gx, p.gz), hB = height(ph.to, p.gx, p.gz);
       const y = -(hA + (hB - hA) * m) - wave; // negative y is up
       const x1 = x * cyy + z * sy, z1 = -x * sy + z * cyy;   // rotate around y
@@ -223,8 +227,9 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
       p.vx *= 0.86; p.vy *= 0.86;
       p.ox += p.vx; p.oy += p.vy;
 
-      // fade the far edge of the plane into the page
-      const edge = Math.max(0, Math.min(1, (1 - r / 1.45) * 3.2));
+      // fully visible near the centre, then more and more transparent until it disappears
+      const t = Math.min(1, Math.max(0, (r - FADE_IN) / (EXT - FADE_IN)));
+      const edge = (1 - t) * (1 - t) * (1 - t * 0.5);
       proj.push({ x: px + p.ox, y: py + p.oy, z: z2, r: p.size * s * (R / 260), a: edge, h: -y });
     }
     proj.sort((a, b) => a.z - b.z); // back to front
