@@ -79,19 +79,20 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
 .mark { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; }
 .mark:focus-visible, .nav-link:focus-visible { outline: 2px solid #0b0b0b; outline-offset: 2px; }
 .nav-link {
-  padding: 8px 14px; border-radius: 7px; color: #0b0b0b; text-decoration: none;
+  padding: 8px 12px; border-radius: 7px; color: #0b0b0b; text-decoration: none;
   font: 500 15px/1 "Geist", "Helvetica Neue", Arial, sans-serif; letter-spacing: 0.01em;
   transition: background .15s ease, color .15s ease;
 }
 .nav-link:hover { background: #eef3fa; color: #104281; }
 .nav { display: flex; align-items: center; gap: 2px; }
-.nav-sep { width: 1px; height: 20px; background: rgba(16, 66, 129, 0.12); margin: 0 6px; }
+.nav-sep { width: 1px; height: 20px; background: #e3e5e9; margin: 0 6px; }
 .icon-link {
   display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 7px;
   color: #0b0b0b; transition: background .15s ease, color .15s ease;
 }
 .icon-link:hover { background: #eef3fa; color: #104281; }
 .icon-link:focus-visible { outline: 2px solid #0b0b0b; outline-offset: 2px; }
+@media (max-width: 700px) { .nav-link { padding: 8px 8px; font-size: 14px; } }
 </style>
 </head>
 <body>
