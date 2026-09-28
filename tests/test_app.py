@@ -100,5 +100,7 @@ def test_landing_and_lab_pages(server):
     assert 'href="/lab"' in landing and "<canvas" in landing
     assert 'id="form"' in lab
     # the project name is not shown on the page (links to GitHub/PyPI may contain it)
-    visible = re.sub(r"<[^>]+>", " ", re.sub(r"<(script|style)[^>]*>.*?</\\1>", " ", landing, flags=re.S))
+    visible = re.sub(
+        r"<[^>]+>", " ", re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", landing, flags=re.S)
+    )
     assert "agorasim" not in visible.lower()

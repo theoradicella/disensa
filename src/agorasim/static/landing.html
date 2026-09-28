@@ -92,7 +92,7 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
 }
 .icon-link:hover { background: #eef3fa; color: #104281; }
 .icon-link:focus-visible { outline: 2px solid #0b0b0b; outline-offset: 2px; }
-.fade { position: fixed; inset: 0; background: var(--page); opacity: 0; pointer-events: none; transition: opacity .45s ease; }
+.fade { position: fixed; inset: 0; z-index: 20; background: var(--page); opacity: 0; pointer-events: none; transition: opacity .45s ease; }
 .leaving .fade { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
 </style>

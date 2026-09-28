@@ -263,7 +263,11 @@ def make_handler(manager: RunManager, config_dir: Path):
                     {
                         "ollama_models": models,
                         "ollama_error": err,
-                        "fake_models": ["fake/bounded", *(f"fake/{b}" for b in BEHAVIOURS)],
+                        "fake_models": [
+                            "fake/bounded",
+                            *(f"fake/{b}" for b in BEHAVIOURS),
+                            "fake/scorer",
+                        ],
                         "presets": presets(config_dir),
                     }
                 )
