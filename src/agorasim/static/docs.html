@@ -58,7 +58,7 @@ a { color: var(--blue); }
   padding: 112px 16px 96px;
 }
 .layout > .toc { grid-column: 1; justify-self: end; width: 240px; }
-.layout > article { grid-column: 2; }
+.layout > article { grid-column: 2; width: 820px; justify-self: start; } /* left edge on the header's, extends right */
 .toc { position: sticky; top: 96px; align-self: start; max-height: calc(100vh - 120px); overflow-y: auto; padding-right: 8px; }
 .toc p { margin: 0 0 10px; font: 600 12px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
