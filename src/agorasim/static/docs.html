@@ -51,12 +51,14 @@ a { color: var(--blue); }
 .icon-link { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 7px; color: var(--ink); }
 .icon-link:hover { background: #eef3fa; color: #104281; }
 
-/* soft white strip behind the floating header, so text does not show through the gap above it */
-/* layout: index on the left, the document on the right */
+/* layout: the document sits in a centred column exactly as wide as the header (620px),
+   the index hangs in the left margin; on narrower screens it folds into a toggle above */
 .layout {
-  display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 56px;
-  max-width: 1180px; margin: 0 auto; padding: 112px 32px 96px;
+  display: grid; grid-template-columns: minmax(0, 1fr) min(620px, 100%) minmax(0, 1fr); column-gap: 48px;
+  padding: 112px 16px 96px;
 }
+.layout > .toc { grid-column: 1; justify-self: end; width: 240px; }
+.layout > article { grid-column: 2; }
 .toc { position: sticky; top: 96px; align-self: start; max-height: calc(100vh - 120px); overflow-y: auto; padding-right: 8px; }
 .toc p { margin: 0 0 10px; font: 600 12px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
@@ -69,18 +71,19 @@ a { color: var(--blue); }
 .toc ol ol { padding-left: 12px; margin: 1px 0 4px; }
 .toc ol ol a { font-size: 13px; padding: 4px 10px; }
 .toc-toggle { display: none; }
-@media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; gap: 0; padding: 92px 16px 64px; }
+@media (max-width: 1239px) {
+  .layout { grid-template-columns: min(620px, 100%); justify-content: center; padding: 92px 16px 64px; }
+  .layout > .toc, .layout > article { grid-column: 1; width: auto; justify-self: stretch; }
   .toc { position: static; max-height: none; margin-bottom: 28px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
   .toc-toggle { display: flex; width: 100%; justify-content: space-between; align-items: center; background: none; border: 0; padding: 0; font: 600 14px var(--sans); color: var(--ink); cursor: pointer; }
   .toc p { display: none; }
   .toc ol.top { margin-top: 10px; }
   .toc:not(.open) ol.top { display: none; }
-  .nav-link { padding: 8px 8px; font-size: 14px; }
 }
+@media (max-width: 700px) { .nav-link { padding: 8px 8px; font-size: 14px; } }
 
 /* document typography */
-article { min-width: 0; max-width: 760px; }
+article { min-width: 0; }
 .eyebrow { margin: 0 0 8px; font: 500 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--blue); }
 h1 { margin: 0 0 16px; font: 700 clamp(36px, 5vw, 52px)/1.05 var(--display); letter-spacing: -0.03em; text-wrap: balance; }
 .lead { font-size: 19px; line-height: 1.6; color: var(--ink-2); margin: 0 0 12px; }
