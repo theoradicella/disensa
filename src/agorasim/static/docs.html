@@ -28,11 +28,7 @@
 [hidden] { display: none !important; }
 html { scroll-behavior: smooth; scroll-padding-top: 96px; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-body { margin: 0; background: var(--page); color: var(--ink); font: 16px/1.65 var(--sans); animation: page-in .45s ease both; }
-@keyframes page-in { from { opacity: 0; } to { opacity: 1; } }
-.fade { position: fixed; inset: 0; z-index: 50; background: var(--page); opacity: 0; pointer-events: none; transition: opacity .45s ease; }
-.leaving .fade { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { body { animation: none; } .fade { transition: none; } }
+body { margin: 0; background: var(--page); color: var(--ink); font: 16px/1.65 var(--sans); }
 a { color: var(--blue); }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
@@ -440,7 +436,6 @@ uv run agorasim viz runs/&lt;run&gt;               # one offline viewer file for
     </ul>
   </article>
 </div>
-<div class="fade" aria-hidden="true"></div>
 
 <script>
 (function () {
@@ -462,14 +457,6 @@ uv run agorasim viz runs/&lt;run&gt;               # one offline viewer file for
   const toc = document.getElementById("toc"), toggle = document.getElementById("toc-toggle");
   toggle.addEventListener("click", () => { const open = !toc.classList.contains("open"); toc.classList.toggle("open", open); toggle.setAttribute("aria-expanded", String(open)); });
   links.forEach((a) => a.addEventListener("click", () => { toc.classList.remove("open"); toggle.setAttribute("aria-expanded", "false"); }));
-  // fade when moving to another page of the app
-  document.querySelectorAll('a[href="/"], a[href="/lab"]').forEach((link) => link.addEventListener("click", (e) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey) return;
-    e.preventDefault();
-    document.body.classList.add("leaving");
-    setTimeout(() => { window.location.href = link.href; }, reduce ? 0 : 420);
-  }));
-  window.addEventListener("pageshow", () => document.body.classList.remove("leaving"));
 })();
 </script>
 </body>

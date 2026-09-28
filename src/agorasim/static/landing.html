@@ -92,9 +92,6 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
 }
 .icon-link:hover { background: #eef3fa; color: #104281; }
 .icon-link:focus-visible { outline: 2px solid #0b0b0b; outline-offset: 2px; }
-.fade { position: fixed; inset: 0; z-index: 20; background: var(--page); opacity: 0; pointer-events: none; transition: opacity .45s ease; }
-.leaving .fade { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
 </style>
 </head>
 <body>
@@ -134,7 +131,6 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
     <div class="ball" id="ball"></div>
   </section>
 </div>
-<div class="fade" aria-hidden="true"></div>
 
 <script>
 (function () {
@@ -267,13 +263,6 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
   document.addEventListener("mouseleave", () => { pointer.active = false; });
   window.addEventListener("blur", () => { pointer.active = false; });
 
-  document.querySelectorAll('a[href="/lab"], a[href="/docs"]').forEach((link) => link.addEventListener("click", (e) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey) return;
-    e.preventDefault();
-    document.body.classList.add("leaving");
-    setTimeout(() => { window.location.href = link.href; }, reduce ? 0 : 420);
-  }));
-  window.addEventListener("pageshow", () => document.body.classList.remove("leaving"));
 
   resize();
   requestAnimationFrame(frame);

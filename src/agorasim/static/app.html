@@ -41,13 +41,6 @@ button, input, select, textarea { font: inherit; color: var(--ink); }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* ---------- page transition ---------- */
-body { animation: page-in .45s ease both; }
-@keyframes page-in { from { opacity: 0; } to { opacity: 1; } }
-.fade { position: fixed; inset: 0; z-index: 50; background: var(--page); opacity: 0; pointer-events: none; transition: opacity .45s ease; }
-.leaving .fade { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { body { animation: none; } .fade { transition: none; } }
-
 /* ---------- header that expands into the setup / runs drawer ---------- */
 .topbar {
   position: fixed; z-index: 30; top: 16px; left: 50%; transform: translateX(-50%);
@@ -456,7 +449,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   </main>
 </div>
 <div id="tooltip" role="status"></div>
-<div class="fade" aria-hidden="true"></div>
 
 <script>
 window.AGORASIM_DATA = /*__AGORASIM_DATA__*/null;
@@ -876,13 +868,6 @@ window.AGORASIM_DATA = /*__AGORASIM_DATA__*/null;
     setTime(first ? 0 : followLive ? D() : Math.min(t, D()));
   }
 
-  document.querySelectorAll('a[href="/"], a[href="/docs"]').forEach((link) => link.addEventListener("click", (e) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey) return;
-    e.preventDefault();
-    document.body.classList.add("leaving");
-    setTimeout(() => { window.location.href = link.href; }, reduceMotion ? 0 : 420);
-  }));
-  window.addEventListener("pageshow", () => document.body.classList.remove("leaving"));
 
   if (STATIC) {
     showData(window.AGORASIM_DATA, false);
