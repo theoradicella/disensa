@@ -160,7 +160,7 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
   }
 
   function makePoints() {
-    const n = 2100;
+    const n = 4200;
     const g = Math.round(Math.sqrt(n));
     pts = [];
     for (let i = 0; i < g; i++) {
@@ -168,7 +168,7 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
         pts.push({
           gx: (i / (g - 1)) * 2 - 1, gz: (j / (g - 1)) * 2 - 1,
           ox: 0, oy: 0, vx: 0, vy: 0, // screen-space push away from the pointer
-          size: 1.3 + Math.random() * 0.7,
+          size: 0.85 + Math.random() * 0.45,
         });
       }
     }
