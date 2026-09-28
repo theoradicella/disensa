@@ -12,6 +12,8 @@ Research questions are deliberately not fixed yet — do not invent or add them.
 
 ## Conventions
 
+- **Git: never add `Co-Authored-By: Claude`, `Claude-Session:` or any other Claude attribution to
+  commit messages or PR descriptions, unless Theo explicitly asks.** Commits are authored by Theo only.
 - Opinions live on **[-2, 2]** everywhere (−2 strongly oppose, +2 strongly support the topic statement).
 - Everything is seeded. Personas depend only on `seed` (never on models), so the same
   population can be replayed under different model mixes. Separate RNG streams:
