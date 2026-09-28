@@ -47,9 +47,7 @@ button { cursor: pointer; }
   width: min(620px, calc(100% - 32px));
   background: #ffffff; border: 1px solid #e3e5e9; border-radius: 12px;
   font-family: "Geist", "Helvetica Neue", Arial, sans-serif;
-  transition: width .35s cubic-bezier(.2, .8, .2, 1);
 }
-.topbar.open { width: min(1120px, calc(100% - 32px)); }
 .bar { height: 54px; padding: 0 10px 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .mark { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; flex: none; }
 .nav { display: flex; align-items: center; gap: 2px; min-width: 0; }
@@ -59,16 +57,22 @@ button { cursor: pointer; }
   display: inline-flex; align-items: center; gap: 6px; transition: background .15s ease, color .15s ease;
 }
 .nav-link:hover { background: #eef3fa; color: #104281; }
-.nav-link[aria-expanded="true"] { background: #e8f0fb; color: #104281; }
-.nav-link .chev { transition: transform .25s ease; }
-.nav-link[aria-expanded="true"] .chev { transform: rotate(180deg); }
+/* New run / Runs: a white-and-grey segmented toggle */
+.toggle { display: inline-flex; padding: 3px; gap: 2px; background: #f1f3f6; border-radius: 9px; margin-right: 4px; }
+.toggle button {
+  border: 0; background: none; padding: 6px 12px; border-radius: 7px; color: #5b6270; cursor: pointer;
+  font: 500 14px/1 "Geist", "Helvetica Neue", Arial, sans-serif; white-space: nowrap;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.toggle button:hover { color: #0b0b0b; }
+.toggle button[aria-pressed="true"] { background: #ffffff; color: #0b0b0b; box-shadow: 0 0 0 1px #e3e5e9, 0 1px 2px rgba(16, 24, 40, 0.06); }
 .nav-sep { width: 1px; height: 20px; background: #e3e5e9; margin: 0 6px; }
 .icon-link { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 7px; color: #0b0b0b; }
 .icon-link:hover { background: #eef3fa; color: #104281; }
 .drawer { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .35s cubic-bezier(.2, .8, .2, 1); }
 .topbar.open .drawer { grid-template-rows: 1fr; }
 .drawer-inner { overflow: hidden; min-height: 0; }
-.drawer-scroll { max-height: calc(100vh - 110px); overflow-y: auto; border-top: 1px solid #eceef2; padding: 18px 22px 20px; }
+.drawer-scroll { max-height: calc(100vh - 110px); overflow-y: auto; border-top: 1px solid #eceef2; padding: 16px 20px 18px; }
 .drawer-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .drawer-head h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
 .drawer-head .hint { margin: 0; }
@@ -82,13 +86,36 @@ main { max-width: 1320px; margin: 0 auto; padding: 96px 22px 40px; min-width: 0;
   main { padding: 88px 16px 32px; }
 }
 
-/* setup form laid out in columns inside the drawer */
-#form { columns: 3 260px; column-gap: 28px; }
-#form fieldset { break-inside: avoid; }
-#llm-only:not([hidden]), #num-only:not([hidden]) { display: contents; }
-.form-foot { column-span: all; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid #eceef2; padding-top: 14px; margin-top: 4px; }
-.form-foot .error { margin: 0; flex: 1; }
-.form-foot .primary { width: auto; min-width: 200px; }
+/* new run: a step-by-step wizard */
+.wiz-progress { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; margin: 2px 0 8px; }
+.wiz-progress button {
+  height: 22px; padding: 0; border: 0; background: none; cursor: pointer; display: grid; align-items: center;
+}
+.wiz-progress button::before { content: ""; height: 4px; border-radius: 2px; background: #e6e9ee; transition: background .2s ease; }
+.wiz-progress button.done::before { background: #9ec5f4; }
+.wiz-progress button.current::before { background: var(--accent); }
+.wiz-progress button:disabled { cursor: default; }
+.wiz-count { margin: 0 0 2px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.wiz-step h3 { margin: 0 0 4px; font: 600 22px/1.25 "Geist", "Helvetica Neue", Arial, sans-serif; letter-spacing: -0.01em; }
+.wiz-step .intro { margin: 0 0 18px; color: var(--ink-2); font-size: 14px; }
+.wiz-step fieldset { margin-bottom: 18px; }
+.wiz-step fieldset:last-child { margin-bottom: 4px; }
+.wiz-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #eceef2; }
+.wiz-nav .error { margin: 0; flex: 1; }
+.btn-ghost {
+  border: 1px solid #e3e5e9; background: #fff; color: var(--ink); border-radius: 8px; padding: 9px 16px;
+  font: 500 14px/1 "Geist", "Helvetica Neue", Arial, sans-serif;
+}
+.btn-ghost:hover { background: #f5f7fa; }
+.wiz-nav .primary { width: auto; min-width: 150px; padding: 10px 18px; font-size: 14px; }
+.review { display: grid; gap: 10px; }
+.review-block { border: 1px solid #e3e5e9; border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; }
+.review-block header { display: flex; justify-content: space-between; align-items: center; }
+.review-block h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.review-block dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; font-size: 13px; }
+.review-block dt { color: var(--muted); }
+.review-block dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.edit-link { border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 13px; padding: 2px 4px; cursor: pointer; }
 /* previous runs as a grid of cards */
 #runs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 #runs > p { grid-column: 1 / -1; }
@@ -207,8 +234,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     </svg>
     </a>
     <nav class="nav">
-      <button type="button" class="nav-link lab-only" id="tab-new" aria-expanded="false" aria-controls="drawer">New run <svg class="chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-      <button type="button" class="nav-link lab-only" id="tab-runs" aria-expanded="false" aria-controls="drawer">Runs <svg class="chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="toggle lab-only" role="group" aria-label="Lab panels">
+        <button type="button" id="tab-new" aria-pressed="false" aria-controls="drawer">New run</button>
+        <button type="button" id="tab-runs" aria-pressed="false" aria-controls="drawer">Runs</button>
+      </div>
       <a class="nav-link docs" href="/docs">Docs</a>
       <span class="nav-sep" aria-hidden="true"></span>
       <a class="icon-link" href="https://github.com/theoradicella/agorasim" target="_blank" rel="noopener" aria-label="GitHub repository" title="GitHub">
@@ -225,16 +254,21 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     <div class="drawer-inner">
       <div class="drawer-scroll">
         <section id="pane-new" hidden>
-          <div class="drawer-head"><h2>New run</h2><p class="hint">Pick a preset or set each part, then run. Offline test models finish in seconds.</p></div>
-          <form id="form" autocomplete="off">
-        <fieldset>
+          
+          <form id="form" autocomplete="off" novalidate>
+        <p class="wiz-count" id="wiz-count"></p>
+        <div class="wiz-progress" id="wiz-progress"></div>
+        <section class="wiz-step" data-step="start" hidden>
+          <h3>Start</h3>
+          <p class="intro">Begin from a preset, or set everything yourself. Every step can be changed later.</p>
+          <fieldset>
           <label class="f">Start from a preset
             <select id="preset"><option value="">Custom</option></select>
           </label>
         </fieldset>
-
-        <fieldset>
+          <fieldset>
           <legend>Agents</legend>
+          <p class="hint">LLM agents read and write posts; a numeric model moves numbers with a fixed rule.</p>
           <div class="seg" role="group" aria-label="Engine">
             <button type="button" id="eng-llm" aria-pressed="true">LLM agents</button>
             <button type="button" id="eng-num" aria-pressed="false">Numeric model</button>
@@ -244,8 +278,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
             <label class="f">Seed <input type="number" id="seed" value="1" step="1"></label>
           </div>
         </fieldset>
-
-        <fieldset>
+        </section>
+        <section class="wiz-step" data-step="network" hidden>
+          <h3>Network</h3>
+          <p class="intro">Who is connected to whom.</p>
+          <fieldset>
           <legend>Network</legend>
           <div class="row">
             <label class="f">Topology
@@ -268,8 +305,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
             <label class="f">Edge probability p <input type="number" id="p" value="0.12" min="0" max="1" step="0.01"></label>
           </div>
         </fieldset>
-
-        <fieldset>
+        </section>
+        <section class="wiz-step" data-step="opinions" hidden>
+          <h3>Initial opinions</h3>
+          <p class="intro">Where agents stand on day 0, from −2 (strongly oppose) to +2 (strongly support).</p>
+          <fieldset>
           <legend>Initial opinions (−2 … +2)</legend>
           <div class="row">
             <label class="f">Distribution
@@ -285,8 +325,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
             <label class="f">Spread (std) <input type="number" id="std" value="1" min="0" step="0.1"></label>
           </div>
         </fieldset>
-
-        <div id="num-only" hidden>
+        </section>
+        <section class="wiz-step" data-step="algorithm" hidden>
+          <h3>Algorithm</h3>
+          <p class="intro">The rule each agent uses to update its opinion.</p>
           <fieldset>
             <legend>Algorithm</legend>
             <label class="f">Model
@@ -306,16 +348,16 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
               <label class="f" data-algo="fj">Stubbornness <input type="number" id="stub" value="1" min="0" step="0.1"></label>
             </div>
           </fieldset>
-        </div>
-
-        <div id="llm-only">
+        </section>
+        <section class="wiz-step" data-step="models" hidden>
+          <h3>Topic and models</h3>
+          <p class="intro">What agents discuss, and which language models play them.</p>
           <fieldset>
             <legend>Topic</legend>
             <label class="f">Statement agents take a position on
               <textarea id="statement">Euthanasia should be legal for terminally ill adults who clearly request it.</textarea>
             </label>
           </fieldset>
-
           <fieldset>
             <legend>Models</legend>
             <div id="ollama-note" class="notice" hidden></div>
@@ -338,7 +380,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
               </select>
             </label>
           </fieldset>
-
+        </section>
+        <section class="wiz-step" data-step="conversation" hidden>
+          <h3>Conversation</h3>
+          <p class="intro">How long the run lasts and what each agent reads every day.</p>
           <fieldset>
             <legend>Simulation</legend>
             <div class="row3">
@@ -350,9 +395,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
             <label class="f" data-show="rec">Similarity threshold <input type="number" id="rec-th" value="1.5" min="0" step="0.1"></label>
             <label class="check"><input type="checkbox" id="bias"> Prompt confirmation bias (Chuang)</label>
           </fieldset>
-        </div>
-
-        <fieldset>
+        </section>
+        <section class="wiz-step" data-step="dynamics" hidden>
+          <h3>Network dynamics</h3>
+          <p class="intro">Whether agents can change who they follow as opinions move.</p>
+          <fieldset>
           <legend>Network dynamics</legend>
           <label class="check"><input type="checkbox" id="rw"> Rewiring: unfollow people you disagree with</label>
           <div class="row" data-show="rw">
@@ -365,12 +412,18 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
             </label>
             <label class="f">Similar within <input type="number" id="rw-th" value="0.5" min="0" step="0.1"></label>
           </div>
-          <p class="hint" id="rw-num-hint" hidden>Rewiring applies to LLM runs only.</p>
         </fieldset>
-
-        <div class="form-foot">
+        </section>
+        <section class="wiz-step" data-step="review" hidden>
+          <h3>Review and run</h3>
+          <p class="intro">Check your choices. Use Edit to go back to any step.</p>
+          <div class="review" id="review"></div>
+        </section>
+        <div class="wiz-nav">
+          <button type="button" class="btn-ghost" id="wiz-back">Back</button>
           <p class="error" id="form-error" role="alert"></p>
-          <button class="primary" id="run-btn" type="submit">Run simulation</button>
+          <button type="button" class="primary" id="wiz-next">Next</button>
+          <button class="primary" id="run-btn" type="submit" hidden>Run simulation</button>
         </div>
       </form>
         </section>
@@ -937,8 +990,8 @@ window.AGORASIM_DATA = /*__AGORASIM_DATA__*/null;
   function setDrawer(which) {
     drawerOpen = which;
     $("topbar").classList.toggle("open", !!which);
-    $("tab-new").setAttribute("aria-expanded", String(which === "new"));
-    $("tab-runs").setAttribute("aria-expanded", String(which === "runs"));
+    $("tab-new").setAttribute("aria-pressed", String(which === "new"));
+    $("tab-runs").setAttribute("aria-pressed", String(which === "runs"));
     if (which) { $("pane-new").hidden = which !== "new"; $("pane-runs").hidden = which !== "runs"; }
     if (which === "runs") loadRuns();
   }
@@ -954,9 +1007,8 @@ window.AGORASIM_DATA = /*__AGORASIM_DATA__*/null;
   function setEngine(e) {
     engine = e;
     $("eng-llm").setAttribute("aria-pressed", e === "llm"); $("eng-num").setAttribute("aria-pressed", e === "numeric");
-    $("llm-only").hidden = e !== "llm"; $("num-only").hidden = e !== "numeric";
-    $("rw").disabled = e === "numeric"; $("rw-num-hint").hidden = e !== "numeric";
     syncVisibility();
+    if (typeof renderWizard === "function") renderWizard();
   }
   $("eng-llm").addEventListener("click", () => setEngine("llm"));
   $("eng-num").addEventListener("click", () => setEngine("numeric"));
@@ -1073,9 +1125,106 @@ window.AGORASIM_DATA = /*__AGORASIM_DATA__*/null;
     syncVisibility();
   }
 
+
+  // ---------------------------------------------------------------- new-run wizard
+  const STEP_TITLES = { start: "Start", network: "Network", opinions: "Initial opinions", algorithm: "Algorithm",
+    models: "Topic and models", conversation: "Conversation", dynamics: "Network dynamics", review: "Review" };
+  const stepsFor = () => engine === "numeric"
+    ? ["start", "network", "opinions", "algorithm", "review"]
+    : ["start", "network", "opinions", "models", "conversation", "dynamics", "review"];
+  let stepKey = "start", furthest = 0;
+  const sectionOf = (key) => document.querySelector(`.wiz-step[data-step="${key}"]`);
+
+  function renderWizard() {
+    const steps = stepsFor();
+    if (!steps.includes(stepKey)) stepKey = steps[Math.min(steps.length - 1, furthest)] || "start";
+    const i = steps.indexOf(stepKey);
+    furthest = Math.min(Math.max(furthest, i), steps.length - 1);
+    document.querySelectorAll(".wiz-step").forEach((sec) => { sec.hidden = sec.dataset.step !== stepKey; });
+    $("wiz-count").textContent = `Step ${i + 1} of ${steps.length}`;
+    const bar = $("wiz-progress"); bar.replaceChildren();
+    steps.forEach((k, j) => {
+      const b = el("button"); b.type = "button";
+      b.className = j === i ? "current" : j <= furthest ? "done" : "";
+      b.disabled = j > furthest;
+      b.setAttribute("aria-label", `${STEP_TITLES[k]}${j === i ? " (current step)" : ""}`);
+      b.title = STEP_TITLES[k];
+      b.addEventListener("click", () => goStep(k));
+      bar.appendChild(b);
+    });
+    $("wiz-back").style.visibility = i === 0 ? "hidden" : "visible";
+    const last = stepKey === "review";
+    $("wiz-next").hidden = last; $("run-btn").hidden = !last;
+    $("wiz-next").textContent = steps[i + 1] === "review" ? "Review" : "Next";
+    if (last) renderReview();
+  }
+  function goStep(key) {
+    $("form-error").textContent = "";
+    stepKey = key; renderWizard();
+    const scroller = document.querySelector(".drawer-scroll"); if (scroller) scroller.scrollTop = 0;
+  }
+  function stepValid() {
+    const sec = sectionOf(stepKey);
+    for (const input of sec.querySelectorAll("input, select, textarea")) {
+      if (input.offsetParent !== null && !input.checkValidity()) { input.reportValidity(); return false; }
+    }
+    if (stepKey === "models" && !readModels().length) { $("form-error").textContent = "Add at least one model."; return false; }
+    return true;
+  }
+  function next() {
+    if (!stepValid()) return;
+    const steps = stepsFor(), i = steps.indexOf(stepKey);
+    furthest = Math.max(furthest, i + 1);
+    goStep(steps[Math.min(i + 1, steps.length - 1)]);
+  }
+  $("wiz-next").addEventListener("click", next);
+  $("wiz-back").addEventListener("click", () => { const steps = stepsFor(); goStep(steps[Math.max(0, steps.indexOf(stepKey) - 1)]); });
+  // Enter moves to the next step instead of submitting early
+  $("form").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.tagName === "INPUT" && stepKey !== "review") { e.preventDefault(); next(); }
+  });
+
+  const TOPO_LABEL = { watts_strogatz: "Small-world (Watts–Strogatz)", barabasi_albert: "Scale-free (Barabási–Albert)", erdos_renyi: "Random (Erdős–Rényi)" };
+  const ALGO_LABEL = { bounded_confidence: "Bounded confidence", deffuant: "Deffuant", friedkin_johnsen: "Friedkin–Johnsen", degroot: "DeGroot" };
+  const optText = (id) => { const sel = $(id); return sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : sel.value; };
+  function renderReview() {
+    const c = buildConfig(), nw = c.network, op = c.opinions;
+    const blocks = [
+      ["start", [["Run name", c.name], ["Seed", c.seed], ["Agents", engine === "numeric" ? "Numeric model" : "LLM agents"], ["Preset", $("preset").value ? $("preset").value.replace(/\.yaml$/, "") : "Custom"]]],
+      ["network", [["Topology", TOPO_LABEL[nw.topology]], ["Agents", nw.n],
+        ...(nw.topology === "watts_strogatz" ? [["Neighbours k", nw.k], ["Rewire β", nw.beta]] : nw.topology === "barabasi_albert" ? [["Links per new node m", nw.m]] : [["Edge probability p", nw.p]])]],
+      ["opinions", [["Distribution", optText("dist")], ...(op.distribution === "uniform" ? [] : [[op.distribution === "bimodal" ? "Camp position" : "Mean", `±${op.mean}`.replace("±", op.distribution === "bimodal" ? "±" : "")], ["Spread", op.std]])]],
+    ];
+    if (engine === "numeric") {
+      const b = c.baseline;
+      blocks.push(["algorithm", [["Model", ALGO_LABEL[b.model]], ["Steps", b.steps],
+        ...(["bounded_confidence", "deffuant"].includes(b.model) ? [["Confidence ε", b.epsilon], ["Rate μ", b.mu]] : []),
+        ...(b.model === "friedkin_johnsen" ? [["Stubbornness", b.stubbornness]] : [])]]);
+    } else {
+      const s = c.simulation;
+      blocks.push(["models", [["Statement", c.topic.statement], ["Models", c.models.map((m) => `${short(m.name)} ×${m.weight}`).join(", ")],
+        ["Spread over agents", optText("assignment").split(":")[0]], ["Scorer", c.scorer ? short(c.scorer.name) : "None"], ["Opinion used", optText("source")]]]);
+      blocks.push(["conversation", [["Days", s.days], ["Posts read per day", `${s.feed.min_posts}–${s.feed.max_posts}`],
+        ["Recommender", s.recommender.enabled ? `On, within ${s.recommender.threshold}` : "Off"], ["Confirmation bias", s.bias === "confirmation" ? "On" : "Off"]]]);
+      const r = s.rewiring;
+      blocks.push(["dynamics", [["Rewiring", r.enabled ? `On: ${r.probability} per day, unfollow beyond ${r.unfollow_threshold}, follow ${r.follow === "similar" ? `similar (within ${r.follow_threshold})` : "anyone"}` : "Off"]]]);
+    }
+    const box = $("review"); box.replaceChildren();
+    blocks.forEach(([key, rows]) => {
+      const card = el("div", "review-block");
+      const head = el("header"); head.appendChild(el("h4", null, STEP_TITLES[key]));
+      const edit = el("button", "edit-link", "Edit"); edit.type = "button"; edit.addEventListener("click", () => goStep(key));
+      head.appendChild(edit); card.appendChild(head);
+      const dl = el("dl");
+      rows.forEach(([k, v]) => { dl.append(el("dt", null, k), el("dd", null, String(v))); });
+      card.appendChild(dl); box.appendChild(card);
+    });
+  }
+
   $("preset").addEventListener("change", (e) => {
     const p = OPTIONS.presets.find((x) => x.file === e.target.value);
     if (p) applyConfig(p.config, p.engine);
+    renderWizard();
   });
 
   $("form").addEventListener("submit", async (e) => {
@@ -1102,6 +1251,7 @@ window.AGORASIM_DATA = /*__AGORASIM_DATA__*/null;
     if (start) { applyConfig(start.config, start.engine); $("preset").value = start.file; }
     else { addModelRow(OPTIONS.ollama_models[0] || "fake/tribal", 1); modelOptions($("scorer"), "", true, false); }
     syncVisibility();
+    renderWizard();
     await loadRuns();
     setDrawer("new");
     requestAnimationFrame(frame);
