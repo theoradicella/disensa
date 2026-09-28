@@ -1,16 +1,16 @@
 import numpy as np
 import pytest
 
-from agorasim.analysis import (
+from disensa.analysis import (
     agent_timeline,
     change_points,
     load_run,
     model_summary,
     opinion_shifts,
 )
-from agorasim.config import ExperimentConfig
-from agorasim.engine import Simulation
-from agorasim.runs import RunWriter, new_run_dir
+from disensa.config import ExperimentConfig
+from disensa.engine import Simulation
+from disensa.runs import RunWriter, new_run_dir
 
 
 @pytest.fixture(scope="module")

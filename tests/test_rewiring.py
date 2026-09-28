@@ -1,8 +1,8 @@
 import networkx as nx
 import numpy as np
 
-from agorasim.config import RewiringConfig
-from agorasim.rewiring import rewire_step
+from disensa.config import RewiringConfig
+from disensa.rewiring import rewire_step
 
 
 def two_camps(n=20):

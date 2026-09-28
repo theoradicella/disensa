@@ -5,8 +5,8 @@ from __future__ import annotations
 import networkx as nx
 import numpy as np
 
-from agorasim import OPINION_MAX, OPINION_MIN
-from agorasim.config import InitialOpinions, NetworkConfig
+from disensa import OPINION_MAX, OPINION_MIN
+from disensa.config import InitialOpinions, NetworkConfig
 
 
 def build_network(cfg: NetworkConfig, seed: int = 0, max_tries: int = 100) -> nx.Graph:

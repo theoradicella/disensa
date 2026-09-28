@@ -7,7 +7,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from agorasim.app import RunManager, make_handler
+from disensa.app import RunManager, make_handler
 
 CAMPS = {
     "name": "t",
@@ -103,7 +103,7 @@ def test_landing_and_lab_pages(server):
     visible = re.sub(
         r"<[^>]+>", " ", re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", landing, flags=re.S)
     )
-    assert "agorasim" not in visible.lower()
+    assert "disensa" not in visible.lower()
 
 
 def test_docs_page(server):

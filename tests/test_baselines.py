@@ -2,9 +2,9 @@ import networkx as nx
 import numpy as np
 import pytest
 
-from agorasim.baselines import run_baseline
-from agorasim.config import BaselineConfig, NetworkConfig
-from agorasim.networks import build_network
+from disensa.baselines import run_baseline
+from disensa.config import BaselineConfig, NetworkConfig
+from disensa.networks import build_network
 
 
 @pytest.fixture

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 import networkx as nx
 import numpy as np
 
-from agorasim.config import RewiringConfig
+from disensa.config import RewiringConfig
 
 
 @dataclass(frozen=True)

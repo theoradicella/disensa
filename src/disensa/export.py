@@ -1,6 +1,6 @@
 """Turn a run into the data the viewer needs, and write a self-contained viewer file.
 
-The app (static/app.html) fetches this payload from the local server. `agorasim viz <run>`
+The app (static/app.html) fetches this payload from the local server. `disensa viz <run>`
 instead writes <run>/viewer.html: the same page with d3 and the run's data embedded, so it
 opens straight from disk, offline, with no server. `positions` is a seeded starting layout;
 the page then runs a live force layout on top of it.
@@ -15,7 +15,7 @@ from pathlib import Path
 import networkx as nx
 import numpy as np
 
-from agorasim.analysis import RunData, load_run
+from disensa.analysis import RunData, load_run
 
 METRICS = ("polarization", "global_disagreement", "neighbor_correlation", "mean_opinion")
 
@@ -106,11 +106,11 @@ def _embed(payload: dict) -> str:
 
 def write_viewer(run_dir: str | Path) -> Path:
     run = load_run(run_dir)
-    static = resources.files("agorasim").joinpath("static")
+    static = resources.files("disensa").joinpath("static")
     template = static.joinpath("app.html").read_text(encoding="utf-8")
     d3_js = static.joinpath("d3.min.js").read_text(encoding="utf-8")
     html = template.replace('<script src="/d3.min.js"></script>', f"<script>{d3_js}</script>", 1)
-    html = html.replace("/*__AGORASIM_DATA__*/null", _embed(build_payload(run)), 1)
+    html = html.replace("/*__DISENSA_DATA__*/null", _embed(build_payload(run)), 1)
     out = Path(run_dir) / "viewer.html"
     out.write_text(html, encoding="utf-8")
     return out

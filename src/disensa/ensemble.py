@@ -15,7 +15,7 @@ from __future__ import annotations
 import networkx as nx
 import numpy as np
 
-from agorasim.config import ModelSpec
+from disensa.config import ModelSpec
 
 
 def target_counts(models: list[ModelSpec], n: int) -> list[int]:

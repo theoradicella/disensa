@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from agorasim.llm import LLMClient, parse_json
+from disensa.llm import LLMClient, parse_json
 
 
 async def test_fake_backend_is_deterministic_and_cached(tmp_path):

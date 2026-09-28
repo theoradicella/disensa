@@ -1,5 +1,5 @@
 [project]
-name = "agorasim"
+name = "disensa"
 version = "0.1.0"
 description = "Multi-model LLM-agent opinion dynamics on social networks"
 readme = "README.md"
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/theoradicella/agorasim"
+Repository = "https://github.com/theoradicella/disensa"
 
 [project.optional-dependencies]
 analysis = [
@@ -35,7 +35,7 @@ analysis = [
 ]
 
 [project.scripts]
-agorasim = "agorasim.cli:app"
+disensa = "disensa.cli:app"
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.5"]
@@ -45,7 +45,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agorasim"]
+packages = ["src/disensa"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -59,5 +59,5 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/agorasim/prompts.py" = ["E501"]  # prompt templates are quoted verbatim
+"src/disensa/prompts.py" = ["E501"]  # prompt templates are quoted verbatim
 "tests/*" = ["E501"]

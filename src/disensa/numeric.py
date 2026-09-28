@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agorasim.baselines import run_baseline
-from agorasim.config import ExperimentConfig
-from agorasim.metrics import all_metrics
-from agorasim.networks import build_network, initial_opinions
-from agorasim.personas import generate_personas
-from agorasim.runs import RunWriter, new_run_dir, update_meta
+from disensa.baselines import run_baseline
+from disensa.config import ExperimentConfig
+from disensa.metrics import all_metrics
+from disensa.networks import build_network, initial_opinions
+from disensa.personas import generate_personas
+from disensa.runs import RunWriter, new_run_dir, update_meta
 
 
 def run_numeric(cfg: ExperimentConfig, run_dir: Path | None = None, progress=None) -> Path:

@@ -11,8 +11,8 @@ from collections.abc import Callable
 import networkx as nx
 import numpy as np
 
-from agorasim import OPINION_MAX, OPINION_MIN
-from agorasim.config import BaselineConfig
+from disensa import OPINION_MAX, OPINION_MIN
+from disensa.config import BaselineConfig
 
 
 def _adjacency(g: nx.Graph) -> np.ndarray:

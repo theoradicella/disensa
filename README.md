@@ -1,4 +1,4 @@
-# agorasim
+# disensa
 
 Opinion dynamics with LLM agents on social networks, where different agents can run on
 **different language models**. It extends the Social Simulation Framework of Wang et al.
@@ -23,13 +23,13 @@ For free local models, install [Ollama](https://ollama.com) and pull a few:
 ```bash
 ollama pull llama3.2:3b && ollama pull llama3.1:8b && ollama pull qwen2.5:7b
 OLLAMA_NUM_PARALLEL=4 OLLAMA_MAX_LOADED_MODELS=3 ollama serve
-uv run agorasim ping ollama_chat/llama3.2:3b      # check it answers
+uv run disensa ping ollama_chat/llama3.2:3b      # check it answers
 ```
 
 ## The app
 
 ```bash
-uv run agorasim app          # opens http://127.0.0.1:8765
+uv run disensa app          # opens http://127.0.0.1:8765
 ```
 
 The start page (a swarm of agents that scatters from your cursor) leads to the lab at `/lab`.
@@ -43,11 +43,11 @@ Start with the `demo_camps` preset: offline, a few seconds.
 ## Command line
 
 ```bash
-uv run agorasim run configs/demo_fake.yaml        # offline fake models, a few seconds
-uv run agorasim run configs/quick.yaml            # 10 agents, 5 days, Ollama, a few minutes
-uv run agorasim inspect runs/<run_dir>            # per-model behaviour + largest opinion shifts
-uv run agorasim inspect runs/<run_dir> --agent 3  # one agent's day-by-day story
-uv run agorasim viz runs/<run_dir>                # open the interactive viewer
+uv run disensa run configs/demo_fake.yaml        # offline fake models, a few seconds
+uv run disensa run configs/quick.yaml            # 10 agents, 5 days, Ollama, a few minutes
+uv run disensa inspect runs/<run_dir>            # per-model behaviour + largest opinion shifts
+uv run disensa inspect runs/<run_dir> --agent 3  # one agent's day-by-day story
+uv run disensa viz runs/<run_dir>                # open the interactive viewer
 ```
 
 | Config | What it is |
@@ -59,7 +59,7 @@ uv run agorasim viz runs/<run_dir>                # open the interactive viewer
 | `wang/{small_world,scale_free,random}.yaml` | Wang et al. replication, one model, 50 agents × 30 days |
 | `mixed_local.yaml` | Three open-weight models from three labs, on Ollama |
 | `mixed_api.yaml` | Claude, GPT, Grok, DeepSeek through their APIs (paid) |
-| `bc_small_world.yaml`, `fj_scale_free.yaml` | Numeric baselines (`agorasim baseline`) |
+| `bc_small_world.yaml`, `fj_scale_free.yaml` | Numeric baselines (`disensa baseline`) |
 
 `--days N` overrides the number of days for a quick try.
 
@@ -88,12 +88,12 @@ Everything is cached on disk, so re-running the same config costs nothing.
 | `metrics.parquet` | per day: polarization, global disagreement, neighbour correlation, per-model means |
 | `events.jsonl` | per day and agent: feed, reasoning, post, memory, raw reply, errors; rewiring events |
 | `edges.jsonl` | the network on day 0 and on every day it changed |
-| `viewer.html` | written by `agorasim viz`: one offline file with the viewer and data |
+| `viewer.html` | written by `disensa viz`: one offline file with the viewer and data |
 
 ## Layout
 
 ```
-src/agorasim/
+src/disensa/
   config.py     typed YAML experiment configs (Pydantic)
   networks.py   graphs and initial opinions
   baselines.py  DeGroot, bounded confidence, Deffuant, Friedkin–Johnsen
@@ -110,7 +110,7 @@ src/agorasim/
   export.py     run → viewer data / offline viewer file
   app.py        local web app server
   static/       the app page + vendored d3
-  cli.py        `agorasim` command
+  cli.py        `disensa` command
 ```
 
 ## Roadmap

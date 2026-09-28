@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 
-from agorasim import OPINION_MAX, OPINION_MIN
+from disensa import OPINION_MAX, OPINION_MIN
 
 BIG_FIVE = {
     "openness": ("open to new ideas and experiences", "prefers the familiar and conventional"),

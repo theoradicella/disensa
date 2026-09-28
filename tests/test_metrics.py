@@ -3,7 +3,7 @@ import math
 import networkx as nx
 import numpy as np
 
-from agorasim.metrics import global_disagreement, neighbor_correlation, polarization
+from disensa.metrics import global_disagreement, neighbor_correlation, polarization
 
 
 def test_polarization_is_variance():

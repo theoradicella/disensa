@@ -4,11 +4,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agorasim.config import ExperimentConfig
-from agorasim.engine import Simulation
-from agorasim.llm import LLMClient
-from agorasim.personas import generate_personas, stance_label
-from agorasim.runs import RunWriter, new_run_dir
+from disensa.config import ExperimentConfig
+from disensa.engine import Simulation
+from disensa.llm import LLMClient
+from disensa.personas import generate_personas, stance_label
+from disensa.runs import RunWriter, new_run_dir
 
 
 def make_cfg(tmp_path, **overrides) -> ExperimentConfig:
@@ -98,7 +98,7 @@ class GarbageClient(LLMClient):
     """A model that never returns JSON."""
 
     async def complete(self, model, messages, **kw):
-        from agorasim.llm import LLMResponse
+        from disensa.llm import LLMResponse
 
         return LLMResponse(text="I refuse to use JSON.", model=model)
 

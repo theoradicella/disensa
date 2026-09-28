@@ -21,7 +21,7 @@ import re
 
 import numpy as np
 
-from agorasim import OPINION_MAX, OPINION_MIN
+from disensa import OPINION_MAX, OPINION_MIN
 
 BEHAVIOURS = {  # name: (mu, epsilon)
     "conformist": (0.5, 4.0),

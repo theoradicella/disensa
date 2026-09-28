@@ -1,4 +1,4 @@
-"""agorasim: multi-model LLM-agent opinion dynamics on social networks."""
+"""disensa: multi-model LLM-agent opinion dynamics on social networks."""
 
 __version__ = "0.1.0"
 

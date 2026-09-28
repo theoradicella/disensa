@@ -1,4 +1,4 @@
-"""`agorasim app`: a local web app to configure, run and watch simulations.
+"""`disensa app`: a local web app to configure, run and watch simulations.
 
 A small standard-library HTTP server bound to 127.0.0.1. It serves one page (static/app.html)
 a landing page at / and the lab at /lab, plus a JSON API:
@@ -34,11 +34,11 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from agorasim.config import ExperimentConfig
-from agorasim.fake_llm import BEHAVIOURS
+from disensa.config import ExperimentConfig
+from disensa.fake_llm import BEHAVIOURS
 
 OLLAMA_URL = "http://localhost:11434"
-STATIC = resources.files("agorasim").joinpath("static")
+STATIC = resources.files("disensa").joinpath("static")
 
 
 @dataclass
@@ -64,7 +64,7 @@ class RunManager:
     # ------------------------------------------------------------------ starting runs
 
     def start(self, engine: str, raw: dict) -> Job:
-        from agorasim.runs import new_run_dir
+        from disensa.runs import new_run_dir
 
         raw = dict(raw)
         raw["output_dir"] = str(self.runs_root)
@@ -92,7 +92,7 @@ class RunManager:
         return cb
 
     def _run_numeric(self, job: Job, cfg: ExperimentConfig) -> None:
-        from agorasim.numeric import run_numeric
+        from disensa.numeric import run_numeric
 
         try:
             run_numeric(cfg, run_dir=job.run_dir, progress=self._progress(job))
@@ -101,8 +101,8 @@ class RunManager:
             job.status, job.error = "failed", f"{type(e).__name__}: {e}"
 
     def _run_llm(self, job: Job, cfg: ExperimentConfig) -> None:
-        from agorasim.engine import Simulation
-        from agorasim.runs import RunWriter, update_meta
+        from disensa.engine import Simulation
+        from disensa.runs import RunWriter, update_meta
 
         loop = asyncio.new_event_loop()
         job.loop = loop
@@ -190,8 +190,8 @@ class RunManager:
         return out[:100]
 
     def payload(self, run_id: str) -> dict | None:
-        from agorasim.analysis import load_run
-        from agorasim.export import build_payload
+        from disensa.analysis import load_run
+        from disensa.export import build_payload
 
         d = self.run_dir(run_id)
         if d is None:
@@ -229,7 +229,7 @@ def presets(config_dir: Path) -> list[dict]:
 
 def make_handler(manager: RunManager, config_dir: Path):
     class Handler(BaseHTTPRequestHandler):
-        server_version = "agorasim"
+        server_version = "disensa"
 
         def log_message(self, fmt, *args):  # keep the terminal quiet
             pass
@@ -329,7 +329,7 @@ def serve(
     manager = RunManager(runs_root)
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(manager, config_dir))
     url = f"http://127.0.0.1:{port}/"
-    print(f"agorasim app running at {url}  (Ctrl+C to stop)")
+    print(f"disensa app running at {url}  (Ctrl+C to stop)")
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:

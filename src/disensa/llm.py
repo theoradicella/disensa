@@ -20,7 +20,7 @@ from typing import Any
 import diskcache
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from agorasim.fake_llm import fake_reply
+from disensa.fake_llm import fake_reply
 
 Message = dict[str, str]
 

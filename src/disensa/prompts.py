@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agorasim.personas import Persona, stance_label
+from disensa.personas import Persona, stance_label
 
 CONFIRMATION_BIAS = (
     "Like most people, you tend to give more weight to arguments that agree with what you "

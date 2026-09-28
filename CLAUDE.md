@@ -1,4 +1,4 @@
-# agorasim — context for coding agents
+# disensa — context for coding agents
 
 Bachelor's thesis project (BAI, University of Milan; supervisors Flaminio Squazzoni, Stefano Zapperi).
 LLM-agent opinion dynamics on social networks. It extends Wang et al. (COLING 2025,
@@ -31,7 +31,7 @@ Research questions are deliberately not fixed yet — do not invent or add them.
 ## Layout
 
 ```
-src/agorasim/
+src/disensa/
   config.py     Pydantic schemas for YAML experiment configs
   networks.py   ER / WS / BA graphs, initial opinions
   baselines.py  DeGroot, bounded confidence, Deffuant, Friedkin–Johnsen
@@ -46,11 +46,11 @@ src/agorasim/
   analysis.py   loading runs, trajectories, shift detection and attribution
   numeric.py    numeric baselines written in the run format (so they open in the app)
   export.py     run → JSON for the page; `viz` embeds it (and d3) into one offline file
-  app.py        `agorasim app`: local stdlib HTTP server + JSON API, runs in threads
+  app.py        `disensa app`: local stdlib HTTP server + JSON API, runs in threads
   static/       landing.html (start page at /), docs.html (/docs), app.html (the lab at /lab: header that expands into
                 the new-run form and runs list, plus the viewer), vendored d3.min.js. The project name is not shown in the UI for now;
                 model text is untrusted: insert with textContent only
-  cli.py        `agorasim` command
+  cli.py        `disensa` command
 ```
 
 ## Commands
@@ -58,12 +58,12 @@ src/agorasim/
 ```bash
 uv sync --extra analysis
 uv run pytest && uv run ruff check . && uv run ruff format --check .
-uv run agorasim run configs/demo_fake.yaml     # offline, seconds
-uv run agorasim run configs/quick.yaml         # Ollama, minutes
-uv run agorasim inspect runs/<run_dir>         # per-model table + largest opinion shifts
-uv run agorasim inspect runs/<run_dir> --agent 7
-uv run agorasim app                            # web app: configure, run, watch live
-uv run agorasim viz runs/<run_dir>             # single offline viewer file for one run
+uv run disensa run configs/demo_fake.yaml     # offline, seconds
+uv run disensa run configs/quick.yaml         # Ollama, minutes
+uv run disensa inspect runs/<run_dir>         # per-model table + largest opinion shifts
+uv run disensa inspect runs/<run_dir> --agent 7
+uv run disensa app                            # web app: configure, run, watch live
+uv run disensa viz runs/<run_dir>             # single offline viewer file for one run
 ```
 
 ## Not done yet

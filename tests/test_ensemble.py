@@ -3,8 +3,8 @@ from collections import Counter
 import networkx as nx
 import pytest
 
-from agorasim.config import ModelSpec
-from agorasim.ensemble import assign_models, model_homophily, target_counts
+from disensa.config import ModelSpec
+from disensa.ensemble import assign_models, model_homophily, target_counts
 
 MODELS = [ModelSpec(name="a", weight=2), ModelSpec(name="b"), ModelSpec(name="c")]
 

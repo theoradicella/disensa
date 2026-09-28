@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from agorasim.config import ExperimentConfig
+from disensa.config import ExperimentConfig
 
 
 def _git_commit() -> str | None:

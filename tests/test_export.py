@@ -2,11 +2,11 @@ import asyncio
 import json
 import re
 
-from agorasim.analysis import load_run
-from agorasim.config import ExperimentConfig
-from agorasim.engine import Simulation
-from agorasim.export import build_payload, write_viewer
-from agorasim.runs import RunWriter, new_run_dir
+from disensa.analysis import load_run
+from disensa.config import ExperimentConfig
+from disensa.engine import Simulation
+from disensa.export import build_payload, write_viewer
+from disensa.runs import RunWriter, new_run_dir
 
 
 def _run(tmp_path, **sim):
@@ -43,8 +43,8 @@ def test_viewer_embeds_data_safely(tmp_path):
     run_dir = _run(tmp_path)
     out = write_viewer(run_dir)
     html = out.read_text()
-    assert "/*__AGORASIM_DATA__*/null" not in html
-    m = re.search(r"window.AGORASIM_DATA = (.*?);\n", html, re.S)
+    assert "/*__DISENSA_DATA__*/null" not in html
+    m = re.search(r"window.DISENSA_DATA = (.*?);\n", html, re.S)
     assert json.loads(m.group(1))["name"] == "v"
     # model text containing </script> must not break out of the script tag
     assert html.count("</script>") == html.count("<script")

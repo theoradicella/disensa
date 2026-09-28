@@ -1,4 +1,4 @@
-"""Command line: `agorasim run configs/quick.yaml`, `agorasim baseline ...`, `agorasim ping ...`."""
+"""Command line: `disensa run configs/quick.yaml`, `disensa baseline ...`, `disensa ping ...`."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ from pathlib import Path
 import typer
 from dotenv import load_dotenv
 
-from agorasim.baselines import run_baseline
-from agorasim.config import ExperimentConfig
-from agorasim.metrics import all_metrics
-from agorasim.networks import build_network, initial_opinions
-from agorasim.runs import RunWriter, new_run_dir, save_metrics, save_trajectory, update_meta
+from disensa.baselines import run_baseline
+from disensa.config import ExperimentConfig
+from disensa.metrics import all_metrics
+from disensa.networks import build_network, initial_opinions
+from disensa.runs import RunWriter, new_run_dir, save_metrics, save_trajectory, update_meta
 
-app = typer.Typer(no_args_is_help=True, help="agorasim: LLM-agent opinion dynamics")
+app = typer.Typer(no_args_is_help=True, help="disensa: LLM-agent opinion dynamics")
 load_dotenv()  # API keys from .env, if present
 
 METRIC_KEYS = ("polarization", "global_disagreement", "neighbor_correlation")
@@ -29,7 +29,7 @@ def _print_change(first: dict, last: dict) -> None:
 @app.command()
 def run(config: Path, days: int = typer.Option(None, help="override simulation.days")):
     """Run an LLM-agent simulation from a YAML config."""
-    from agorasim.engine import Simulation
+    from disensa.engine import Simulation
 
     cfg = ExperimentConfig.from_yaml(config)
     if days:
@@ -93,7 +93,7 @@ def baseline(config: Path, every: int = typer.Option(10, help="metrics every N s
 @app.command()
 def ping(model: str, prompt: str = "In one sentence: is remote work good for society?"):
     """Send one prompt to any model (checks keys / endpoints)."""
-    from agorasim.llm import LLMClient
+    from disensa.llm import LLMClient
 
     resp = asyncio.run(
         LLMClient().complete(model, [{"role": "user", "content": prompt}], use_cache=False)
@@ -112,7 +112,7 @@ def inspect(
     """Inspect a finished run: per-model behaviour and the largest opinion shifts, or one agent."""
     import pandas as pd
 
-    from agorasim.analysis import (
+    from disensa.analysis import (
         agent_timeline,
         change_points,
         load_run,
@@ -170,7 +170,7 @@ def app_cmd(
     open_browser: bool = typer.Option(True, "--open/--no-open", help="open it in your browser"),
 ):
     """Open the web app: configure runs, start them, and watch them live."""
-    from agorasim.app import serve
+    from disensa.app import serve
 
     serve(port=port, open_browser=open_browser)
 
@@ -183,7 +183,7 @@ def viz(
     """Write <run>/viewer.html (the d3 viewer, data embedded) and open it."""
     import webbrowser
 
-    from agorasim.export import write_viewer
+    from disensa.export import write_viewer
 
     out = write_viewer(run_dir)
     typer.echo(f"wrote {out}")

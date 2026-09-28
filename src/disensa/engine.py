@@ -20,22 +20,22 @@ from dataclasses import dataclass, field
 import networkx as nx
 import numpy as np
 
-from agorasim import OPINION_MAX, OPINION_MIN
-from agorasim.config import ExperimentConfig, ModelSpec
-from agorasim.ensemble import assign_models, model_homophily
-from agorasim.llm import LLMClient
-from agorasim.metrics import all_metrics
-from agorasim.networks import build_network, initial_opinions
-from agorasim.personas import Persona, generate_personas
-from agorasim.prompts import (
+from disensa import OPINION_MAX, OPINION_MIN
+from disensa.config import ExperimentConfig, ModelSpec
+from disensa.ensemble import assign_models, model_homophily
+from disensa.llm import LLMClient
+from disensa.metrics import all_metrics
+from disensa.networks import build_network, initial_opinions
+from disensa.personas import Persona, generate_personas
+from disensa.prompts import (
     SCORER_SYSTEM,
     initial_post_prompt,
     scorer_prompt,
     system_prompt,
     update_prompt,
 )
-from agorasim.rewiring import rewire_step
-from agorasim.runs import RunWriter
+from disensa.rewiring import rewire_step
+from disensa.runs import RunWriter
 
 
 @dataclass
