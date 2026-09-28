@@ -37,7 +37,7 @@ a { color: var(--blue); }
   position: fixed; z-index: 30; top: 16px; left: 50%; transform: translateX(-50%);
   width: min(620px, calc(100% - 32px)); height: 56px; padding: 0 10px 0 14px;
   display: flex; align-items: center; justify-content: space-between;
-  background: #ffffff; border: 1px solid var(--line); border-radius: 12px;
+  background: rgba(255, 255, 255, 0.75); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4); border: 1px solid var(--line); border-radius: 12px;
 }
 .mark { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; }
 .nav { display: flex; align-items: center; gap: 2px; }
@@ -52,10 +52,6 @@ a { color: var(--blue); }
 .icon-link:hover { background: #eef3fa; color: #104281; }
 
 /* soft white strip behind the floating header, so text does not show through the gap above it */
-body::before {
-  content: ""; position: fixed; z-index: 25; top: 0; left: 0; right: 0; height: 88px; pointer-events: none;
-  background: linear-gradient(#ffffff 0%, #ffffff 72%, rgba(255, 255, 255, 0) 100%);
-}
 /* layout: index on the left, the document on the right */
 .layout {
   display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 56px;
