@@ -1,22 +1,27 @@
-"""Run directories: config snapshot, git commit, and everything a run produces, on disk.
+"""Storing runs on disk: one folder per run, written while it runs, read back by the lab.
 
-Layout of runs/<timestamp>_<name>_s<seed>/
-  meta.json            config + git commit + summary
-  agents.parquet       one row per agent: persona, model, initial opinion
-  opinions.parquet     per (day, agent): self-reported belief, classifier score, opinion used
-  metrics.parquet      one row per day: polarization, disagreement, neighbour correlation, ...
-  events.jsonl         one line per (day, agent): what it read, its reasoning, post, memory, errors
-  edges.jsonl          graph edges on day 0 and on every day the graph changed (rewiring)
-  trajectory.parquet   (numeric baselines only) one row per (step, agent)
+runs/<timestamp>_<name>_s<seed>/
+  meta.json          the full config, git commit, start time, status, timings
+  agents.parquet     one row per agent: id, model (or numeric rule), degree, initial opinion
+  edges.json         the network as a list of [u, v] pairs
+  opinions.parquet   one row per (day, agent): the opinion
+  metrics.parquet    one row per day: polarization, disagreement, neighbour correlation, ...
+  events.jsonl       LLM runs only, one line per (day, agent): what it read, its reasoning,
+                     post, memory, the exact prompt and raw reply, and any error
+
+Parquet for tables (fast, typed, opens in pandas/DuckDB), JSONL for text. Every day is
+flushed, so a crash or a cancelled run keeps all finished days.
 """
 
 from __future__ import annotations
 
 import json
 import subprocess
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 
@@ -32,9 +37,9 @@ def _git_commit() -> str | None:
         return None
 
 
-def new_run_dir(cfg: ExperimentConfig, suffix: str = "") -> Path:
+def new_run_dir(cfg: ExperimentConfig) -> Path:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    base = cfg.output_dir / f"{stamp}_{cfg.name}{suffix}_s{cfg.seed}"
+    base = cfg.output_dir / f"{stamp}_{cfg.name}_s{cfg.seed}"
     run_dir, i = base, 1
     while run_dir.exists():  # two runs in the same second
         run_dir = base.with_name(f"{base.name}-{i}")
@@ -52,68 +57,82 @@ def update_meta(run_dir: Path, **fields) -> None:
     path.write_text(json.dumps(meta, indent=2))
 
 
-def save_trajectory(run_dir: Path, traj: np.ndarray) -> Path:
-    """Long format: one row per (step, agent). Easy to query with DuckDB/pandas."""
-    steps, n = traj.shape
-    df = pd.DataFrame(
-        {
-            "step": np.repeat(np.arange(steps), n),
-            "agent": np.tile(np.arange(n), steps),
-            "opinion": traj.ravel(),
-        }
-    )
-    path = run_dir / "trajectory.parquet"
-    df.to_parquet(path, index=False)
-    return path
-
-
-def save_metrics(run_dir: Path, rows: list[dict]) -> Path:
-    path = run_dir / "metrics.parquet"
-    pd.DataFrame(rows).to_parquet(path, index=False)
-    return path
-
-
 class RunWriter:
-    """Streams an LLM simulation to disk as it runs, so a crash never loses finished days."""
-
     def __init__(self, run_dir: Path):
         self.run_dir = run_dir
-        self._events = open(run_dir / "events.jsonl", "a", encoding="utf-8")
-        self._edges = open(run_dir / "edges.jsonl", "a", encoding="utf-8")
-        self.opinion_rows: list[dict] = []
-        self.metric_rows: list[dict] = []
+        self._events = None  # opened on the first event: numeric runs have none
+        self._opinions: list[dict] = []
+        self._metrics: list[dict] = []
 
-    def agents(self, rows: list[dict]) -> None:
-        df = pd.DataFrame(rows).rename(columns={"agent_id": "agent"})
-        # nested dicts (Big Five traits) → one boolean column per trait
-        if "traits" in df:
-            traits = pd.json_normalize(df.pop("traits")).add_prefix("trait_")
-            df = pd.concat([df, traits], axis=1)
-        df.to_parquet(self.run_dir / "agents.parquet", index=False)
+    def start(self, graph: nx.Graph, labels: list[str], x0: np.ndarray) -> None:
+        agents = pd.DataFrame(
+            {
+                "agent": range(len(labels)),
+                "model": labels,
+                "degree": [graph.degree(i) for i in range(len(labels))],
+                "initial_opinion": x0,
+            }
+        )
+        agents.to_parquet(self.run_dir / "agents.parquet", index=False)
+        edges = sorted([min(u, v), max(u, v)] for u, v in graph.edges())
+        (self.run_dir / "edges.json").write_text(json.dumps(edges))
 
-    def event(self, record: dict) -> None:
-        self._events.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-    def edges(self, day: int, edges: list[tuple[int, int]]) -> None:
-        self._edges.write(json.dumps({"day": day, "edges": [list(e) for e in edges]}) + "\n")
-
-    def opinions(self, rows: list[dict]) -> None:
-        self.opinion_rows.extend(rows)
-
-    def metrics(self, row: dict) -> None:
-        self.metric_rows.append(row)
+    def day(self, day: int, x: np.ndarray, metrics: dict, events: list[dict]) -> None:
+        self._opinions += [{"day": day, "agent": i, "opinion": float(v)} for i, v in enumerate(x)]
+        self._metrics.append({"day": day, **metrics})
+        if events and self._events is None:
+            self._events = open(self.run_dir / "events.jsonl", "a", encoding="utf-8")
+        for e in events:
+            self._events.write(json.dumps(e, ensure_ascii=False) + "\n")
+        self.flush()
 
     def flush(self) -> None:
-        self._events.flush()
-        self._edges.flush()
-        if self.opinion_rows:
-            pd.DataFrame(self.opinion_rows).to_parquet(
-                self.run_dir / "opinions.parquet", index=False
-            )
-        if self.metric_rows:
-            pd.DataFrame(self.metric_rows).to_parquet(self.run_dir / "metrics.parquet", index=False)
+        if self._events:
+            self._events.flush()
+        pd.DataFrame(self._opinions).to_parquet(self.run_dir / "opinions.parquet", index=False)
+        pd.DataFrame(self._metrics).to_parquet(self.run_dir / "metrics.parquet", index=False)
 
     def close(self) -> None:
-        self.flush()
-        self._events.close()
-        self._edges.close()
+        if self._events:
+            self._events.close()
+
+
+@dataclass
+class Run:
+    path: Path
+    meta: dict
+    agents: pd.DataFrame
+    opinions: pd.DataFrame
+    metrics: pd.DataFrame
+    events: list[dict]
+    edges: list[list[int]]
+
+    @property
+    def days(self) -> int:
+        return int(self.opinions["day"].max())
+
+    def opinion_matrix(self) -> np.ndarray:
+        """Array of shape (days + 1, n_agents)."""
+        return self.opinions.pivot(index="day", columns="agent", values="opinion").to_numpy()
+
+
+def load_run(path: str | Path) -> Run:
+    """Read a run folder (also works on a run that is still in progress)."""
+    path = Path(path)
+    events = []
+    events_file = path / "events.jsonl"
+    if events_file.exists():
+        for line in open(events_file, encoding="utf-8"):
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:  # a run in progress may end mid-line
+                break
+    return Run(
+        path=path,
+        meta=json.loads((path / "meta.json").read_text()),
+        agents=pd.read_parquet(path / "agents.parquet"),
+        opinions=pd.read_parquet(path / "opinions.parquet"),
+        metrics=pd.read_parquet(path / "metrics.parquet"),
+        events=events,
+        edges=json.loads((path / "edges.json").read_text()),
+    )

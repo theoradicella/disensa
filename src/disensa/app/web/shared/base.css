@@ -1,0 +1,31 @@
+/* Shared by every page: box model, and the floating header (<site-header>, shared/header.js).
+   Each page keeps its own colours and layout in <page>/<page>.css. */
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.topbar {
+  position: fixed; z-index: 30; top: 16px; left: 50%; transform: translateX(-50%);
+  width: min(620px, calc(100% - 32px)); height: 56px; padding: 0 10px 0 14px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(255, 255, 255, 0.75);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid #e3e5e9; border-radius: 12px;
+}
+.mark { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; }
+.nav { display: flex; align-items: center; gap: 2px; }
+.nav-link {
+  padding: 8px 12px; border-radius: 7px; color: #0b0b0b; text-decoration: none;
+  font: 500 15px/1 "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace, "Geist", "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.01em; transition: background .15s ease, color .15s ease;
+}
+.nav-link:hover { background: #eef3fa; color: #104281; }
+.nav-link[aria-current="page"] { background: #e8f0fb; color: #104281; }
+.nav-sep { width: 1px; height: 20px; background: #e3e5e9; margin: 0 6px; }
+.icon-link {
+  display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 7px;
+  color: #0b0b0b; transition: background .15s ease, color .15s ease;
+}
+.icon-link:hover { background: #eef3fa; color: #104281; }
+.mark:focus-visible, .nav-link:focus-visible, .icon-link:focus-visible { outline: 2px solid #0b0b0b; outline-offset: 2px; }
+@media (max-width: 700px) { .nav-link { padding: 8px 8px; font-size: 14px; } }

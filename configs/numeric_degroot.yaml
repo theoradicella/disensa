@@ -1,0 +1,10 @@
+# DeGroot on a scale-free network: everyone averages with their neighbours, so the
+# population always reaches consensus. Instant.
+name: numeric_degroot
+seed: 1
+network: {topology: barabasi_albert, n: 60, m: 2}
+opinions: {distribution: uniform}
+steps: 30
+dynamics:
+  type: numeric
+  rule: degroot

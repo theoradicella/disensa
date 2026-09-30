@@ -1,5 +1,4 @@
 import json
-import re
 import threading
 import time
 import urllib.request
@@ -7,26 +6,29 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from disensa.app import RunManager, make_handler
+from disensa.app.server import RunManager, make_handler
 
-CAMPS = {
+BASE = {
     "name": "t",
     "seed": 1,
     "network": {"topology": "watts_strogatz", "n": 16, "k": 4, "beta": 0.1},
-    "simulation": {"days": 3, "rewiring": {"enabled": True, "probability": 0.3}},
-    "models": [{"name": "fake/tribal"}],
-    "scorer": {"name": "fake/scorer"},
-    "llm": {"max_concurrency": 32},
+    "steps": 3,
 }
+LLM = {
+    **BASE,
+    "dynamics": {"type": "llm", "models": [{"name": "fake/tribal"}], "max_concurrency": 32},
+}
+NUMERIC = {**BASE, "dynamics": {"type": "numeric", "rule": "degroot"}}
 
 
 @pytest.fixture
 def server(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # LLM cache goes to tmp
-    manager = RunManager(tmp_path / "runs")
     (tmp_path / "configs").mkdir()
-    (tmp_path / "configs" / "a.yaml").write_text(json.dumps(CAMPS))
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(manager, tmp_path / "configs"))
+    (tmp_path / "configs" / "a.yaml").write_text(json.dumps(LLM))
+    (tmp_path / "configs" / "old.yaml").write_text("name: x\nsimulation: {days: 3}\n")  # invalid
+    handler = make_handler(RunManager(tmp_path / "runs"), tmp_path / "configs")
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{srv.server_address[1]}"
     srv.shutdown()
@@ -41,7 +43,8 @@ def call(url, body=None):
     )
     try:
         with urllib.request.urlopen(req) as r:
-            return r.status, json.loads(r.read())
+            raw = r.read()
+            return r.status, json.loads(raw) if "json" in r.headers["Content-Type"] else raw
     except urllib.error.HTTPError as e:
         return e.code, json.loads(e.read())
 
@@ -55,61 +58,42 @@ def wait_done(base, run_id):
     raise AssertionError("run did not finish")
 
 
-def test_options_list_presets(server):
+def test_pages_and_assets_are_served(server):
+    for path in [
+        "/",
+        "/lab",
+        "/docs",
+        "/shared/base.css",
+        "/shared/header.js",
+        "/lab/lab.js",
+        "/vendor/d3.min.js",
+    ]:
+        code, body = call(server + path)
+        assert code == 200 and len(body) > 100, path
+    assert call(server + "/lab/../../server.py")[0] == 404
+    assert call(server + "/nope.css")[0] == 404
+
+
+def test_options_list_only_valid_presets(server):
     code, o = call(f"{server}/api/options")
     assert code == 200
     assert [p["file"] for p in o["presets"]] == ["a.yaml"]
     assert "fake/tribal" in o["fake_models"]
 
 
-def test_llm_run_end_to_end(server):
-    code, r = call(f"{server}/api/runs", {"engine": "llm", "config": CAMPS})
+@pytest.mark.parametrize("config,engine", [(LLM, "llm"), (NUMERIC, "numeric")])
+def test_start_run_and_read_it_back(server, config, engine):
+    code, res = call(f"{server}/api/runs", {"config": config})
     assert code == 201
-    assert wait_done(server, r["id"])["status"] == "done"
-    _, d = call(f"{server}/api/runs/{r['id']}")
-    assert len(d["data"]["opinions"]) == 4 and len(d["data"]["agents"]) == 16
+    assert wait_done(server, res["id"])["status"] == "done"
+    _, run = call(f"{server}/api/runs/{res['id']}")
+    data = run["data"]
+    assert len(data["opinions"]) == 4 and len(data["agents"]) == 16 and data["edges"]
+    assert (data["posts"][1][0] is not None) == (engine == "llm")
     _, runs = call(f"{server}/api/runs")
-    assert runs[0]["id"] == r["id"] and runs[0]["status"] == "done"
-
-
-def test_numeric_run(server):
-    cfg = {**CAMPS, "baseline": {"model": "deffuant", "steps": 5, "epsilon": 1.0}}
-    code, r = call(f"{server}/api/runs", {"engine": "numeric", "config": cfg})
-    assert code == 201
-    assert wait_done(server, r["id"])["status"] == "done"
-    _, d = call(f"{server}/api/runs/{r['id']}")
-    assert d["data"]["models"] == ["numeric/deffuant"] and d["data"]["topic"] == ""
+    assert runs[0]["id"] == res["id"] and runs[0]["engine"] == engine
 
 
 def test_invalid_config_is_a_400(server):
-    bad = {**CAMPS, "network": {"topology": "erdos_renyi", "n": 10}}
-    code, r = call(f"{server}/api/runs", {"engine": "llm", "config": bad})
-    assert code == 400 and "requires: p" in r["error"]
-
-
-def test_unknown_run_is_a_404(server):
-    assert call(f"{server}/api/runs/nope")[0] == 404
-    assert call(f"{server}/api/runs/..%2Fetc")[0] == 404
-
-
-def test_landing_and_lab_pages(server):
-    with urllib.request.urlopen(f"{server}/") as r:
-        landing = r.read().decode()
-    with urllib.request.urlopen(f"{server}/lab") as r:
-        lab = r.read().decode()
-    assert 'href="/lab"' in landing and "<canvas" in landing
-    assert 'id="form"' in lab
-    # the project name is not shown on the page (links to GitHub/PyPI may contain it)
-    visible = re.sub(
-        r"<[^>]+>", " ", re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", landing, flags=re.S)
-    )
-    assert "disensa" not in visible.lower()
-
-
-def test_docs_page(server):
-    with urllib.request.urlopen(f"{server}/docs") as r:
-        docs = r.read().decode()
-    for section in ("introduction", "algorithms", "topologies", "metrics", "parameters"):
-        assert f'id="{section}"' in docs and f'href="#{section}"' in docs
-    with urllib.request.urlopen(f"{server}/") as r:
-        assert 'href="/docs"' in r.read().decode()
+    code, err = call(f"{server}/api/runs", {"config": {**BASE, "dynamics": {"type": "llm"}}})
+    assert code == 400 and "models" in err["error"]

@@ -1,0 +1,134 @@
+(function () {
+  "use strict";
+  const canvas = document.getElementById("swarm");
+  const ctx = canvas.getContext("2d");
+  const box = document.getElementById("ball");
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const DOT = getComputedStyle(document.documentElement).getPropertyValue("--dot").trim();
+
+  let W = 0, H = 0, DPR = 1, cx = 0, cy = 0, R = 200;
+  let pts = [];
+  const pointer = { x: -9999, y: -9999, active: false };
+  let rotY = 0.6, tiltX = 0, tiltY = 0;
+  const VIEW_X = -0.52;   // camera looks down on the plane
+  const SIZE = 0.74;      // half-width of the plane, in units of R
+
+  // Opinion distributions that rise out of the plane, one after another (every 4 s):
+  // consensus (one peak) -> polarization (two camps) -> fragmentation (three clusters) -> ...
+  // Each is a sum of Gaussian bumps: [x, z, height, width]. Opinion runs along x.
+  const DISTS = [
+    [[0, 0, 0.95, 0.3]],
+    [[-0.58, 0, 0.82, 0.22], [0.58, 0, 0.82, 0.22]],
+    [[-0.7, 0.32, 0.62, 0.17], [0.05, -0.38, 0.72, 0.18], [0.66, 0.3, 0.56, 0.16]],
+  ];
+  const PERIOD = 4, MORPH = 1.6;
+  const smooth = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x * x * x * (x * (x * 6 - 15) + 10);
+  function phase(sec) {
+    const k = Math.floor(sec / PERIOD), c = sec - k * PERIOD;
+    return {
+      from: DISTS[k % DISTS.length], to: DISTS[(k + 1) % DISTS.length],
+      m: c < PERIOD - MORPH ? 0 : (c - (PERIOD - MORPH)) / MORPH,
+    };
+  }
+  function height(dist, x, z) {
+    let h = 0;
+    for (const [bx, bz, a, w] of dist) {
+      const dx = x - bx, dz = z - bz;
+      h += a * Math.exp(-(dx * dx + dz * dz) / (2 * w * w));
+    }
+    return h;
+  }
+
+  function makePoints() {
+    const n = 9000;
+    const g = Math.round(Math.sqrt(n));
+    pts = [];
+    for (let i = 0; i < g; i++) {
+      for (let j = 0; j < g; j++) {
+        pts.push({
+          gx: (i / (g - 1)) * 2 - 1, gz: (j / (g - 1)) * 2 - 1,
+          ox: 0, oy: 0, vx: 0, vy: 0, // screen-space push away from the pointer
+          size: 0.5 + Math.random() * 0.3,
+        });
+      }
+    }
+  }
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const b = box.getBoundingClientRect();
+    cx = b.left + b.width / 2; cy = b.top + b.height / 2 - b.height * 0.02; R = Math.min(b.width / 2, b.height * 0.62) * 0.95;
+    makePoints();
+  }
+
+  const proj = [];
+  let startAt = null;
+  function frame(now) {
+    if (startAt == null) startAt = now;
+    const sec = (now - startAt) / 1000;
+    if (!reduce) rotY += 0.0012;
+    const tx = pointer.active ? ((pointer.y - cy) / H) * 0.35 : 0;
+    const ty = pointer.active ? ((pointer.x - cx) / W) * 0.5 : 0;
+    tiltX += (tx - tiltX) * 0.04; tiltY += (ty - tiltY) * 0.04;
+    const ay = rotY + tiltY, ax = VIEW_X + tiltX;
+    const sy = Math.sin(ay), cyy = Math.cos(ay), sx = Math.sin(ax), cxx = Math.cos(ax);
+    const persp = 3.6, reach = R * 0.45, reach2 = reach * reach;
+    const ph = reduce ? { from: DISTS[1], to: DISTS[1], m: 0 } : phase(sec);
+    const m = smooth(ph.m);
+
+    proj.length = 0;
+    for (const p of pts) {
+      const x = p.gx * SIZE, z = p.gz * SIZE;
+      const r = Math.hypot(p.gx, p.gz);
+      // the travelling wave, calmer towards the edges
+      const wave = reduce ? 0 : (0.07 * Math.sin(r * 6 - sec * 2.2) + 0.035 * Math.sin((p.gx + p.gz) * 3 - sec * 1.4)) * (1 - r * 0.4);
+      const hA = height(ph.from, p.gx, p.gz), hB = height(ph.to, p.gx, p.gz);
+      const y = -(hA + (hB - hA) * m) - wave; // negative y is up
+      const x1 = x * cyy + z * sy, z1 = -x * sy + z * cyy;   // rotate around y
+      const y1 = y * cxx - z1 * sx, z2 = y * sx + z1 * cxx;  // then around x
+      const s = persp / (persp - z2);
+      const px = cx + x1 * R * s, py = cy + y1 * R * s;
+
+      if (pointer.active && !reduce) {
+        const dx = px + p.ox - pointer.x, dy = py + p.oy - pointer.y, d2 = dx * dx + dy * dy;
+        if (d2 < reach2) {
+          const d = Math.sqrt(d2) + 0.001, f = (1 - d / reach) ** 2 * 2.6;
+          p.vx += (dx / d) * f; p.vy += (dy / d) * f;
+        }
+      }
+      p.vx += -p.ox * 0.035; p.vy += -p.oy * 0.035;
+      p.vx *= 0.86; p.vy *= 0.86;
+      p.ox += p.vx; p.oy += p.vy;
+
+      // fade the far edge of the plane into the page
+      const edge = Math.max(0, Math.min(1, (1 - r / 1.45) * 3.2));
+      proj.push({ x: px + p.ox, y: py + p.oy, z: z2, r: p.size * s * (R / 260), a: edge, h: -y });
+    }
+    proj.sort((a, b) => a.z - b.z); // back to front
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = DOT;
+    for (const q of proj) {
+      const depth = Math.max(0, Math.min(1, (q.z + SIZE) / (2 * SIZE)));
+      // points on the peaks are a little stronger, so the distribution reads
+      ctx.globalAlpha = q.a * Math.min(1, 0.5 + depth * 0.35 + q.h * 0.6);
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, Math.max(0.5, q.r * (0.6 + depth * 0.6)), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (!reduce) requestAnimationFrame(frame);
+  }
+
+  window.addEventListener("resize", () => { resize(); if (reduce) frame(performance.now()); });
+  window.addEventListener("pointermove", (e) => { pointer.x = e.clientX; pointer.y = e.clientY; pointer.active = true; });
+  document.addEventListener("mouseleave", () => { pointer.active = false; });
+  window.addEventListener("blur", () => { pointer.active = false; });
+
+
+  resize();
+  requestAnimationFrame(frame);
+})();

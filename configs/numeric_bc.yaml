@@ -1,6 +1,12 @@
-# Classic bounded confidence (Hegselmann–Krause) on a small world: narrow confidence -> clusters.
+# Bounded confidence on a small world: agents only listen to neighbours within ε,
+# so a narrow ε leaves separate opinion clusters. Instant.
 name: numeric_bc
 seed: 3
 network: {topology: watts_strogatz, n: 60, k: 6, beta: 0.15}
 opinions: {distribution: uniform}
-baseline: {model: bounded_confidence, steps: 40, epsilon: 0.7, mu: 0.5}
+steps: 40
+dynamics:
+  type: numeric
+  rule: bounded_confidence
+  epsilon: 0.7
+  mu: 0.5

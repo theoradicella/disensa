@@ -1,37 +1,95 @@
+import asyncio
 import json
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from disensa.config import ExperimentConfig
-from disensa.engine import Simulation
-from disensa.llm import LLMClient
-from disensa.personas import generate_personas, stance_label
-from disensa.runs import RunWriter, new_run_dir
+from disensa.config import ModelSpec
+from disensa.dynamics.llm_agent import assign_models
+from disensa.engine import run
+from disensa.llm.prompts import stance_label
+from disensa.runs import load_run, new_run_dir
+
+NUMERIC = {"type": "numeric", "rule": "bounded_confidence", "epsilon": 0.8, "mu": 0.5}
 
 
-def make_cfg(tmp_path, **overrides) -> ExperimentConfig:
-    raw = {
-        "name": "t",
-        "seed": 3,
-        "network": {"topology": "watts_strogatz", "n": 20, "k": 4, "beta": 0.1},
-        "simulation": {"days": 4, "feed": {"min_posts": 1, "max_posts": 3}},
-        "models": [{"name": "fake/bounded"}],
-        "scorer": {"name": "fake/scorer"},
-        "llm": {"cache_dir": str(tmp_path / "cache"), "max_concurrency": 32},
-        "output_dir": str(tmp_path / "runs"),
-    }
-    for k, v in overrides.items():
-        raw[k] = v
-    return ExperimentConfig.model_validate(raw)
+def test_numeric_run_writes_a_run_folder(make_cfg):
+    cfg = make_cfg(dynamics=NUMERIC, steps=10)
+    run_dir = new_run_dir(cfg)
+    history = asyncio.run(run(cfg, run_dir))
+    assert [h["day"] for h in history] == list(range(11))
+    r = load_run(run_dir)
+    assert r.days == 10 and r.opinion_matrix().shape == (11, 20)
+    assert set(r.agents["model"]) == {"numeric/bounded_confidence"}
+    assert not (run_dir / "events.jsonl").exists()  # numbers only, no text
+    assert json.loads((run_dir / "meta.json").read_text())["finished"]
 
 
-def test_personas_depend_only_on_seed():
-    x = np.linspace(-2, 2, 8)
-    assert generate_personas(x, 5) == generate_personas(x, 5)
-    assert generate_personas(x, 5) != generate_personas(x, 6)
-    assert all(18 <= p.age <= 64 for p in generate_personas(x, 5))
+def test_same_seed_same_run(make_cfg):
+    a = asyncio.run(run(make_cfg()))
+    b = asyncio.run(run(make_cfg()))
+    assert a == b
+
+
+def test_llm_run_logs_every_agent_every_day(make_cfg):
+    cfg = make_cfg()
+    run_dir = new_run_dir(cfg)
+    asyncio.run(run(cfg, run_dir))
+    r = load_run(run_dir)
+    assert len(r.events) == 20 * (cfg.steps + 1)
+    day1 = [e for e in r.events if e["day"] == 1]
+    assert all(e["post"] and e["prompt"] and e["error"] is None for e in day1)
+    assert all(1 <= len(e["feed"]) <= 3 for e in day1)
+    ops = r.opinion_matrix()
+    assert ops.min() >= -2 and ops.max() <= 2 and not np.allclose(ops[0], ops[-1])
+
+
+def test_update_is_synchronous(make_cfg):
+    """Everyone reads posts from the previous day, never from the day being computed."""
+    cfg = make_cfg()
+    run_dir = new_run_dir(cfg)
+    asyncio.run(run(cfg, run_dir))
+    events = pd.DataFrame(load_run(run_dir).events)
+    for day in range(1, cfg.steps + 1):
+        posted_before = dict(
+            events[events["day"] == day - 1][["agent", "post"]].itertuples(index=False)
+        )
+        for feed in events[events["day"] == day]["feed"]:
+            for item in feed:
+                assert item["post"] == posted_before[item["author"]]
+
+
+def test_bad_model_reply_never_crashes_a_run(make_cfg, monkeypatch):
+    from disensa.llm.client import LLMClient
+
+    async def broken(self, model, messages, **kw):
+        return {"reasoning": "hm"}, '{"reasoning": "hm"}'  # no belief, no post
+
+    monkeypatch.setattr(LLMClient, "complete_json", broken)
+    cfg = make_cfg()
+    history = asyncio.run(run(cfg))
+    assert history[-1]["errors"] == 20
+    assert history[0]["mean_opinion"] == history[-1]["mean_opinion"]  # nobody moved
+
+
+def test_models_are_split_by_weight():
+    models = [ModelSpec(name="a", weight=3), ModelSpec(name="b", weight=1)]
+    names = [m.name for m in assign_models(models, 20, seed=1)]
+    assert names.count("a") == 15 and names.count("b") == 5
+    assert names == [m.name for m in assign_models(models, 20, seed=1)]
+
+
+def test_mixed_models_get_a_mean_per_model(make_cfg):
+    dyn = make_cfg().dynamics.model_dump(mode="json")
+    dyn["models"] = [{"name": "fake/stubborn"}, {"name": "fake/conformist"}]
+    history = asyncio.run(run(make_cfg(dynamics=dyn)))
+    assert "mean_opinion[fake/stubborn]" in history[-1]
+
+
+def test_llm_dynamics_need_a_model(make_cfg):
+    with pytest.raises(ValueError):
+        make_cfg(dynamics={"type": "llm", "models": []})
 
 
 @pytest.mark.parametrize(
@@ -40,95 +98,3 @@ def test_personas_depend_only_on_seed():
 )
 def test_stance_label(v, label):
     assert stance_label(v) == label
-
-
-def test_classifier_source_requires_scorer(tmp_path):
-    with pytest.raises(ValueError):
-        make_cfg(tmp_path, scorer=None, simulation={"opinion_source": "classifier"})
-
-
-def test_recommender_only_shows_similar_neighbours(tmp_path):
-    cfg = make_cfg(
-        tmp_path,
-        simulation={
-            "recommender": {"enabled": True, "threshold": 0.5},
-            "feed": {"min_posts": 10, "max_posts": 10},
-        },
-    )
-    sim = Simulation(cfg)
-    for a in sim.agents:
-        a.post = f"post {a.id}"
-    ops = sim.opinions()
-    for i in range(len(sim.agents)):
-        for author, _ in sim.build_feed(i, ops):
-            assert author in sim.graph[i]
-            assert abs(ops[author] - ops[i]) <= 0.5
-
-
-async def test_full_run_writes_everything(tmp_path):
-    cfg = make_cfg(tmp_path)
-    run_dir = new_run_dir(cfg)
-    writer = RunWriter(run_dir)
-    sim = Simulation(cfg)
-    history = await sim.run(writer)
-    writer.close()
-
-    assert len(history) == cfg.simulation.days + 1
-    ops = pd.read_parquet(run_dir / "opinions.parquet")
-    assert len(ops) == 20 * (cfg.simulation.days + 1)
-    assert ops["opinion"].between(-2, 2).all()
-    events = [json.loads(line) for line in open(run_dir / "events.jsonl")]
-    assert len(events) == 20 * (cfg.simulation.days + 1)
-    assert all(e["error"] is None for e in events)
-    assert all(e["post"] for e in events)
-    assert {"agent", "model", "gender", "trait_openness"} <= set(
-        pd.read_parquet(run_dir / "agents.parquet").columns
-    )
-
-
-async def test_same_seed_same_run(tmp_path):
-    a = Simulation(make_cfg(tmp_path))
-    b = Simulation(make_cfg(tmp_path))
-    await a.run()
-    await b.run()
-    assert np.allclose(a.opinions(), b.opinions())
-
-
-class GarbageClient(LLMClient):
-    """A model that never returns JSON."""
-
-    async def complete(self, model, messages, **kw):
-        from disensa.llm import LLMResponse
-
-        return LLMResponse(text="I refuse to use JSON.", model=model)
-
-
-async def test_bad_model_output_is_logged_not_fatal(tmp_path):
-    cfg = make_cfg(tmp_path)
-    sim = Simulation(cfg, client=GarbageClient(cache_dir=tmp_path / "c"))
-    before = sim.opinions().copy()
-    await sim.run()
-    assert np.allclose(sim.opinions(), before)  # beliefs unchanged
-    assert sim.day_metrics()["errors"] == 20 * (cfg.simulation.days + 1)
-
-
-async def test_rewiring_run_logs_edges_and_conserves_them(tmp_path):
-    cfg = make_cfg(
-        tmp_path,
-        simulation={
-            "days": 6,
-            "recommender": {"enabled": False},
-            "rewiring": {"enabled": True, "probability": 0.5, "unfollow_threshold": 0.8},
-        },
-    )
-    run_dir = new_run_dir(cfg)
-    writer = RunWriter(run_dir)
-    sim = Simulation(cfg)
-    m0 = sim.graph.number_of_edges()
-    history = await sim.run(writer)
-    writer.close()
-    assert sim.graph.number_of_edges() == m0
-    assert sum(h["rewired"] for h in history) > 0
-    snapshots = [json.loads(line) for line in open(run_dir / "edges.jsonl")]
-    assert snapshots[0]["day"] == 0 and len(snapshots) > 1
-    assert all(len(s["edges"]) == m0 for s in snapshots)

@@ -1,17 +1,16 @@
-# Offline demo with the fake backend: no model needed, runs in seconds.
-# Useful to try the pipeline, the trajectory tools and the visualization.
+# The LLM pipeline with offline fake models: no Ollama, no API keys, a few seconds.
+# Fake agents embed their position in their posts and move towards what they read.
 name: demo_fake
 seed: 7
 network: {topology: watts_strogatz, n: 60, k: 6, beta: 0.1}
 opinions: {distribution: uniform}
-simulation:
-  days: 30
+steps: 30
+dynamics:
+  type: llm
+  statement: Euthanasia should be legal for terminally ill adults who clearly request it.
+  models:
+    - {name: fake/bounded, weight: 2}
+    - {name: fake/conformist, weight: 1}
+    - {name: fake/stubborn, weight: 1}
   feed: {min_posts: 2, max_posts: 5}
-  recommender: {enabled: false}
-models:
-  - {name: fake/bounded, weight: 2}
-  - {name: fake/conformist, weight: 1}
-  - {name: fake/stubborn, weight: 1}
-scorer:
-  name: fake/scorer
-llm: {max_concurrency: 64}
+  max_concurrency: 64

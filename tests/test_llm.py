@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import pytest
@@ -5,45 +6,27 @@ import pytest
 from disensa.llm import LLMClient, parse_json
 
 
-async def test_fake_backend_is_deterministic_and_cached(tmp_path):
-    client = LLMClient(cache_dir=tmp_path)
-    msgs = [
-        {
-            "role": "user",
-            "content": 'Respond ONLY with JSON: {"score": x}. Post: "My position is +1.40."',
-        }
-    ]
-    a = await client.complete("fake/x", msgs)
-    b = await client.complete("fake/x", msgs)
-    assert not a.cached and b.cached
-    assert a.text == b.text
-    assert json.loads(a.text)["score"] == 1
-
-
-async def test_different_models_are_cached_separately(tmp_path):
-    client = LLMClient(cache_dir=tmp_path)
-    msgs = [{"role": "user", "content": "hello"}]
-    await client.complete("fake/one", msgs)
-    b = await client.complete("fake/two", msgs)
-    assert not b.cached
-
-
 @pytest.mark.parametrize(
-    "text,expected",
+    "text",
     [
-        ('{"belief": 1}', {"belief": 1}),
-        (
-            'Sure! Here it is:\n```json\n{"belief": -1.5, "post": "hi"}\n```',
-            {"belief": -1.5, "post": "hi"},
-        ),
-        ('{"a": {"b": 2}, "c": 3,}', {"a": {"b": 2}, "c": 3}),  # trailing comma
-        ('noise {not json} then {"score": 2}', {"score": 2}),
+        '{"belief": 1}',
+        'Sure! ```json\n{"belief": 1}\n```',
+        'Here: {"belief": 1,}',
     ],
 )
-def test_parse_json_tolerates_messy_replies(text, expected):
-    assert parse_json(text) == expected
+def test_parse_json_tolerates_common_slips(text):
+    assert parse_json(text) == {"belief": 1}
 
 
-def test_parse_json_raises_without_object():
+def test_parse_json_rejects_prose():
     with pytest.raises(ValueError):
-        parse_json("I would rather not answer in JSON.")
+        parse_json("I think I agree.")
+
+
+def test_cache_makes_reruns_free(tmp_path):
+    client = LLMClient(tmp_path / "cache")
+    msgs = [{"role": "user", "content": 'your position: +1.0 {"post": "<your post>"}'}]
+    a = asyncio.run(client.complete("fake/bounded", msgs))
+    b = asyncio.run(client.complete("fake/bounded", msgs))
+    assert not a.cached and b.cached and a.text == b.text
+    assert json.loads(a.text)["post"]

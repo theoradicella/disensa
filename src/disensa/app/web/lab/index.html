@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opinion Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@500&display=swap">
+<script src="/vendor/d3.min.js"></script>
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/lab/lab.css">
+<script src="/shared/header.js"></script>
+</head>
+<body>
+<site-header current="lab"></site-header>
+
+<section class="labcard" id="labcard" aria-label="Lab">
+  <div class="labbar">
+    <div class="toggle" role="group" aria-label="Lab panels">
+      <button type="button" id="tab-new" aria-pressed="false" aria-controls="drawer">New run</button>
+      <button type="button" id="tab-runs" aria-pressed="false" aria-controls="drawer">Runs</button>
+    </div>
+    <p class="labbar-hint">Configure a simulation or replay a past one</p>
+  </div>
+  <div class="drawer" id="drawer">
+    <div class="drawer-inner">
+      <div class="drawer-scroll">
+        <section id="pane-new" hidden>
+          
+          <form id="form" autocomplete="off" novalidate>
+        <p class="wiz-count" id="wiz-count"></p>
+        <div class="wiz-progress" id="wiz-progress"></div>
+        <section class="wiz-step" data-step="start" hidden>
+          <h3>Start</h3>
+          <p class="intro">Begin from a preset, or set everything yourself. Every step can be changed later.</p>
+          <fieldset>
+          <label class="f">Start from a preset
+            <select id="preset"><option value="">Custom</option></select>
+          </label>
+        </fieldset>
+          <fieldset>
+          <legend>Agents</legend>
+          <p class="hint">LLM agents read and write posts; a numeric model moves numbers with a fixed rule.</p>
+          <div class="seg" role="group" aria-label="Engine">
+            <button type="button" id="eng-llm" aria-pressed="true">LLM agents</button>
+            <button type="button" id="eng-num" aria-pressed="false">Numeric model</button>
+          </div>
+          <div class="row">
+            <label class="f">Run name <input type="text" id="name" value="my_run"></label>
+            <label class="f">Seed <input type="number" id="seed" value="1" step="1"></label>
+          </div>
+        </fieldset>
+        </section>
+        <section class="wiz-step" data-step="network" hidden>
+          <h3>Network</h3>
+          <p class="intro">Who is connected to whom.</p>
+          <fieldset>
+          <legend>Network</legend>
+          <div class="row">
+            <label class="f">Topology
+              <select id="topology">
+                <option value="watts_strogatz">Small-world (Watts–Strogatz)</option>
+                <option value="barabasi_albert">Scale-free (Barabási–Albert)</option>
+                <option value="erdos_renyi">Random (Erdős–Rényi)</option>
+              </select>
+            </label>
+            <label class="f">Agents <input type="number" id="n" value="40" min="3" max="500"></label>
+          </div>
+          <div class="row" data-topo="watts_strogatz">
+            <label class="f">Neighbours k <input type="number" id="k" value="6" min="2" step="2"></label>
+            <label class="f">Rewire β <input type="number" id="beta" value="0.1" min="0" max="1" step="0.05"></label>
+          </div>
+          <div class="row" data-topo="barabasi_albert">
+            <label class="f">Links per new node m <input type="number" id="m" value="3" min="1"></label>
+          </div>
+          <div class="row" data-topo="erdos_renyi">
+            <label class="f">Edge probability p <input type="number" id="p" value="0.12" min="0" max="1" step="0.01"></label>
+          </div>
+        </fieldset>
+        </section>
+        <section class="wiz-step" data-step="opinions" hidden>
+          <h3>Initial opinions</h3>
+          <p class="intro">Where agents stand on day 0, from −2 (strongly oppose) to +2 (strongly support).</p>
+          <fieldset>
+          <legend>Initial opinions (−2 … +2)</legend>
+          <div class="row">
+            <label class="f">Distribution
+              <select id="dist">
+                <option value="uniform">Uniform</option>
+                <option value="normal">Normal</option>
+                <option value="bimodal">Two camps</option>
+              </select>
+            </label>
+          </div>
+          <div class="row" id="dist-params">
+            <label class="f" id="mean-label">Mean <input type="number" id="mean" value="0" step="0.1"></label>
+            <label class="f">Spread (std) <input type="number" id="std" value="1" min="0" step="0.1"></label>
+          </div>
+        </fieldset>
+        </section>
+        <section class="wiz-step" data-step="algorithm" hidden>
+          <h3>Algorithm</h3>
+          <p class="intro">The rule each agent uses to update its opinion.</p>
+          <fieldset>
+            <legend>Algorithm</legend>
+            <label class="f">Model
+              <select id="algo">
+                <option value="bounded_confidence">Bounded confidence (Hegselmann–Krause)</option>
+                <option value="degroot">DeGroot</option>
+              </select>
+            </label>
+            <div class="row">
+              <label class="f">Steps <input type="number" id="steps" value="60" min="1" max="1000"></label>
+              <label class="f" data-algo="bc">Confidence ε <input type="number" id="eps" value="0.8" min="0" step="0.1"></label>
+            </div>
+            <div class="row">
+              <label class="f" data-algo="bc">Rate μ <input type="number" id="mu" value="0.5" min="0" max="1" step="0.05"></label>
+            </div>
+          </fieldset>
+        </section>
+        <section class="wiz-step" data-step="models" hidden>
+          <h3>Topic and models</h3>
+          <p class="intro">What agents discuss, and which language models play them.</p>
+          <fieldset>
+            <legend>Topic</legend>
+            <label class="f">Statement agents take a position on
+              <textarea id="statement">Euthanasia should be legal for terminally ill adults who clearly request it.</textarea>
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>Models</legend>
+            <div id="ollama-note" class="notice" hidden></div>
+            <div id="models"></div>
+            <button type="button" class="link-btn" id="add-model">+ Add model</button>
+            <p class="hint">Weights set each model's share of agents; agents are placed at random.</p>
+          </fieldset>
+        </section>
+        <section class="wiz-step" data-step="conversation" hidden>
+          <h3>Conversation</h3>
+          <p class="intro">How long the run lasts and what each agent reads every day.</p>
+          <fieldset>
+            <legend>Simulation</legend>
+            <div class="row3">
+              <label class="f">Days <input type="number" id="days" value="15" min="1" max="200"></label>
+              <label class="f">Posts read min <input type="number" id="fmin" value="2" min="0"></label>
+              <label class="f">max <input type="number" id="fmax" value="5" min="1"></label>
+            </div>
+          </fieldset>
+        </section>
+        <section class="wiz-step" data-step="review" hidden>
+          <h3>Review and run</h3>
+          <p class="intro">Check your choices. Use Edit to go back to any step.</p>
+          <div class="review" id="review"></div>
+        </section>
+        <div class="wiz-nav">
+          <button type="button" class="btn-ghost" id="wiz-back">Back</button>
+          <p class="error" id="form-error" role="alert"></p>
+          <button type="button" class="primary" id="wiz-next">Next</button>
+          <button class="primary" id="run-btn" type="submit" hidden>Run simulation</button>
+        </div>
+      </form>
+        </section>
+        <section id="pane-runs" hidden>
+          <div class="drawer-head"><h2>Previous runs</h2><p class="hint">Open one to replay it.</p></div>
+          <div id="runs"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="shell">
+  <main>
+    <div id="empty" class="empty">
+      <div>
+        <h1>Set up a run from New run above</h1>
+        <p>Or open a past one from Runs. Offline test models run in seconds; Ollama models take minutes.</p>
+      </div>
+    </div>
+
+    <div id="view" hidden>
+      <div class="head">
+        <h1 id="title"></h1>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="pill" id="status"></span>
+          <button type="button" class="icon-btn" id="cancel" hidden style="padding:0 10px">Stop</button>
+        </div>
+      </div>
+      <p class="topic" id="topic"></p>
+      <div class="chips" id="chips"></div>
+
+      <div class="controls">
+        <button type="button" class="play" id="play" aria-label="Play">▶</button>
+        <input type="range" id="scrub" min="0" max="1" step="0.001" value="0" aria-label="Time">
+        <div class="daybox"><span class="hint">Day</span> <b id="day">0</b><span class="hint" id="of"> / 0</span></div>
+        <label class="hint">Speed
+          <select id="speed">
+            <option value="0.5">slow</option>
+            <option value="1.2" selected>normal</option>
+            <option value="3">fast</option>
+          </select>
+        </label>
+        <button type="button" class="icon-btn" id="table-toggle" style="padding:0 10px">Table</button>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Network</h2>
+          <div id="net"></div>
+          <div class="legend" id="net-legend"></div>
+        </div>
+        <div class="card">
+          <h2>Agent</h2>
+          <div id="agent"></div>
+        </div>
+      </div>
+
+      <div class="charts">
+        <div class="card chart"><h2>Polarization</h2><div id="c-pol"></div></div>
+        <div class="card chart"><h2>Disagreement with neighbours</h2><div id="c-dis"></div></div>
+        <div class="card chart"><h2>Neighbour correlation</h2><div id="c-nci"></div></div>
+      </div>
+      <div class="charts2">
+        <div class="card chart"><h2 id="means-title">Mean opinion by model</h2><div id="c-means"></div><div class="legend" id="means-legend"></div></div>
+        <div class="card chart"><h2>Opinion distribution</h2><div id="c-hist"></div></div>
+      </div>
+
+      <div class="card" id="table-card" hidden>
+        <h2>All agents</h2>
+        <div class="table-scroll">
+          <table><thead><tr><th class="num">Agent</th><th>Model</th><th class="num">Opinion</th><th class="num">Links</th><th>Post</th></tr></thead><tbody id="tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="tooltip" role="status"></div>
+
+<script src="/lab/lab.js"></script>
+</body>
+</html>

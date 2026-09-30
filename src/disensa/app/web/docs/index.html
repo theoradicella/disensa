@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opinion Lab Docs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/docs/docs.css">
+<script src="/shared/header.js"></script>
+</head>
+<body>
+<site-header current="docs"></site-header>
+
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="Contents">
+    <button type="button" class="toc-toggle" id="toc-toggle" aria-expanded="false">Contents <span aria-hidden="true">▾</span></button>
+    <p>Contents</p>
+    <ol class="top">
+      <li><a href="#introduction">Introduction</a></li>
+      <li><a href="#quick-start">Quick start</a></li>
+      <li><a href="#how-a-run-works">How a run works</a></li>
+      <li><a href="#agents">LLM agents</a>
+        <ol>
+          <li><a href="#personas">Personas</a></li>
+          <li><a href="#memory">Memory and prompts</a></li>
+          <li><a href="#models">Models</a></li>
+          <li><a href="#assignment">Mixing models</a></li>
+          <li><a href="#scorer">The scorer</a></li>
+        </ol>
+      </li>
+      <li><a href="#algorithms">Numeric algorithms</a>
+        <ol>
+          <li><a href="#degroot">DeGroot</a></li>
+          <li><a href="#bounded-confidence">Bounded confidence</a></li>
+          <li><a href="#deffuant">Deffuant</a></li>
+          <li><a href="#friedkin-johnsen">Friedkin–Johnsen</a></li>
+        </ol>
+      </li>
+      <li><a href="#topologies">Network topologies</a></li>
+      <li><a href="#initial-opinions">Initial opinions</a></li>
+      <li><a href="#simulation">Simulation settings</a>
+        <ol>
+          <li><a href="#feed">Feed and recommender</a></li>
+          <li><a href="#rewiring">Rewiring</a></li>
+          <li><a href="#opinion-source">Which opinion counts</a></li>
+        </ol>
+      </li>
+      <li><a href="#metrics">Metrics</a></li>
+      <li><a href="#reading-a-run">Reading a run</a></li>
+      <li><a href="#outputs">Run files</a></li>
+      <li><a href="#parameters">All parameters</a></li>
+      <li><a href="#references">References</a></li>
+    </ol>
+  </nav>
+
+  <article>
+    <p class="eyebrow">Documentation</p>
+    <h1 id="introduction">Watch opinions form, split and settle</h1>
+    <p class="lead">The lab simulates how opinions spread on a social network. Each person in the network is an agent that reads what its neighbours post, thinks about it, and writes its own posts, day after day.</p>
+    <p>Classic opinion-dynamics models reduce each person to a single number and move that number with a fixed rule. Here the agents can be <strong>language models</strong> that read and write actual text, so you can see not only <em>whether</em> an opinion changed but <em>why</em>: every post an agent read, its reasoning and its new post are saved.</p>
+    <p>Two things set this lab apart from earlier LLM simulations such as Wang et al. (2025), which used one model for every agent:</p>
+    <ul>
+      <li><strong>Different agents can run on different models</strong> (Llama, Gemma, Mistral, Qwen, Claude, GPT, Grok, DeepSeek…), so the population mixes genuinely different ways of reasoning.</li>
+      <li><strong>Individual trajectories are inspectable.</strong> You can follow a single agent through the run and see which posts moved it.</li>
+    </ul>
+    <p>The classic numeric models are included too, so every LLM run can be compared with a baseline on exactly the same network.</p>
+    <div class="note">Opinions always live on a scale from <strong>−2</strong> (strongly oppose) to <strong>+2</strong> (strongly support) a statement, such as “Euthanasia should be legal for terminally ill adults who clearly request it.”</div>
+
+    <h2 id="quick-start">Quick start</h2>
+    <pre><code>uv sync --extra analysis        # install
+uv run disensa app             # open the start page, then the Lab</code></pre>
+    <p>In the Lab, open <strong>New run</strong> in the header, pick a preset or set each part, and press <strong>Run simulation</strong>. The <code>demo_camps</code> preset uses offline test models and finishes in a few seconds.</p>
+    <p>For real language models, install <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>, start it, and pull a few models:</p>
+    <pre><code>ollama serve                                 # keep this running
+ollama pull llama3.2:3b &amp;&amp; ollama pull qwen2.5:7b</code></pre>
+    <p>Installed Ollama models then appear in the model menus. Everything also works from the command line:</p>
+    <pre><code>uv run disensa run configs/quick.yaml       # run a config
+uv run disensa inspect runs/&lt;run&gt;           # per-model summary and largest opinion shifts
+uv run disensa viz runs/&lt;run&gt;               # one offline viewer file for a run</code></pre>
+
+    <h2 id="how-a-run-works">How a run works</h2>
+    <ol class="steps">
+      <li><strong>Build the network.</strong> A random, small-world or scale-free graph connects the agents. It is seeded, so the same seed always gives the same network.</li>
+      <li><strong>Create the agents.</strong> Each agent gets a persona and a starting opinion, and is assigned a model.</li>
+      <li><strong>Day 0.</strong> Every agent writes a first post about the statement.</li>
+      <li><strong>Each following day.</strong> Every agent reads a few posts from the people it follows, then replies with its reasoning, its new opinion, a new post, and an updated memory. All agents act at the same time, based on the previous day.</li>
+      <li><strong>End of the day.</strong> A fixed scorer rates every post, the network may rewire, and the metrics are recorded.</li>
+    </ol>
+    <p>Days are <strong>synchronous</strong>: everyone reads the state of day <em>t − 1</em> and all updates apply together, so the order in which agents are processed never matters.</p>
+
+    <h2 id="agents">LLM agents</h2>
+    <h3 id="personas">Personas</h3>
+    <p>Following Wang et al., each agent is described by a gender, an age between 18 and 64, an education level, and one pole of each Big Five personality trait (for example “open to new ideas” or “prefers the familiar”). Agents are identified only by a number, to avoid bias from names.</p>
+    <p>Personas depend only on the seed, never on which model an agent uses. This means the same population can be replayed under different model mixes, and any difference in outcome comes from the models.</p>
+
+    <h3 id="memory">Memory and prompts</h3>
+    <p>Each agent keeps a short running summary of what it has seen and thought (at most <code>memory_words</code> words). Every day it receives its persona, its memory, its current opinion and the day's posts, and answers in JSON with four fields: <code>reasoning</code>, <code>belief</code>, <code>post</code> and <code>memory</code>.</p>
+    <p>Model output is treated as untrusted. Replies are parsed tolerantly (code fences and small JSON mistakes are fixed), and a reply that still cannot be used is logged as an error while the agent keeps its previous state. A bad reply never stops a run.</p>
+    <p>With <strong>confirmation bias</strong> switched on, the prompt tells agents that they tend to favour arguments that agree with them. Chuang et al. (2024) found that LLM agents otherwise drift towards the factual consensus.</p>
+
+    <h3 id="models">Models</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Kind</th><th>Example name</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Local, Ollama</td><td><code>ollama_chat/llama3.1:8b</code></td><td>Free, runs on your computer. Installed models appear automatically in the Lab.</td></tr>
+        <tr><td>Hosted APIs</td><td><code>anthropic/…</code>, <code>openai/…</code>, <code>xai/…</code>, <code>deepseek/…</code></td><td>Put the API keys in a <code>.env</code> file. Costs money.</td></tr>
+        <tr><td>Any OpenAI-compatible server</td><td><code>openai/&lt;model&gt;</code> + <code>api_base</code></td><td>For example a vLLM server on a GPU cluster.</td></tr>
+        <tr><td>Offline test models</td><td><code>fake/tribal</code>, <code>fake/stubborn</code>…</td><td>No model at all, instant and deterministic. For trying the tool and for tests.</td></tr>
+      </tbody>
+    </table></div>
+    <p>The offline test models imitate simple behaviours, so every part of the lab can be tried without a language model:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Test model</th><th>Behaviour</th></tr></thead>
+      <tbody>
+        <tr><td><code>fake/bounded</code></td><td>Moves towards posts within 1.5 of its own opinion.</td></tr>
+        <tr><td><code>fake/conformist</code></td><td>Moves strongly towards everything it reads.</td></tr>
+        <tr><td><code>fake/stubborn</code></td><td>Barely moves.</td></tr>
+        <tr><td><code>fake/contrarian</code></td><td>Moves away from what it reads.</td></tr>
+        <tr><td><code>fake/tribal</code></td><td>Only listens to posts within 0.7 of its own opinion, so the population splits into camps.</td></tr>
+      </tbody>
+    </table></div>
+    <p>Every model reply is cached on disk, so running the same configuration again costs nothing and returns the same result.</p>
+
+    <h3 id="assignment">Mixing models</h3>
+    <p>When a run uses several models, each has a <strong>weight</strong>: its share of the agents. The assignment decides where those agents sit in the network.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Assignment</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>balanced</code> (default)</td><td>Exact shares from the weights, placed at random.</td></tr>
+        <tr><td><code>random</code></td><td>Each agent draws a model independently, with probability proportional to its weight.</td></tr>
+        <tr><td><code>clustered</code></td><td>Exact shares, but whole communities of the network (found with the Louvain method) share a model, so model and network position are correlated.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 id="scorer">The scorer</h3>
+    <p>Language models are not always consistent when they report their own opinion. Following Chuang et al., a single fixed <strong>scorer</strong> model reads every post and rates it from −2 to +2. The same scorer rates every agent, and it should ideally come from a different lab than the agents, so no model grades its own family's writing.</p>
+
+    <h2 id="algorithms">Numeric algorithms</h2>
+    <p>These classic models run on exactly the same networks and starting opinions as the LLM agents, with each opinion a single number <em>x<sub>i</sub></em> on [−2, 2]. One “day” is one step of the model.</p>
+
+    <h3 id="degroot">DeGroot</h3>
+    <p>Everyone moves to the average of their own opinion and their neighbours'. On a connected network this always ends in full consensus.</p>
+    <div class="formula">x<sub>i</sub>(t+1) = average of x<sub>j</sub>(t) over j ∈ {i} ∪ N(i)</div>
+
+    <h3 id="bounded-confidence">Bounded confidence (Hegselmann–Krause)</h3>
+    <p>Agents only listen to neighbours whose opinion is close enough to their own, within the <strong>confidence bound ε</strong>, and move towards them at <strong>rate μ</strong>. This is the numeric counterpart Wang et al. compare against. A wide ε gives consensus; a narrow ε lets the population break into separate clusters.</p>
+    <div class="formula">x<sub>i</sub>(t+1) = x<sub>i</sub>(t) + μ · mean<sub>j ∈ N(i), |x<sub>j</sub> − x<sub>i</sub>| ≤ ε</sub> ( x<sub>j</sub>(t) − x<sub>i</sub>(t) )</div>
+
+    <h3 id="deffuant">Deffuant</h3>
+    <p>The pairwise version: random pairs of connected agents meet, and if their opinions are within ε, both move towards each other by μ times their difference. One step is as many encounters as there are edges.</p>
+    <div class="formula">if |x<sub>i</sub> − x<sub>j</sub>| ≤ ε : &nbsp; x<sub>i</sub> ← x<sub>i</sub> + μ(x<sub>j</sub> − x<sub>i</sub>), &nbsp; x<sub>j</sub> ← x<sub>j</sub> + μ(x<sub>i</sub> − x<sub>j</sub>)</div>
+
+    <h3 id="friedkin-johnsen">Friedkin–Johnsen</h3>
+    <p>Each agent keeps its <strong>innate</strong> opinion <em>s<sub>i</sub></em> (its starting opinion) and balances it against its neighbours. The <strong>stubbornness λ</strong> sets how strongly it holds on, so disagreement never fully disappears.</p>
+    <div class="formula">x<sub>i</sub>(t+1) = ( λ s<sub>i</sub> + Σ<sub>j ∈ N(i)</sub> x<sub>j</sub>(t) ) / ( λ + deg(i) )</div>
+
+    <h2 id="topologies">Network topologies</h2>
+    <p>Every network is seeded and always connected (a random graph is redrawn until it is).</p>
+    <div class="cards">
+      <div class="card">
+        <svg width="84" height="56" viewBox="0 0 84 56" aria-hidden="true"><g stroke="#9ec5f4" stroke-width="1.2"><line x1="12" y1="12" x2="40" y2="44"/><line x1="12" y1="12" x2="70" y2="16"/><line x1="40" y1="44" x2="70" y2="16"/><line x1="26" y1="30" x2="58" y2="40"/><line x1="58" y1="40" x2="70" y2="16"/><line x1="12" y1="12" x2="26" y2="30"/></g><g fill="#2a78d6"><circle cx="12" cy="12" r="4"/><circle cx="40" cy="44" r="4"/><circle cx="70" cy="16" r="4"/><circle cx="26" cy="30" r="4"/><circle cx="58" cy="40" r="4"/></g></svg>
+        <h4>Random (Erdős–Rényi)</h4>
+        <p>Every pair is linked with the same probability <code>p</code>. No clusters and no hubs.</p>
+      </div>
+      <div class="card">
+        <svg width="84" height="56" viewBox="0 0 84 56" aria-hidden="true"><g stroke="#9ec5f4" stroke-width="1.2" fill="none"><circle cx="42" cy="28" r="22"/><line x1="20" y1="28" x2="64" y2="28"/></g><g fill="#2a78d6"><circle cx="42" cy="6" r="3.5"/><circle cx="62" cy="17" r="3.5"/><circle cx="64" cy="28" r="3.5"/><circle cx="62" cy="39" r="3.5"/><circle cx="42" cy="50" r="3.5"/><circle cx="22" cy="39" r="3.5"/><circle cx="20" cy="28" r="3.5"/><circle cx="22" cy="17" r="3.5"/></g></svg>
+        <h4>Small-world (Watts–Strogatz)</h4>
+        <p>A ring where each agent links to its <code>k</code> nearest neighbours, and a share <code>β</code> of the links are rewired at random. Tight local groups with short paths between them.</p>
+      </div>
+      <div class="card">
+        <svg width="84" height="56" viewBox="0 0 84 56" aria-hidden="true"><g stroke="#9ec5f4" stroke-width="1.2"><line x1="42" y1="28" x2="14" y2="10"/><line x1="42" y1="28" x2="14" y2="46"/><line x1="42" y1="28" x2="70" y2="10"/><line x1="42" y1="28" x2="72" y2="44"/><line x1="42" y1="28" x2="42" y2="6"/><line x1="70" y1="10" x2="78" y2="26"/></g><g fill="#2a78d6"><circle cx="42" cy="28" r="6.5"/><circle cx="14" cy="10" r="3"/><circle cx="14" cy="46" r="3"/><circle cx="70" cy="10" r="4"/><circle cx="72" cy="44" r="3"/><circle cx="42" cy="6" r="3"/><circle cx="78" cy="26" r="3"/></g></svg>
+        <h4>Scale-free (Barabási–Albert)</h4>
+        <p>Grows one agent at a time, each linking to <code>m</code> existing agents, preferring popular ones. A few hubs, many agents with few links.</p>
+      </div>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Topology</th><th>Parameters</th><th>Typical values</th></tr></thead>
+      <tbody>
+        <tr><td><code>erdos_renyi</code></td><td><code>p</code>: edge probability (0–1)</td><td>0.08–0.15 for 50 agents</td></tr>
+        <tr><td><code>watts_strogatz</code></td><td><code>k</code>: neighbours on the ring (even); <code>β</code>: rewiring share (0–1)</td><td>k = 4–6, β = 0.1</td></tr>
+        <tr><td><code>barabasi_albert</code></td><td><code>m</code>: links per new agent</td><td>2–3</td></tr>
+      </tbody>
+    </table></div>
+    <p>All topologies take <code>n</code>, the number of agents (default 50, as in Wang et al.). Wang et al. found echo chambers on small-world and scale-free networks but not on random ones.</p>
+
+    <h2 id="initial-opinions">Initial opinions</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Distribution</th><th>Parameters</th><th>What you get</th></tr></thead>
+      <tbody>
+        <tr><td><code>uniform</code> (default)</td><td>none</td><td>Opinions spread evenly between −2 and +2.</td></tr>
+        <tr><td><code>normal</code></td><td><code>mean</code>, <code>std</code></td><td>Most agents near the mean.</td></tr>
+        <tr><td><code>bimodal</code></td><td><code>mean</code> (camp position ±), <code>std</code></td><td>Two camps around −mean and +mean, already polarized.</td></tr>
+      </tbody>
+    </table></div>
+    <p>Values are clipped to [−2, 2]. For LLM agents, the starting opinion becomes part of the first prompt (“you somewhat support this statement, +0.8”).</p>
+
+    <h2 id="simulation">Simulation settings</h2>
+    <h3 id="feed">Feed and recommender</h3>
+    <p>Each day an agent reads a random number of posts, between <strong>posts read min</strong> and <strong>max</strong>, from the people it is linked to.</p>
+    <p>With the <strong>recommender</strong> on, it only sees posts from neighbours whose opinion is within the <strong>similarity threshold</strong> of its own, like a feed that shows people content they already agree with (Wang et al. §3.3). A lower threshold means a stronger filter bubble.</p>
+
+    <h3 id="rewiring">Rewiring</h3>
+    <p>Off by default. When on, at the end of each day every agent, with some probability, <strong>unfollows</strong> the neighbour it disagrees with most (if the gap is beyond the unfollow threshold) and <strong>follows</strong> someone new: a similar agent, or anyone. The number of links stays the same and nobody is ever left without links. This follows the co-evolving network models of Holme &amp; Newman (2006) and Sasahara et al. (2021).</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Chance per day</td><td>0.1</td><td>Probability that an agent reconsiders its links on a given day.</td></tr>
+        <tr><td>Unfollow beyond</td><td>1.5</td><td>Only neighbours further than this can be dropped.</td></tr>
+        <tr><td>Follow</td><td>similar</td><td><code>similar</code>: someone within the next setting; <code>random</code>: anyone.</td></tr>
+        <tr><td>Similar within</td><td>0.5</td><td>How close a new contact must be.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 id="opinion-source">Which opinion counts</h3>
+    <p>Each LLM agent has two opinions every day: the <strong>belief it reports</strong> itself (the approach of Wang et al.) and the <strong>scorer's rating of its post</strong> (the approach of Chuang et al.). Both are always saved. The setting chooses which one drives the metrics, the recommender and rewiring.</p>
+
+    <h2 id="metrics">Metrics</h2>
+    <p>Recorded every day, following Wang et al. §4.2. <em>N</em> is the number of agents and <em>N(i)</em> the neighbours of agent <em>i</em>.</p>
+    <h3>Polarization</h3>
+    <p>The variance of all opinions. High when the population sits at the extremes.</p>
+    <div class="formula">P = (1/N) Σ<sub>i</sub> (x<sub>i</sub> − x̄)<sup>2</sup></div>
+    <h3>Global disagreement</h3>
+    <p>How much agents disagree with their own neighbours. It falls when neighbours come to agree, the local signature of an echo chamber.</p>
+    <div class="formula">DG = (1/2N) Σ<sub>i</sub> (1/|N(i)|) Σ<sub>j ∈ N(i)</sub> (x<sub>i</sub> − x<sub>j</sub>)<sup>2</sup></div>
+    <h3>Neighbour correlation</h3>
+    <p>The correlation between each agent's opinion and the average opinion of its neighbours (Cinus et al. 2022). Close to +1 when like-minded agents cluster together.</p>
+    <div class="formula">NC = corr( x<sub>i</sub> , mean<sub>j ∈ N(i)</sub> x<sub>j</sub> )</div>
+    <div class="note"><strong>Echo chambers</strong> show up as neighbour correlation going up and disagreement going down. Polarization tells you whether the camps are also far apart.</div>
+    <h3>With several models</h3>
+    <p>Runs that mix models also record the mean opinion of each model's agents and the <strong>model homophily</strong>: the share of links between two agents on the same model.</p>
+
+    <h2 id="reading-a-run">Reading a run</h2>
+    <p>Open a run from <strong>Runs</strong> in the Lab header. Live runs stream in as each day finishes.</p>
+    <ul>
+      <li><strong>Network.</strong> Colour is opinion, from pale blue (oppose) to deep blue (support); shape is the model; size is the number of links. Horizontal position follows opinion, so camps pull apart on screen. Drag nodes to move them.</li>
+      <li><strong>Playback.</strong> Play, pause or scrub through the days. Opinions change smoothly between days. Arrow keys step a day; space plays.</li>
+      <li><strong>Agent panel.</strong> Click an agent to see its persona, its opinion over time, the posts it read that day (click one to jump to that agent), its reasoning and its post.</li>
+      <li><strong>Charts.</strong> The three metrics, mean opinion by model, and today's opinion distribution. Click a chart to jump to that day.</li>
+      <li><strong>Table.</strong> Every agent's opinion, links and post for the selected day.</li>
+    </ul>
+    <p>From the command line, <code>disensa inspect</code> lists how each model behaved and the largest opinion shifts, each marked as moving <em>toward</em> what the agent read (assimilation) or <em>away</em> from it (repulsion), with the agent's reasoning.</p>
+
+    <h2 id="outputs">Run files</h2>
+    <p>Each run is saved in its own folder, <code>runs/&lt;date&gt;_&lt;name&gt;_s&lt;seed&gt;/</code>:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>File</th><th>Contents</th></tr></thead>
+      <tbody>
+        <tr><td><code>meta.json</code></td><td>The full configuration, the code version (git commit), timing and call counts.</td></tr>
+        <tr><td><code>agents.parquet</code></td><td>One row per agent: persona, model, number of links.</td></tr>
+        <tr><td><code>opinions.parquet</code></td><td>Per day and agent: reported belief, scorer rating, and the opinion used.</td></tr>
+        <tr><td><code>metrics.parquet</code></td><td>One row per day with every metric.</td></tr>
+        <tr><td><code>events.jsonl</code></td><td>Per day and agent: what it read, its reasoning, post, memory, the raw model reply and any error; plus rewiring events.</td></tr>
+        <tr><td><code>edges.jsonl</code></td><td>The network on day 0 and on every day it changed.</td></tr>
+      </tbody>
+    </table></div>
+    <p>Parquet tables open directly in pandas or DuckDB.</p>
+
+    <h2 id="parameters">All parameters</h2>
+    <p>Everything the Lab form sets can also be written in a YAML config (see the <code>configs/</code> folder).</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Setting</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>name</code>, <code>seed</code></td><td>–, 0</td><td>Run name and random seed. Same seed, same run.</td></tr>
+        <tr><td><code>network.topology</code></td><td>–</td><td><code>erdos_renyi</code>, <code>watts_strogatz</code> or <code>barabasi_albert</code>, with its parameters above.</td></tr>
+        <tr><td><code>network.n</code></td><td>50</td><td>Number of agents.</td></tr>
+        <tr><td><code>opinions.distribution</code></td><td>uniform</td><td><code>uniform</code>, <code>normal</code> or <code>bimodal</code>, with <code>mean</code> (0) and <code>std</code> (1).</td></tr>
+        <tr><td><code>topic.statement</code></td><td>the euthanasia statement</td><td>The statement agents take a position on.</td></tr>
+        <tr><td><code>models</code></td><td>–</td><td>List of models, each with <code>name</code>, <code>weight</code> (1), <code>temperature</code> (0.7) and optional <code>api_base</code>.</td></tr>
+        <tr><td><code>assignment</code></td><td>balanced</td><td><code>balanced</code>, <code>random</code> or <code>clustered</code>.</td></tr>
+        <tr><td><code>scorer.name</code></td><td>none</td><td>Model that rates every post (temperature 0).</td></tr>
+        <tr><td><code>simulation.days</code></td><td>5</td><td>Number of simulated days.</td></tr>
+        <tr><td><code>simulation.feed</code></td><td>1–5</td><td>Posts read per day (<code>min_posts</code>, <code>max_posts</code>).</td></tr>
+        <tr><td><code>simulation.recommender</code></td><td>on, 2.0</td><td>Show only neighbours within <code>threshold</code>.</td></tr>
+        <tr><td><code>simulation.rewiring</code></td><td>off</td><td><code>probability</code> 0.1, <code>unfollow_threshold</code> 1.5, <code>follow</code> similar, <code>follow_threshold</code> 0.5.</td></tr>
+        <tr><td><code>simulation.opinion_source</code></td><td>self</td><td><code>self</code> (reported belief) or <code>classifier</code> (scorer rating; needs a scorer).</td></tr>
+        <tr><td><code>simulation.bias</code></td><td>none</td><td><code>confirmation</code> adds a confirmation-bias sentence to every prompt.</td></tr>
+        <tr><td><code>simulation.memory_words</code></td><td>60</td><td>Maximum length of an agent's memory summary.</td></tr>
+        <tr><td><code>baseline</code></td><td>–</td><td>For numeric runs: <code>model</code>, <code>steps</code> (100), <code>epsilon</code> (1.0), <code>mu</code> (0.5), <code>stubbornness</code> (1.0).</td></tr>
+        <tr><td><code>llm.max_concurrency</code></td><td>4</td><td>Parallel requests per provider. Raise it if your machine or API allows.</td></tr>
+        <tr><td><code>llm.max_tokens</code></td><td>400</td><td>Maximum length of each model reply.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2 id="references">References</h2>
+    <ul class="refs">
+      <li>Wang et al. (2025). Decoding Echo Chambers: LLM-Powered Simulations Revealing Polarization in Social Networks. COLING 2025. arXiv:2409.19338.</li>
+      <li>Chuang et al. (2024). Simulating Opinion Dynamics with Networks of LLM-based Agents. arXiv:2311.09618.</li>
+      <li>DeGroot, M. H. (1974). Reaching a consensus. Journal of the American Statistical Association.</li>
+      <li>Hegselmann, R. &amp; Krause, U. (2002). Opinion dynamics and bounded confidence. JASSS 5(3).</li>
+      <li>Deffuant et al. (2000). Mixing beliefs among interacting agents. Advances in Complex Systems.</li>
+      <li>Friedkin, N. E. &amp; Johnsen, E. C. (1990). Social influence and opinions. Journal of Mathematical Sociology.</li>
+      <li>Watts, D. J. &amp; Strogatz, S. H. (1998). Collective dynamics of small-world networks. Nature.</li>
+      <li>Barabási, A.-L. &amp; Albert, R. (1999). Emergence of scaling in random networks. Science.</li>
+      <li>Holme, P. &amp; Newman, M. E. J. (2006). Nonequilibrium phase transition in the coevolution of networks and opinions. Physical Review E.</li>
+      <li>Sasahara et al. (2021). Social influence and unfollowing accelerate the emergence of echo chambers. Journal of Computational Social Science.</li>
+      <li>Cinus et al. (2022). The effect of people recommenders on echo chambers and polarization. ICWSM.</li>
+    </ul>
+  </article>
+</div>
+
+<script src="/docs/docs.js"></script>
+</body>
+</html>

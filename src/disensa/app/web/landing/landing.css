@@ -1,0 +1,64 @@
+:root {
+  color-scheme: light;
+  --page: #ffffff;
+  --left: #f7f7f7;
+  --right: #ddeaff;  /* cool sky blue, no violet cast */
+  --dot: #2a78d6;
+  --accent: #1c5cab;
+  --accent-hover: #184f95;
+}
+html, body {
+  min-height: 100vh; overflow: hidden;
+  background: var(--left);
+  font: 16px/1.5 "Geist", "Helvetica Neue", Arial, sans-serif;
+}
+/* the dots are drawn above the two coloured halves; clicks pass through to the links */
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; pointer-events: none; }
+.layout {
+  position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 1fr;
+  /* a soft blend between the halves instead of a hard edge */
+  background: linear-gradient(50deg, var(--right) 0%, var(--right) 40%, var(--left) 50%, var(--left) 100%);
+}
+.left {
+  display: grid; align-content: center; justify-items: start; gap: 26px;
+  padding: 150px clamp(20px, 6vw, 96px) 48px; position: relative;
+}
+.copy { display: grid; gap: 20px; max-width: 560px; }
+.copy h1 {
+  margin: 0; color: #0b0b0b; text-wrap: balance;
+  font: 700 clamp(40px, 4.6vw, 76px)/1.0 "Inter Tight", "Geist", "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: -0.035em;
+}
+.copy h1 em { font-style: normal; color: #1c5cab; }
+.copy p {
+  margin: 0; max-width: 42ch; color: #4a5160;
+  font: 400 clamp(16px, 1.3vw, 19px)/1.5 "Geist", "Helvetica Neue", Arial, sans-serif;
+}
+.enter {
+  pointer-events: auto; position: relative; z-index: 2; display: inline-flex; align-items: center; justify-content: center;
+  padding: 13px 24px; border-radius: 6px; background: #0b0b0b; color: #fff; text-decoration: none;
+  font: 500 15px/1 "Geist", "Helvetica Neue", Arial, sans-serif; letter-spacing: 0.01em;
+  transition: background .18s ease, transform .18s ease;
+}
+.enter:hover { background: #104281; }
+.enter:active { transform: translateY(1px); }
+.enter:focus-visible { outline: 2px solid #1c5cab; outline-offset: 3px; }
+.right { display: grid; place-items: center; padding: 150px 32px 32px; }
+.social { display: flex; align-items: center; gap: 4px; margin-top: -14px; }
+.social .icon-link { width: 40px; height: 40px; color:#2b2d30 }
+.social .icon-link:hover { background: none; color: #1c5cab; }
+/* desktop: double the left padding of the text half */
+@media (min-width: 821px) {
+  .left { padding-left: clamp(40px, 12vw, 192px); }
+}
+/* the plane is drawn on the full-screen canvas, centred on this box */
+.ball { width: 100%; max-width: 760px; aspect-ratio: 1.15; }
+@media (max-width: 820px) {
+  .layout {
+    grid-template-columns: 1fr; grid-template-rows: 52% 48%;
+    background: linear-gradient(180deg, var(--left) 0%, var(--left) 46%, var(--right) 56%, var(--right) 100%);
+  }
+  .left { align-content: end; padding-top: 96px; padding-bottom: 28px; gap: 18px; }
+  .right { padding: 8px 16px; }
+  .ball { max-width: 440px; aspect-ratio: 1.3; }
+}

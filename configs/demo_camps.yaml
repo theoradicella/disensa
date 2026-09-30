@@ -1,22 +1,15 @@
 # Offline demo where the population splits into camps (fake models, a few seconds).
-# Tribal agents only listen to people within 0.7 of their view; the recommender hides
-# distant neighbours; rewiring lets agents unfollow people they disagree with.
+# "Tribal" agents only listen to posts within 0.7 of their own view.
 name: demo_camps
 seed: 3
 network: {topology: watts_strogatz, n: 60, k: 6, beta: 0.15}
 opinions: {distribution: uniform}
-topic:
-  name: euthanasia
+steps: 25
+dynamics:
+  type: llm
   statement: Euthanasia should be legal for terminally ill adults who clearly request it.
-simulation:
-  days: 25
+  models:
+    - {name: fake/tribal, weight: 3}
+    - {name: fake/stubborn, weight: 1}
   feed: {min_posts: 2, max_posts: 5}
-  recommender: {enabled: true, threshold: 1.5}
-  rewiring: {enabled: true, probability: 0.25, unfollow_threshold: 1.0, follow: similar, follow_threshold: 0.5}
-assignment: balanced
-models:
-  - {name: fake/tribal, weight: 3}
-  - {name: fake/stubborn, weight: 1}
-scorer:
-  name: fake/scorer
-llm: {max_concurrency: 64}
+  max_concurrency: 64
