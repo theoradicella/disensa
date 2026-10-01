@@ -1,8 +1,12 @@
 """LLM agents, following the Social Simulation Framework of Wang et al. (COLING 2025, §3).
 
-  step 0   every agent writes a first post from its initial opinion
-  step t   every agent reads a few posts by its neighbours (from step t-1), reasons over them
-           with its memory, and replies with a new belief, a new post and an updated memory
+  step 0   every agent states a first message from its initial opinion
+  step t   every agent interacts with a few others: it hears the messages they shared at
+           step t-1, reasons over them with its memory, and replies with a new belief, a new
+           message and an updated memory
+
+Wang et al. frame this as users reading posts on a social network; here the framing is
+domain-neutral (agents in a community exchanging messages), the mechanism is the same.
 
 All agents of a step call their models concurrently; results are applied together, so the
 order in which agents are processed never matters. A malformed reply never crashes a run:
@@ -19,21 +23,21 @@ import numpy as np
 
 from disensa.config import LLMDynamics, ModelSpec
 from disensa.llm import LLMClient
-from disensa.llm.prompts import initial_post_prompt, system_prompt, update_prompt
+from disensa.llm.prompts import initial_message_prompt, system_prompt, update_prompt
 
 
 @dataclass
 class TextState:
     """What an LLM agent carries between steps besides its opinion."""
 
-    post: str = ""
+    message: str = ""  # the latest message it shared
     memory: str = ""
 
 
 def assign_models(models: list[ModelSpec], n: int, seed: int) -> list[ModelSpec]:
     """Exact shares by weight (largest-remainder rounding), randomly placed on the network.
 
-    Uses its own RNG stream (seed + 2_000) so feeds are unaffected by the model mix.
+    Uses its own RNG stream (seed + 2_000) so interactions are unaffected by the model mix.
     """
     w = np.array([m.weight for m in models], dtype=float)
     raw = w / w.sum() * n
@@ -53,7 +57,7 @@ class LLMAgents:
         self.n = graph.number_of_nodes()
         self.models = assign_models(cfg.models, self.n, seed)
         self.state = [TextState() for _ in range(self.n)]
-        self.rng = np.random.default_rng(seed)  # which posts each agent reads
+        self.rng = np.random.default_rng(seed)  # whom each agent interacts with
         self.client = LLMClient(cfg.cache_dir, cfg.max_concurrency)
 
     def labels(self) -> list[str]:
@@ -81,37 +85,41 @@ class LLMAgents:
         except Exception as e:  # malformed JSON after repair, provider error, ...
             return {}, "", f"{type(e).__name__}: {e}"[:500]
 
-    # ---------------------------------------------------------------- reading
+    # ---------------------------------------------------------------- interactions
 
-    def feed(self, i: int) -> list[tuple[int, str]]:
-        """A random number of posts, from a random subset of i's neighbours."""
-        authors = [j for j in sorted(self.graph.neighbors(i)) if self.state[j].post]
-        k = int(self.rng.integers(self.cfg.feed.min_posts, self.cfg.feed.max_posts + 1))
-        k = min(k, len(authors))
+    def interactions(self, i: int) -> list[tuple[int, str]]:
+        """Whom i interacts with this step: (author, message) for a random number of authors.
+
+        Authors are, for now, a random subset of i's network neighbours.
+        """
+        authors = [j for j in sorted(self.graph.neighbors(i)) if self.state[j].message]
+        lo, hi = self.cfg.interactions.min, self.cfg.interactions.max
+        k = min(int(self.rng.integers(lo, hi + 1)), len(authors))
         if k == 0:
             return []
         chosen = sorted(self.rng.choice(authors, size=k, replace=False).tolist())
-        return [(j, self.state[j].post) for j in chosen]
+        return [(j, self.state[j].message) for j in chosen]
 
     # ---------------------------------------------------------------- the two phases
 
     async def start(self, x0: np.ndarray) -> list[dict]:
-        prompts = [initial_post_prompt(self.cfg.statement, float(v)) for v in x0]
+        prompts = [initial_message_prompt(self.cfg.statement, float(v)) for v in x0]
         replies = await asyncio.gather(*(self.ask(i, p) for i, p in enumerate(prompts)))
         events = []
         for i, (obj, raw, err) in enumerate(replies):
-            self.state[i].post = str(obj.get("post", "")).strip()
+            self.state[i].message = str(obj.get("message", "")).strip()
             events.append(self._event(0, i, [], "", self.state[i], prompts[i], raw, err))
         return events
 
-    async def step(self, x: np.ndarray, day: int) -> tuple[np.ndarray, list[dict]]:
-        feeds = [self.feed(i) for i in range(self.n)]  # everyone reads yesterday's posts
+    async def step(self, x: np.ndarray, t: int) -> tuple[np.ndarray, list[dict]]:
+        # everyone hears the messages shared at step t-1
+        interactions = [self.interactions(i) for i in range(self.n)]
         prompts = [
             update_prompt(
                 self.cfg.statement,
                 float(x[i]),
                 self.state[i].memory,
-                feeds[i],
+                interactions[i],
                 self.cfg.memory_words,
             )
             for i in range(self.n)
@@ -128,23 +136,23 @@ class LLMAgents:
                 err = f"missing or invalid 'belief' in reply: {raw[:200]!r}"
             old = self.state[i]
             s = TextState(
-                post=str(obj.get("post", "")).strip() or old.post,
+                message=str(obj.get("message", "")).strip() or old.message,
                 memory=str(obj.get("memory", "")).strip() or old.memory,
             )
             reasoning = str(obj.get("reasoning", "")).strip()
             new_state.append(s)
-            events.append(self._event(day, i, feeds[i], reasoning, s, prompts[i], raw, err))
+            events.append(self._event(t, i, interactions[i], reasoning, s, prompts[i], raw, err))
         self.state = new_state  # applied together: synchronous update
         return new_x, events
 
-    def _event(self, day, i, feed, reasoning, s: TextState, prompt, raw, err) -> dict:
+    def _event(self, t, i, interactions, reasoning, s: TextState, prompt, raw, err) -> dict:
         return {
-            "day": day,
+            "step": t,
             "agent": i,
             "model": self.models[i].name,
-            "feed": [{"author": j, "post": p} for j, p in feed],
+            "interactions": [{"author": j, "message": m} for j, m in interactions],
             "reasoning": reasoning,
-            "post": s.post,
+            "message": s.message,
             "memory": s.memory,
             "prompt": prompt,
             "raw": raw,

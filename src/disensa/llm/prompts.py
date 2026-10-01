@@ -6,31 +6,31 @@ import numpy as np
 
 from disensa import OPINION_MAX, OPINION_MIN
 
-SYSTEM_TEMPLATE = """You are Agent {agent_id}, an ordinary person using a social media platform where you read posts from people you follow and share your own views.
-Think and write as this person would, in plain everyday language."""
+SYSTEM_TEMPLATE = """You are Agent {agent_id}, a member of a community. You interact with other people and share your views with them.
+Think and speak as this person would, in plain everyday language."""
 
-INITIAL_POST_TEMPLATE = """Topic: "{statement}"
+INITIAL_MESSAGE_TEMPLATE = """Topic: "{statement}"
 
 You {label} this statement (your position: {value:+.1f} on a scale from -2 = strongly oppose to +2 = strongly support).
 
-Write a short social media post (1-3 sentences) sharing your view.
-Respond ONLY with JSON: {{"post": "<your post>"}}"""
+Write a short message (1-3 sentences) stating your view.
+Respond ONLY with JSON: {{"message": "<your message>"}}"""
 
 UPDATE_TEMPLATE = """Topic: "{statement}"
 
-What you remember from previous days: {memory}
+What you remember from previous interactions: {memory}
 
 Your current position: you {label} the statement ({value:+.1f} on a scale from -2 = strongly oppose to +2 = strongly support).
 
-Today you read these posts from people you follow:
-{feed}
+In this step you interacted with:
+{interactions}
 
-Reflect on what you read, as the person you are. You may keep, soften, strengthen or change your position.
+Reflect on these interactions, as the person you are. You may keep, soften, strengthen or change your position.
 Respond ONLY with JSON:
-{{"reasoning": "<2-4 sentences: how today's posts affect your view>",
+{{"reasoning": "<2-4 sentences: how these interactions affect your view>",
  "belief": <number from -2 to 2>,
- "post": "<your new post for today, 1-3 sentences>",
- "memory": "<updated summary of what you have seen and thought so far, at most {memory_words} words>"}}"""
+ "message": "<your new message, 1-3 sentences>",
+ "memory": "<updated summary of what you have heard and thought so far, at most {memory_words} words>"}}"""
 
 
 def stance_label(value: float) -> str:
@@ -49,24 +49,30 @@ def system_prompt(agent_id: int) -> str:
     return SYSTEM_TEMPLATE.format(agent_id=agent_id)
 
 
-def initial_post_prompt(statement: str, value: float) -> str:
-    return INITIAL_POST_TEMPLATE.format(statement=statement, label=stance_label(value), value=value)
+def initial_message_prompt(statement: str, value: float) -> str:
+    return INITIAL_MESSAGE_TEMPLATE.format(
+        statement=statement, label=stance_label(value), value=value
+    )
 
 
-def format_feed(feed: list[tuple[int, str]]) -> str:
-    if not feed:
-        return "(nothing today)"
-    return "\n".join(f'- Agent {author}: "{post}"' for author, post in feed)
+def format_interactions(interactions: list[tuple[int, str]]) -> str:
+    if not interactions:
+        return "(nobody in this step)"
+    return "\n".join(f'- Agent {author} said: "{message}"' for author, message in interactions)
 
 
 def update_prompt(
-    statement: str, value: float, memory: str, feed: list[tuple[int, str]], memory_words: int
+    statement: str,
+    value: float,
+    memory: str,
+    interactions: list[tuple[int, str]],
+    memory_words: int,
 ) -> str:
     return UPDATE_TEMPLATE.format(
         statement=statement,
         memory=memory or "(nothing yet)",
         label=stance_label(value),
         value=value,
-        feed=format_feed(feed),
+        interactions=format_interactions(interactions),
         memory_words=memory_words,
     )

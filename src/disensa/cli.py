@@ -32,9 +32,9 @@ def run(config: Path, steps: int = typer.Option(None, help="override `steps`")):
     )
     t0 = time.time()
 
-    def progress(day: int, m: dict) -> None:
+    def progress(t: int, m: dict) -> None:
         typer.echo(
-            f"  step {day:3d}  pol {m['polarization']:.3f}  dis {m['global_disagreement']:.3f}  "
+            f"  step {t:3d}  pol {m['polarization']:.3f}  dis {m['global_disagreement']:.3f}  "
             f"nci {m['neighbor_correlation']:+.3f}  errors {m['errors']}  [{time.time() - t0:.0f}s]"
         )
 

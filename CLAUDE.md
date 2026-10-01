@@ -5,7 +5,7 @@ LLM-agent opinion dynamics on social networks. It extends Wang et al. (COLING 20
 arXiv:2409.19338), who used a single LLM for every agent, in two directions:
 
 1. **Model heterogeneity**: different agents run on different LLMs.
-2. **Individual-level inspection**: every agent's reading, reasoning and posts are logged, so
+2. **Individual-level inspection**: every agent's interactions, reasoning and messages are logged, so
    single trajectories can be traced and explained.
 
 Research questions are deliberately not fixed yet — do not invent or add them.
@@ -18,10 +18,14 @@ Research questions are deliberately not fixed yet — do not invent or add them.
   scorer, recommender, rewiring, Deffuant/Friedkin–Johnsen, analysis, offline viewer). Bring
   features back one at a time, only when Theo asks.
 - One loop for everything (`engine.py`). Numeric and LLM agents differ only in the `Dynamics`
-  object (`dynamics/`): `labels()`, `start(x0)`, `step(x, day) -> (new x, events)`.
+  object (`dynamics/`): `labels()`, `start(x0)`, `step(x, t) -> (new x, events)`.
 - Opinions live on **[-2, 2]** everywhere (−2 strongly oppose, +2 strongly support the statement).
-- Everything is seeded. RNG streams: network/opinions/feeds `seed`, model assignment `seed+2000`.
-- Steps are synchronous: agents read step t−1 and all updates apply together.
+- Everything is seeded. RNG streams: network/opinions/interactions `seed`, model assignment `seed+2000`.
+- Steps are synchronous: agents use the state of step t−1 and all updates apply together.
+- **Vocabulary: no social-media framing.** LLM agents have *interactions*; each interaction is
+  an *author* and the *message* they shared at t−1. Say *step*, never *day*; *message*, never
+  *post*; *interactions*, never *feed*. Prompts describe a community, not a platform. Same
+  mechanism as Wang et al.
 - LLM calls go through `LLMClient` only (LiteLLM + disk cache). `fake/<behaviour>` models run
   offline and deterministically; use them in tests. Never call real APIs in tests.
 - Model output is untrusted: parse with `parse_json`, and a malformed reply must never crash a

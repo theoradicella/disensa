@@ -18,9 +18,9 @@ def test_numeric_run_writes_a_run_folder(make_cfg):
     cfg = make_cfg(dynamics=NUMERIC, steps=10)
     run_dir = new_run_dir(cfg)
     history = asyncio.run(run(cfg, run_dir))
-    assert [h["day"] for h in history] == list(range(11))
+    assert [h["step"] for h in history] == list(range(11))
     r = load_run(run_dir)
-    assert r.days == 10 and r.opinion_matrix().shape == (11, 20)
+    assert r.steps == 10 and r.opinion_matrix().shape == (11, 20)
     assert set(r.agents["model"]) == {"numeric/bounded_confidence"}
     assert not (run_dir / "events.jsonl").exists()  # numbers only, no text
     assert json.loads((run_dir / "meta.json").read_text())["finished"]
@@ -38,33 +38,33 @@ def test_llm_run_logs_every_agent_every_day(make_cfg):
     asyncio.run(run(cfg, run_dir))
     r = load_run(run_dir)
     assert len(r.events) == 20 * (cfg.steps + 1)
-    day1 = [e for e in r.events if e["day"] == 1]
-    assert all(e["post"] and e["prompt"] and e["error"] is None for e in day1)
-    assert all(1 <= len(e["feed"]) <= 3 for e in day1)
+    step1 = [e for e in r.events if e["step"] == 1]
+    assert all(e["message"] and e["prompt"] and e["error"] is None for e in step1)
+    assert all(1 <= len(e["interactions"]) <= 3 for e in step1)
     ops = r.opinion_matrix()
     assert ops.min() >= -2 and ops.max() <= 2 and not np.allclose(ops[0], ops[-1])
 
 
 def test_update_is_synchronous(make_cfg):
-    """Everyone reads posts from the previous day, never from the day being computed."""
+    """Every interaction carries the author's message from step t-1, never from step t."""
     cfg = make_cfg()
     run_dir = new_run_dir(cfg)
     asyncio.run(run(cfg, run_dir))
     events = pd.DataFrame(load_run(run_dir).events)
-    for day in range(1, cfg.steps + 1):
-        posted_before = dict(
-            events[events["day"] == day - 1][["agent", "post"]].itertuples(index=False)
+    for t in range(1, cfg.steps + 1):
+        said_before = dict(
+            events[events["step"] == t - 1][["agent", "message"]].itertuples(index=False)
         )
-        for feed in events[events["day"] == day]["feed"]:
-            for item in feed:
-                assert item["post"] == posted_before[item["author"]]
+        for interactions in events[events["step"] == t]["interactions"]:
+            for it in interactions:
+                assert it["message"] == said_before[it["author"]]
 
 
 def test_bad_model_reply_never_crashes_a_run(make_cfg, monkeypatch):
     from disensa.llm.client import LLMClient
 
     async def broken(self, model, messages, **kw):
-        return {"reasoning": "hm"}, '{"reasoning": "hm"}'  # no belief, no post
+        return {"reasoning": "hm"}, '{"reasoning": "hm"}'  # no belief, no message
 
     monkeypatch.setattr(LLMClient, "complete_json", broken)
     cfg = make_cfg()

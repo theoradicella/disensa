@@ -29,7 +29,7 @@ from disensa.runs import RunWriter, update_meta
 Progress = Callable[[int, dict], None]
 
 
-def day_metrics(graph, x: np.ndarray, labels: list[str], events: list[dict]) -> dict:
+def step_metrics(graph, x: np.ndarray, labels: list[str], events: list[dict]) -> dict:
     m = all_metrics(graph, x)
     m["errors"] = sum(1 for e in events if e.get("error"))
     models = sorted(set(labels))
@@ -51,22 +51,22 @@ async def run(
     writer = RunWriter(run_dir) if run_dir else None
     t0 = time.time()
 
-    def record(day: int, x: np.ndarray, events: list[dict]) -> dict:
-        m = day_metrics(graph, x, labels, events)
+    def record(t: int, x: np.ndarray, events: list[dict]) -> dict:
+        m = step_metrics(graph, x, labels, events)
         if writer:
-            writer.day(day, x, m, events)
+            writer.step(t, x, m, events)
         if progress:
-            progress(day, m)
-        return {"day": day, **m}
+            progress(t, m)
+        return {"step": t, **m}
 
     try:
         if writer:
             writer.start(graph, labels, x)
         history = [record(0, x, await dynamics.start(x))]
-        for day in range(1, cfg.steps + 1):
-            x, events = await dynamics.step(x, day)
+        for t in range(1, cfg.steps + 1):
+            x, events = await dynamics.step(x, t)
             x = np.clip(x, OPINION_MIN, OPINION_MAX)
-            history.append(record(day, x, events))
+            history.append(record(t, x, events))
     finally:
         if writer:
             writer.close()

@@ -4,7 +4,7 @@ An experiment is: a network, initial opinions, a number of steps, and the *dynam
 decide how an agent updates its opinion each step. `dynamics.type` switches between
 
   numeric   a classic opinion-dynamics rule (DeGroot, bounded confidence)
-  llm       every agent is a language model that reads its neighbours' posts
+  llm       every agent is a language model that interacts with others through messages
 
 Everything else (network, opinions, seed, steps, metrics, storage) is shared by both.
 """
@@ -70,20 +70,23 @@ class ModelSpec(BaseModel):
     temperature: float = 0.7
 
 
-class FeedConfig(BaseModel):
-    """How many neighbour posts an agent reads per step (Wang: a random number)."""
+class InteractionsConfig(BaseModel):
+    """How many other agents an agent interacts with per step (Wang: a random number).
 
-    min_posts: int = Field(1, ge=0)
-    max_posts: int = Field(5, ge=1)
+    For now the authors are drawn from the agent's network neighbours.
+    """
+
+    min: int = Field(1, ge=0)
+    max: int = Field(5, ge=1)
 
 
 class LLMDynamics(BaseModel):
-    """Agents are language models that read neighbours' posts and report a new belief."""
+    """Agents are language models: they interact through messages and report a new belief."""
 
     type: Literal["llm"] = "llm"
     statement: str = "Euthanasia should be legal for terminally ill adults who clearly request it."
     models: list[ModelSpec] = Field(min_length=1)
-    feed: FeedConfig = FeedConfig()
+    interactions: InteractionsConfig = InteractionsConfig()
     memory_words: int = Field(60, gt=0)
     max_tokens: int = Field(400, gt=0)
     max_concurrency: int = Field(4, gt=0, description="parallel requests per provider")
@@ -101,7 +104,7 @@ class ExperimentConfig(BaseModel):
     seed: int = 0
     network: NetworkConfig
     opinions: InitialOpinions = InitialOpinions()
-    steps: int = Field(10, gt=0, description="number of update steps (days)")
+    steps: int = Field(10, gt=0, description="number of update steps")
     dynamics: Dynamics
     output_dir: Path = Path("runs")
 

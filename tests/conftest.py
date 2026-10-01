@@ -16,7 +16,7 @@ def make_cfg(tmp_path):
             "dynamics": {
                 "type": "llm",
                 "models": [{"name": "fake/bounded"}],
-                "feed": {"min_posts": 1, "max_posts": 3},
+                "interactions": {"min": 1, "max": 3},
                 "cache_dir": str(tmp_path / "cache"),
                 "max_concurrency": 32,
             },

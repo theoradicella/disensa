@@ -25,8 +25,8 @@ def test_parse_json_rejects_prose():
 
 def test_cache_makes_reruns_free(tmp_path):
     client = LLMClient(tmp_path / "cache")
-    msgs = [{"role": "user", "content": 'your position: +1.0 {"post": "<your post>"}'}]
+    msgs = [{"role": "user", "content": 'your position: +1.0 {"message": "<your message>"}'}]
     a = asyncio.run(client.complete("fake/bounded", msgs))
     b = asyncio.run(client.complete("fake/bounded", msgs))
     assert not a.cached and b.cached and a.text == b.text
-    assert json.loads(a.text)["post"]
+    assert json.loads(a.text)["message"]

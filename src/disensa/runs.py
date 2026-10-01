@@ -4,13 +4,14 @@ runs/<timestamp>_<name>_s<seed>/
   meta.json          the full config, git commit, start time, status, timings
   agents.parquet     one row per agent: id, model (or numeric rule), degree, initial opinion
   edges.json         the network as a list of [u, v] pairs
-  opinions.parquet   one row per (day, agent): the opinion
-  metrics.parquet    one row per day: polarization, disagreement, neighbour correlation, ...
-  events.jsonl       LLM runs only, one line per (day, agent): what it read, its reasoning,
-                     post, memory, the exact prompt and raw reply, and any error
+  opinions.parquet   one row per (step, agent): the opinion
+  metrics.parquet    one row per step: polarization, disagreement, neighbour correlation, ...
+  events.jsonl       LLM runs only, one line per (step, agent): its interactions (author +
+                     message), its reasoning, new message, memory, the exact prompt and raw
+                     reply, and any error
 
-Parquet for tables (fast, typed, opens in pandas/DuckDB), JSONL for text. Every day is
-flushed, so a crash or a cancelled run keeps all finished days.
+Parquet for tables (fast, typed, opens in pandas/DuckDB), JSONL for text. Every step is
+flushed, so a crash or a cancelled run keeps all finished steps.
 """
 
 from __future__ import annotations
@@ -77,9 +78,9 @@ class RunWriter:
         edges = sorted([min(u, v), max(u, v)] for u, v in graph.edges())
         (self.run_dir / "edges.json").write_text(json.dumps(edges))
 
-    def day(self, day: int, x: np.ndarray, metrics: dict, events: list[dict]) -> None:
-        self._opinions += [{"day": day, "agent": i, "opinion": float(v)} for i, v in enumerate(x)]
-        self._metrics.append({"day": day, **metrics})
+    def step(self, t: int, x: np.ndarray, metrics: dict, events: list[dict]) -> None:
+        self._opinions += [{"step": t, "agent": i, "opinion": float(v)} for i, v in enumerate(x)]
+        self._metrics.append({"step": t, **metrics})
         if events and self._events is None:
             self._events = open(self.run_dir / "events.jsonl", "a", encoding="utf-8")
         for e in events:
@@ -108,12 +109,12 @@ class Run:
     edges: list[list[int]]
 
     @property
-    def days(self) -> int:
-        return int(self.opinions["day"].max())
+    def steps(self) -> int:
+        return int(self.opinions["step"].max())
 
     def opinion_matrix(self) -> np.ndarray:
-        """Array of shape (days + 1, n_agents)."""
-        return self.opinions.pivot(index="day", columns="agent", values="opinion").to_numpy()
+        """Array of shape (steps + 1, n_agents)."""
+        return self.opinions.pivot(index="step", columns="agent", values="opinion").to_numpy()
 
 
 def load_run(path: str | Path) -> Run:

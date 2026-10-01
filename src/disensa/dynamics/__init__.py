@@ -4,7 +4,7 @@ The engine owns the loop; a dynamics object only answers "given everyone's opini
 what are the opinions at t?". Two implementations:
 
   NumericAgents  (numeric.py)    a fixed rule on numbers: DeGroot, bounded confidence
-  LLMAgents      (llm_agent.py)  each agent reads neighbours' posts and asks its LLM
+  LLMAgents      (llm_agent.py)  each agent interacts with others and asks its LLM
 
 Both are async so the engine does not care which one it runs; numeric steps simply never wait.
 """
@@ -25,11 +25,11 @@ class Dynamics(Protocol):
         ...
 
     async def start(self, x0: np.ndarray) -> list[dict]:
-        """Step 0. Returns events to log (LLM agents write a first post; numeric: none)."""
+        """Step 0. Returns events to log (LLM agents state a first message; numeric: none)."""
         ...
 
-    async def step(self, x: np.ndarray, day: int) -> tuple[np.ndarray, list[dict]]:
-        """One synchronous update: read state at day-1, return (new opinions, events)."""
+    async def step(self, x: np.ndarray, t: int) -> tuple[np.ndarray, list[dict]]:
+        """One synchronous update: use the state at t-1, return (new opinions, events)."""
         ...
 
 

@@ -11,7 +11,7 @@ Standard library only (http.server), bound to 127.0.0.1.
   GET  /api/runs                past and running runs, newest first
   POST /api/runs                {"config": {...}} -> {"id": ...}   starts a run
   GET  /api/runs/<id>           the run's data for the viewer (works while it is running)
-  GET  /api/runs/<id>/status    {"status", "day", "days", "error"}
+  GET  /api/runs/<id>/status    {"status", "step", "steps", "error"}
   POST /api/runs/<id>/cancel    stop a running simulation after the current step
 
 Each run executes in its own thread with its own asyncio loop, writing the usual run folder.
@@ -53,9 +53,9 @@ TYPES = {
 class Job:
     id: str
     run_dir: Path
-    days: int
+    steps: int
     status: str = "running"  # running | done | failed | cancelled
-    day: int = -1
+    step: int = -1
     error: str | None = None
     loop: asyncio.AbstractEventLoop | None = None
     task: asyncio.Task | None = None
@@ -71,7 +71,7 @@ class RunManager:
 
         cfg = ExperimentConfig.model_validate({**raw, "output_dir": str(self.runs_root)})
         run_dir = new_run_dir(cfg)
-        job = Job(id=run_dir.name, run_dir=run_dir, days=cfg.steps)
+        job = Job(id=run_dir.name, run_dir=run_dir, steps=cfg.steps)
         self.jobs[job.id] = job
         threading.Thread(target=self._run, args=(job, cfg), daemon=True).start()
         return job
@@ -80,8 +80,8 @@ class RunManager:
         from disensa.engine import run
         from disensa.runs import update_meta
 
-        def progress(day: int, _m: dict) -> None:
-            job.day = day
+        def progress(t: int, _m: dict) -> None:
+            job.step = t
 
         loop = asyncio.new_event_loop()
         job.loop = loop
@@ -116,7 +116,7 @@ class RunManager:
     def status(self, run_id: str) -> dict:
         job = self.jobs.get(run_id)
         if job:
-            return {"status": job.status, "day": job.day, "days": job.days, "error": job.error}
+            return {"status": job.status, "step": job.step, "steps": job.steps, "error": job.error}
         d = self.run_dir(run_id)
         meta = json.loads((d / "meta.json").read_text()) if d else {}
         status = (
@@ -126,7 +126,7 @@ class RunManager:
             if meta.get("finished")
             else "incomplete"
         )
-        return {"status": status, "day": None, "days": None, "error": None}
+        return {"status": status, "step": None, "steps": None, "error": None}
 
     def list(self) -> list[dict]:
         if not self.runs_root.exists():

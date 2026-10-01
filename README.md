@@ -1,8 +1,10 @@
 # disensa
 
 Opinion dynamics on social networks, run either with **classic numeric rules** (agent-based
-models) or with **LLM agents** that read and write posts, possibly each on a different model.
-It builds on the Social Simulation Framework of Wang et al. (COLING 2025, arXiv:2409.19338).
+models) or with **LLM agents** that interact by exchanging messages, possibly each on a
+different model. It builds on the Social Simulation Framework of Wang et al. (COLING 2025,
+arXiv:2409.19338), keeping their agent mechanism but with a domain-neutral framing: agents in
+a community interacting, rather than users of a social media platform.
 
 This is the minimal core. Features from the first prototype (personas, a scorer model, a
 similarity recommender, rewiring, more numeric rules, analysis tools) are parked in the git
@@ -49,7 +51,7 @@ The loop is the same for both kinds of agents (`engine.py`):
 G    <- build the network                 (Erdős–Rényi, Watts–Strogatz, Barabási–Albert)
 x(0) <- draw initial opinions on [-2, 2]
 for t = 1 .. steps:
-    every agent looks at its neighbours at t-1
+    every agent interacts with others (state at t-1)
     x_i(t) <- update(i)                    numeric rule, or an LLM call
     record x(t) and the metrics
 ```
@@ -65,9 +67,10 @@ dynamics:
   models: [{name: ollama_chat/llama3.2:3b}]
 ```
 
-An LLM agent writes a first post at step 0. Each step it reads a few of its neighbours'
-posts and replies (one call, JSON) with its reasoning, new belief, new post and updated
-memory. Replies are cached on disk, so re-running a config costs nothing.
+An LLM agent states a first message at step 0. Each step it interacts with a few others
+(for now, random network neighbours): it hears the message each of them shared at the
+previous step, then replies (one call, JSON) with its reasoning, new belief, new message and
+updated memory. Replies are cached on disk, so re-running a config costs nothing.
 
 Metrics every step (Wang et al. §4.2): polarization, global disagreement, neighbour
 correlation, mean opinion (per model when models are mixed).
@@ -92,7 +95,8 @@ src/disensa/
 
 Each run is a folder `runs/<timestamp>_<name>_s<seed>/`: `meta.json` (config, git commit),
 `agents.parquet`, `edges.json`, `opinions.parquet`, `metrics.parquet`, and for LLM runs
-`events.jsonl` (what each agent read, its reasoning, post, memory, prompt and raw reply).
+`events.jsonl` (one line per agent per step: its interactions as author + message, its
+reasoning, new message, memory, prompt and raw reply).
 See `runs.py`.
 
 ## Tests

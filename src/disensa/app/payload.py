@@ -33,15 +33,16 @@ def build_payload(run: Run) -> dict:
     agents = run.agents.sort_values("agent")
     n = len(agents)
     ops = run.opinion_matrix()
-    days = run.days
+    steps = run.steps
 
-    posts: list[list[dict | None]] = [[None] * n for _ in range(days + 1)]
+    # what each agent did at each step: its interactions (author ids), reasoning and message
+    agent_steps: list[list[dict | None]] = [[None] * n for _ in range(steps + 1)]
     for e in run.events:
-        if e["day"] <= days:  # a live run can log events before that day's opinions
-            posts[e["day"]][e["agent"]] = {
-                "post": e.get("post") or "",
+        if e["step"] <= steps:  # a live run can log events before that step's opinions
+            agent_steps[e["step"]][e["agent"]] = {
+                "message": e.get("message") or "",
                 "reasoning": e.get("reasoning") or "",
-                "feed": [int(f["author"]) for f in e.get("feed") or []],
+                "interactions": [int(it["author"]) for it in e.get("interactions") or []],
                 "error": e.get("error") or None,
             }
 
@@ -57,8 +58,8 @@ def build_payload(run: Run) -> dict:
             for a, m in zip(agents["agent"], agents["model"], strict=True)
         ],
         "positions": layout(n, run.edges, seed=int(cfg["seed"])),
-        "opinions": [[_num(v) for v in day] for day in ops],
-        "posts": posts,
+        "opinions": [[_num(v) for v in row] for row in ops],
+        "agent_steps": agent_steps,
         "edges": run.edges,
         "metrics": [{k: _num(v) for k, v in row.items()} for row in run.metrics.to_dict("records")],
     }

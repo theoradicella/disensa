@@ -13,4 +13,4 @@ dynamics:
     - {name: ollama_chat/llama3.1:8b}   # Meta
     - {name: ollama_chat/gemma2:9b}     # Google
     - {name: ollama_chat/mistral:7b}    # Mistral
-  feed: {min_posts: 1, max_posts: 4}
+  interactions: {min: 1, max: 4}

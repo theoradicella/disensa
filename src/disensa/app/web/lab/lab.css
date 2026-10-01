@@ -148,8 +148,8 @@ textarea { resize: vertical; min-height: 54px; }
 .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 14px; }
 .play { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); font-size: 14px; flex: none; }
 #scrub { flex: 1; min-width: 160px; accent-color: var(--accent); }
-.daybox { font-variant-numeric: tabular-nums; min-width: 92px; }
-.daybox b { font-size: 18px; }
+.stepbox { font-variant-numeric: tabular-nums; min-width: 92px; }
+.stepbox b { font-size: 18px; }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; }
 @media (max-width: 1200px) { .grid { grid-template-columns: 1fr; } }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; min-width: 0; }
@@ -175,10 +175,10 @@ textarea { resize: vertical; min-height: 54px; }
 .kv { display: flex; gap: 8px; align-items: baseline; margin: 8px 0 2px; flex-wrap: wrap; }
 .kv b { font-size: 18px; font-variant-numeric: tabular-nums; }
 .label { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-top: 12px; }
-.post { margin: 4px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; white-space: pre-wrap; }
+.message { margin: 4px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; white-space: pre-wrap; }
 .reasoning { margin: 4px 0; color: var(--ink-2); white-space: pre-wrap; }
-.feed { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.feed button { border: 1px solid var(--line-2); background: var(--surface); border-radius: 999px; padding: 2px 9px; font-size: 12px; }
+.interactions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.interactions button { border: 1px solid var(--line-2); background: var(--surface); border-radius: 999px; padding: 2px 9px; font-size: 12px; }
 .agent-error { color: var(--bad); font-size: 12px; margin-top: 6px; }
 
 #tooltip {

@@ -41,7 +41,7 @@
         </fieldset>
           <fieldset>
           <legend>Agents</legend>
-          <p class="hint">LLM agents read and write posts; a numeric model moves numbers with a fixed rule.</p>
+          <p class="hint">LLM agents interact by exchanging messages; a numeric model moves numbers with a fixed rule.</p>
           <div class="seg" role="group" aria-label="Engine">
             <button type="button" id="eng-llm" aria-pressed="true">LLM agents</button>
             <button type="button" id="eng-num" aria-pressed="false">Numeric model</button>
@@ -81,7 +81,7 @@
         </section>
         <section class="wiz-step" data-step="opinions" hidden>
           <h3>Initial opinions</h3>
-          <p class="intro">Where agents stand on day 0, from −2 (strongly oppose) to +2 (strongly support).</p>
+          <p class="intro">Where agents stand at step 0, from −2 (strongly oppose) to +2 (strongly support).</p>
           <fieldset>
           <legend>Initial opinions (−2 … +2)</legend>
           <div class="row">
@@ -136,15 +136,15 @@
             <p class="hint">Weights set each model's share of agents; agents are placed at random.</p>
           </fieldset>
         </section>
-        <section class="wiz-step" data-step="conversation" hidden>
-          <h3>Conversation</h3>
-          <p class="intro">How long the run lasts and what each agent reads every day.</p>
+        <section class="wiz-step" data-step="interactions" hidden>
+          <h3>Interactions</h3>
+          <p class="intro">How long the run lasts and how many others each agent interacts with per step.</p>
           <fieldset>
             <legend>Simulation</legend>
             <div class="row3">
-              <label class="f">Days <input type="number" id="days" value="15" min="1" max="200"></label>
-              <label class="f">Posts read min <input type="number" id="fmin" value="2" min="0"></label>
-              <label class="f">max <input type="number" id="fmax" value="5" min="1"></label>
+              <label class="f">Steps <input type="number" id="llm-steps" value="15" min="1" max="200"></label>
+              <label class="f">Interactions min <input type="number" id="imin" value="2" min="0"></label>
+              <label class="f">max <input type="number" id="imax" value="5" min="1"></label>
             </div>
           </fieldset>
         </section>
@@ -193,7 +193,7 @@
       <div class="controls">
         <button type="button" class="play" id="play" aria-label="Play">▶</button>
         <input type="range" id="scrub" min="0" max="1" step="0.001" value="0" aria-label="Time">
-        <div class="daybox"><span class="hint">Day</span> <b id="day">0</b><span class="hint" id="of"> / 0</span></div>
+        <div class="stepbox"><span class="hint">Step</span> <b id="step">0</b><span class="hint" id="of"> / 0</span></div>
         <label class="hint">Speed
           <select id="speed">
             <option value="0.5">slow</option>
@@ -229,7 +229,7 @@
       <div class="card" id="table-card" hidden>
         <h2>All agents</h2>
         <div class="table-scroll">
-          <table><thead><tr><th class="num">Agent</th><th>Model</th><th class="num">Opinion</th><th class="num">Links</th><th>Post</th></tr></thead><tbody id="tbody"></tbody></table>
+          <table><thead><tr><th class="num">Agent</th><th>Model</th><th class="num">Opinion</th><th class="num">Links</th><th>Message</th></tr></thead><tbody id="tbody"></tbody></table>
         </div>
       </div>
     </div>

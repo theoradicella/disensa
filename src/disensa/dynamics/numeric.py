@@ -48,7 +48,7 @@ class NumericAgents:
     async def start(self, x0: np.ndarray) -> list[dict]:
         return []
 
-    async def step(self, x: np.ndarray, day: int) -> tuple[np.ndarray, list[dict]]:
+    async def step(self, x: np.ndarray, t: int) -> tuple[np.ndarray, list[dict]]:
         if self.cfg.rule == "degroot":
             return degroot(self.a, x), []
         return bounded_confidence(self.a, x, self.cfg.epsilon, self.cfg.mu), []

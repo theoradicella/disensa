@@ -1,5 +1,5 @@
 # The LLM pipeline with offline fake models: no Ollama, no API keys, a few seconds.
-# Fake agents embed their position in their posts and move towards what they read.
+# Fake agents embed their position in their messages and move towards what they hear.
 name: demo_fake
 seed: 7
 network: {topology: watts_strogatz, n: 60, k: 6, beta: 0.1}
@@ -12,5 +12,5 @@ dynamics:
     - {name: fake/bounded, weight: 2}
     - {name: fake/conformist, weight: 1}
     - {name: fake/stubborn, weight: 1}
-  feed: {min_posts: 2, max_posts: 5}
+  interactions: {min: 2, max: 5}
   max_concurrency: 64

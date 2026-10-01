@@ -89,7 +89,7 @@ def test_start_run_and_read_it_back(server, config, engine):
     _, run = call(f"{server}/api/runs/{res['id']}")
     data = run["data"]
     assert len(data["opinions"]) == 4 and len(data["agents"]) == 16 and data["edges"]
-    assert (data["posts"][1][0] is not None) == (engine == "llm")
+    assert (data["agent_steps"][1][0] is not None) == (engine == "llm")
     _, runs = call(f"{server}/api/runs")
     assert runs[0]["id"] == res["id"] and runs[0]["engine"] == engine
 

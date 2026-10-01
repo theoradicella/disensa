@@ -33,12 +33,12 @@
 
   // ============================================================ viewer state
   let DATA = null, runId = null, t = 0, playing = false, speed = 1.2, selected = null, followLive = false;
-  let lastFrame = null, lastDayDrawn = -1;
+  let lastFrame = null, lastStepDrawn = -1;
 
   const W = 900, H = 600;
   const netSvg = d3.select("#net").append("svg").attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img").attr("aria-label", "Agent network");
   const guide = netSvg.append("g");
-  const gEdges = netSvg.append("g"), gFeed = netSvg.append("g"), gNodes = netSvg.append("g");
+  const gEdges = netSvg.append("g"), gInteractions = netSvg.append("g"), gNodes = netSvg.append("g");
   let nodes = [], links = [], nodeSel = null, sim = null;
 
   const D = () => (DATA ? DATA.opinions.length - 1 : 0);
@@ -86,8 +86,8 @@
     nodeSel.select("path.mark").attr("d", (d) => d3.symbol(shapeOf(d.model), d.area)()).attr("stroke-width", 1.5);
     nodeSel
       .on("pointermove", (evt, d) => {
-        const p = DATA.posts[Math.round(t)][d.id];
-        showTip(evt, [[fmt(opinionAt(d.id, t)), `Agent ${d.id} · ${short(d.model)}`], ...(p && p.feed.length ? [[String(p.feed.length), "posts read that day"]] : [])]);
+        const p = DATA.agent_steps[Math.round(t)][d.id];
+        showTip(evt, [[fmt(opinionAt(d.id, t)), `Agent ${d.id} · ${short(d.model)}`], ...(p && p.interactions.length ? [[String(p.interactions.length), "interactions this step"]] : [])]);
       })
       .on("pointerleave", hideTip)
       .on("click", (evt, d) => select(d.id))
@@ -106,7 +106,7 @@
       .force("x", d3.forceX((d) => xTarget(opinionAt(d.id, t))).strength(0.22))
       .force("y", d3.forceY(H / 2 + 10).strength(0.035))
       .on("tick", drawPositions);
-    lastDayDrawn = -1;
+    lastStepDrawn = -1;
     updateLinks();
 
     // legend
@@ -130,10 +130,10 @@
   }
 
   function updateLinks() {
-    const day = Math.floor(t);
-    if (day === lastDayDrawn) return;
-    lastDayDrawn = day;
-    links = edgesAt(day).map(([s, tt]) => ({ source: s, target: tt, key: s < tt ? `${s}-${tt}` : `${tt}-${s}` }));
+    const step = Math.floor(t);
+    if (step === lastStepDrawn) return;
+    lastStepDrawn = step;
+    links = edgesAt(step).map(([s, tt]) => ({ source: s, target: tt, key: s < tt ? `${s}-${tt}` : `${tt}-${s}` }));
     sim.force("link").links(links);
     gEdges.selectAll("line").data(links, (d) => d.key).join(
       (enter) => enter.append("line").attr("stroke", css("--edge")).attr("stroke-width", 1).attr("stroke-opacity", 0)
@@ -148,22 +148,22 @@
     gEdges.selectAll("line").attr("x1", (d) => d.source.x).attr("y1", (d) => d.source.y).attr("x2", (d) => d.target.x).attr("y2", (d) => d.target.y);
     nodeSel.attr("transform", (d) => `translate(${d.x},${d.y})`);
     if (selected != null) {
-      const p = DATA.posts[Math.round(t)][selected];
+      const p = DATA.agent_steps[Math.round(t)][selected];
       const me = nodes[selected];
-      gFeed.selectAll("line").data(p ? p.feed : [], (j) => j).join("line")
+      gInteractions.selectAll("line").data(p ? p.interactions : [], (j) => j).join("line")
         .attr("stroke", css("--ink")).attr("stroke-width", 1.8).attr("stroke-linecap", "round")
         .attr("x1", (j) => nodes[j].x).attr("y1", (j) => nodes[j].y).attr("x2", me.x).attr("y2", me.y);
-    } else gFeed.selectAll("line").remove();
+    } else gInteractions.selectAll("line").remove();
   }
 
   function paintNodes() {
-    const day = Math.round(t);
-    const p = selected != null ? DATA.posts[day][selected] : null;
-    const feed = new Set(p ? p.feed : []);
+    const step = Math.round(t);
+    const p = selected != null ? DATA.agent_steps[step][selected] : null;
+    const partners = new Set(p ? p.interactions : []);
     nodeSel.select("path.mark")
       .attr("fill", (d) => opinionColor(opinionAt(d.id, t)))
-      .attr("stroke", (d) => (d.id === selected ? css("--ink") : feed.has(d.id) ? css("--ink-2") : css("--node-ring")))
-      .attr("stroke-width", (d) => (d.id === selected ? 2.5 : feed.has(d.id) ? 2 : 1.2));
+      .attr("stroke", (d) => (d.id === selected ? css("--ink") : partners.has(d.id) ? css("--ink-2") : css("--node-ring")))
+      .attr("stroke-width", (d) => (d.id === selected ? 2.5 : partners.has(d.id) ? 2 : 1.2));
     gEdges.selectAll("line")
       .attr("stroke", (d) => selected != null && (d.source.id === selected || d.target.id === selected) ? css("--ink-2") : css("--edge"));
     nodeSel.attr("aria-label", (d) => `Agent ${d.id}, ${short(d.model)}, opinion ${fmt(opinionAt(d.id, t))}`);
@@ -197,7 +197,7 @@
       .on("pointermove", (evt) => {
         const [mx] = d3.pointer(evt); const d = Math.max(0, Math.min(D(), Math.round(x.invert(mx))));
         hover.style("display", null).attr("x1", x(d)).attr("x2", x(d));
-        showTip(evt, [[`Day ${d}`, ""], ...series.map((s) => [fmt(s.values[d] ? s.values[d][1] : null), s.name, s.color])]);
+        showTip(evt, [[`Step ${d}`, ""], ...series.map((s) => [fmt(s.values[d] ? s.values[d][1] : null), s.name, s.color])]);
       })
       .on("pointerleave", () => { hover.style("display", "none"); hideTip(); })
       .on("click", (evt) => { const [mx] = d3.pointer(evt); stop(); followLive = false; setTime(Math.round(x.invert(mx))); });
@@ -217,7 +217,7 @@
 
   function buildCharts() {
     cursors = [];
-    const ms = (key) => DATA.metrics.map((r) => [r.day, r[key]]);
+    const ms = (key) => DATA.metrics.map((r) => [r.step, r[key]]);
     const mx = (key) => d3.max(DATA.metrics, (r) => r[key]) || 1;
     const ink = css("--accent");
     lineChart("#c-pol", [{ name: "polarization", color: ink, values: ms("polarization") }], [0, mx("polarization")], "Polarization over time");
@@ -280,12 +280,12 @@
   function select(id) { selected = selected === id ? null : id; lastPanel = ""; paintNodes(); drawPositions(); drawPanel(); }
   let lastPanel = "";
   function drawPanel() {
-    const day = Math.round(t);
-    const key = `${selected}|${day}|${D()}`;
+    const step = Math.round(t);
+    const key = `${selected}|${step}|${D()}`;
     if (key === lastPanel) return; lastPanel = key;
     const box = $("agent"); box.replaceChildren();
     if (selected == null) {
-      box.appendChild(el("p", "hint", "Click a node to follow one agent: what it read each day, how it reasoned, and what it posted."));
+      box.appendChild(el("p", "hint", "Click a node to follow one agent: whom it interacted with at each step, how it reasoned, and the message it shared."));
       return;
     }
     const a = DATA.agents[selected];
@@ -302,45 +302,45 @@
     const vals = DATA.opinions.map((row, d) => [d, row[a.id]]);
     s.append("path").datum(vals).attr("fill", "none").attr("stroke", css("--accent")).attr("stroke-width", 2)
       .attr("d", d3.line().defined((d) => d[1] != null).x((d) => sx(d[0])).y((d) => sy(d[1])).curve(d3.curveMonotoneX));
-    s.append("circle").attr("cx", sx(day)).attr("cy", sy(DATA.opinions[day][a.id] ?? 0)).attr("r", 5).attr("fill", opinionColor(DATA.opinions[day][a.id])).attr("stroke", css("--ink")).attr("stroke-width", 1.5);
+    s.append("circle").attr("cx", sx(step)).attr("cy", sy(DATA.opinions[step][a.id] ?? 0)).attr("r", 5).attr("fill", opinionColor(DATA.opinions[step][a.id])).attr("stroke", css("--ink")).attr("stroke-width", 1.5);
 
-    const kv = el("div", "kv"); kv.append(el("span", "hint", `Day ${day}`), el("b", null, fmt(DATA.opinions[day][a.id])));
-    if (day > 0) {
-      const prev = DATA.opinions[day - 1][a.id], cur = DATA.opinions[day][a.id];
-      if (prev != null && cur != null) kv.append(el("span", "hint", `${cur - prev >= 0 ? "▲" : "▼"} ${Math.abs(cur - prev).toFixed(2)} since day ${day - 1}`));
+    const kv = el("div", "kv"); kv.append(el("span", "hint", `Step ${step}`), el("b", null, fmt(DATA.opinions[step][a.id])));
+    if (step > 0) {
+      const prev = DATA.opinions[step - 1][a.id], cur = DATA.opinions[step][a.id];
+      if (prev != null && cur != null) kv.append(el("span", "hint", `${cur - prev >= 0 ? "▲" : "▼"} ${Math.abs(cur - prev).toFixed(2)} since step ${step - 1}`));
     }
     box.appendChild(kv);
-    const p = DATA.posts[day][a.id];
+    const p = DATA.agent_steps[step][a.id];
     if (!p) return;
-    if (p.feed.length) {
-      box.appendChild(el("div", "label", "Read that day"));
-      const f = el("div", "feed");
-      p.feed.forEach((j) => {
-        const b = el("button", null, `Agent ${j}  ${fmt(day > 0 ? DATA.opinions[day - 1][j] : null)}`);
+    if (p.interactions.length) {
+      box.appendChild(el("div", "label", "Interacted with"));
+      const f = el("div", "interactions");
+      p.interactions.forEach((j) => {
+        const b = el("button", null, `Agent ${j}  ${fmt(step > 0 ? DATA.opinions[step - 1][j] : null)}`);
         b.type = "button";
-        const post = DATA.posts[day - 1] && DATA.posts[day - 1][j];
-        b.title = post ? post.post : "";
+        const prev = DATA.agent_steps[step - 1] && DATA.agent_steps[step - 1][j];
+        b.title = prev ? prev.message : ""; // the message j shared at the previous step
         b.addEventListener("click", () => select(j));
         f.appendChild(b);
       });
       box.appendChild(f);
     }
     if (p.reasoning) { box.appendChild(el("div", "label", "Reasoning")); box.appendChild(el("p", "reasoning", p.reasoning)); }
-    if (p.post) { box.appendChild(el("div", "label", "Post")); box.appendChild(el("p", "post", p.post)); }
+    if (p.message) { box.appendChild(el("div", "label", "Message")); box.appendChild(el("p", "message", p.message)); }
     if (p.error) box.appendChild(el("div", "agent-error", "Model reply could not be used: " + p.error));
   }
 
   let lastTable = "";
   function drawTable() {
     if ($("table-card").hidden) return;
-    const day = Math.round(t), key = `${day}|${D()}`;
+    const step = Math.round(t), key = `${step}|${D()}`;
     if (key === lastTable) return; lastTable = key;
     const deg = new Array(DATA.agents.length).fill(0);
-    edgesAt(day).forEach(([u, v]) => { deg[u]++; deg[v]++; });
+    edgesAt(step).forEach(([u, v]) => { deg[u]++; deg[v]++; });
     const tb = $("tbody"); tb.replaceChildren();
     DATA.agents.forEach((a) => {
-      const tr = el("tr"); const p = DATA.posts[day][a.id];
-      [[a.id, "num"], [short(a.model)], [fmt(DATA.opinions[day][a.id]), "num"], [deg[a.id], "num"], [p ? p.post : ""]]
+      const tr = el("tr"); const p = DATA.agent_steps[step][a.id];
+      [[a.id, "num"], [short(a.model)], [fmt(DATA.opinions[step][a.id]), "num"], [deg[a.id], "num"], [p ? p.message : ""]]
         .forEach(([v, c]) => tr.appendChild(el("td", c || null, String(v))));
       tr.style.cursor = "pointer"; tr.addEventListener("click", () => select(a.id));
       tb.appendChild(tr);
@@ -350,10 +350,10 @@
   // ============================================================ time & playback
   const scrub = $("scrub");
   function setTime(v) {
-    if (!DATA || !sim) return; // a live run with no finished day yet
+    if (!DATA || !sim) return; // a live run with no finished step yet
     t = Math.max(0, Math.min(D(), v));
     scrub.value = D() ? t / D() : 0;
-    $("day").textContent = String(Math.round(t));
+    $("step").textContent = String(Math.round(t));
     updateLinks();
     sim.force("x").x((d) => xTarget(opinionAt(d.id, t)));
     if (sim.alpha() < 0.08) sim.alpha(0.08).restart();
@@ -386,7 +386,7 @@
   // ============================================================ loading a run
   function statusPill(s) {
     const pill = $("status"); pill.className = "pill " + s.status;
-    pill.textContent = s.status === "running" ? `Running · day ${Math.max(0, s.day)} of ${s.days}` : s.status[0].toUpperCase() + s.status.slice(1);
+    pill.textContent = s.status === "running" ? `Running · step ${Math.max(0, s.step)} of ${s.steps}` : s.status[0].toUpperCase() + s.status.slice(1);
     $("cancel").hidden = s.status !== "running";
     if (s.error) pill.title = s.error;
   }
@@ -414,10 +414,10 @@
     if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
     return body;
   }
-  let pollTimer = null, lastSeenDay = -2;
+  let pollTimer = null, lastSeenStep = -2;
   async function openRun(id) {
     setDrawer(null);
-    runId = id; lastSeenDay = -2; clearTimeout(pollTimer); stop();
+    runId = id; lastSeenStep = -2; clearTimeout(pollTimer); stop();
     renderRunsList();
     const res = await api(`/api/runs/${encodeURIComponent(id)}`);
     statusPill(res.status);
@@ -432,10 +432,10 @@
     try {
       const s = await api(`/api/runs/${encodeURIComponent(id)}/status`);
       if (id !== runId) return;
-      if (s.status === "running" && !DATA) { $("empty").hidden = false; $("view").hidden = true; $("empty").querySelector("h1").textContent = `Starting… day ${Math.max(0, s.day)} of ${s.days}`; }
+      if (s.status === "running" && !DATA) { $("empty").hidden = false; $("view").hidden = true; $("empty").querySelector("h1").textContent = `Starting… step ${Math.max(0, s.step)} of ${s.steps}`; }
       else statusPill(s);
-      if (s.day !== lastSeenDay || s.status !== "running") {
-        lastSeenDay = s.day;
+      if (s.step !== lastSeenStep || s.status !== "running") {
+        lastSeenStep = s.step;
         const res = await api(`/api/runs/${encodeURIComponent(id)}`);
         if (id !== runId) return;
         statusPill(res.status);
@@ -562,12 +562,12 @@
       return cfg;
     }
     const models = readModels();
-    cfg.steps = num("days");
+    cfg.steps = num("llm-steps");
     cfg.dynamics = {
       type: "llm",
       statement: $("statement").value.trim(),
       models,
-      feed: { min_posts: num("fmin"), max_posts: num("fmax") },
+      interactions: { min: num("imin"), max: num("imax") },
       max_concurrency: models.every((m) => m.name.startsWith("fake/")) ? 64 : 4,
     };
     return cfg;
@@ -585,8 +585,8 @@
     set("dist", op.distribution || "uniform"); set("mean", op.mean ?? 0); set("std", op.std ?? 1);
     if (d.type === "numeric") { set("algo", d.rule); set("steps", c.steps); set("eps", d.epsilon); set("mu", d.mu); }
     else {
-      set("days", c.steps); set("statement", d.statement);
-      set("fmin", d.feed && d.feed.min_posts); set("fmax", d.feed && d.feed.max_posts);
+      set("llm-steps", c.steps); set("statement", d.statement);
+      set("imin", d.interactions && d.interactions.min); set("imax", d.interactions && d.interactions.max);
       if (d.models && d.models.length) { $("models").replaceChildren(); d.models.forEach((m) => addModelRow(m.name, m.weight)); }
     }
     syncVisibility();
@@ -595,10 +595,10 @@
 
   // ---------------------------------------------------------------- new-run wizard
   const STEP_TITLES = { start: "Start", network: "Network", opinions: "Initial opinions", algorithm: "Algorithm",
-    models: "Topic and models", conversation: "Conversation", review: "Review" };
+    models: "Topic and models", interactions: "Interactions", review: "Review" };
   const stepsFor = () => engine === "numeric"
     ? ["start", "network", "opinions", "algorithm", "review"]
-    : ["start", "network", "opinions", "models", "conversation", "review"];
+    : ["start", "network", "opinions", "models", "interactions", "review"];
   let stepKey = "start", furthest = 0;
   const sectionOf = (key) => document.querySelector(`.wiz-step[data-step="${key}"]`);
 
@@ -668,7 +668,7 @@
         ...(d.rule === "bounded_confidence" ? [["Confidence ε", d.epsilon], ["Rate μ", d.mu]] : [])]]);
     } else {
       blocks.push(["models", [["Statement", d.statement], ["Models", d.models.map((m) => `${short(m.name)} ×${m.weight}`).join(", ")]]]);
-      blocks.push(["conversation", [["Days", c.steps], ["Posts read per day", `${d.feed.min_posts}–${d.feed.max_posts}`]]]);
+      blocks.push(["interactions", [["Steps", c.steps], ["Interactions per step", `${d.interactions.min}–${d.interactions.max}`]]]);
     }
     const box = $("review"); box.replaceChildren();
     blocks.forEach(([key, rows]) => {
