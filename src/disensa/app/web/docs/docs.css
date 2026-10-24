@@ -9,6 +9,7 @@
   --line-2: #eceef2;
   --blue: #1c5cab;
   --blue-soft: #e8f0fb;
+  --teal: #1b7f74;
   --code-bg: #f4f6f9;
   --sans: "Geist", "Helvetica Neue", Arial, sans-serif;
   --display: "Inter Tight", "Geist", "Helvetica Neue", Arial, sans-serif;
@@ -18,6 +19,8 @@ html { scroll-behavior: smooth; scroll-padding-top: 96px; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body { margin: 0; background: var(--page); color: var(--ink); font: 16px/1.65 var(--sans); }
 a { color: var(--blue); }
+article a { color: var(--teal); text-underline-offset: 3px; }
+article a:hover { color: #14655c; }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 
@@ -27,9 +30,9 @@ a { color: var(--blue); }
   display: grid; grid-template-columns: minmax(0, 1fr) min(620px, 100%) minmax(0, 1fr); column-gap: 48px;
   padding: 112px 16px 96px;
 }
-.layout > .toc { grid-column: 1; justify-self: end; width: 240px; margin-right: clamp(0px, (100vw - 1240px) * 0.5, 128px); }
+.layout > .toc { grid-column: 1; justify-self: end; width: 240px; margin-right: clamp(0px, (100vw - 1240px) * 0.25, 64px); }
 .layout > article { grid-column: 2; width: 820px; justify-self: start; margin-left: calc(-1 * clamp(0px, (100vw - 1240px) * 0.25, 64px)); }
-/* on wide screens both slide left as space allows: the index more than the text (it stays >= 22px from the edge) */
+/* on wide screens the text slides left as space allows and the index moves with it, keeping the same gap */
 .toc { position: sticky; top: 96px; align-self: start; max-height: calc(100vh - 120px); overflow-y: auto; padding-right: 8px; }
 .toc p { margin: 0 0 10px; font: 600 12px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
@@ -40,6 +43,13 @@ a { color: var(--blue); }
 .toc a:hover { background: var(--soft); color: var(--ink); }
 .toc a.active { color: var(--blue); background: var(--blue-soft); font-weight: 500; }
 .toc ol ol { padding-left: 12px; margin: 1px 0 4px; }
+/* only the section being read shows its subsections, inside a soft box */
+.toc ol.top > li { border-radius: 8px; transition: background .15s ease; }
+.toc ol.top > li > ol { display: none; }
+.toc ol.top > li.current { background: rgba(28, 92, 171, 0.05); }
+.toc ol.top > li.current > ol { display: grid; }
+.toc ol.top > li.current a:hover { background: rgba(28, 92, 171, 0.06); }
+.toc ol.top > li.current a.active { background: rgba(28, 92, 171, 0.1); }
 .toc ol ol a { font-size: 13px; padding: 4px 10px; }
 .toc-toggle { display: none; }
 @media (max-width: 1239px) {
@@ -56,7 +66,7 @@ a { color: var(--blue); }
 /* document typography */
 article { min-width: 0; }
 .eyebrow { margin: 0 0 8px; font: 500 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--blue); }
-h1 { margin: 0 0 16px; font: 700 clamp(36px, 5vw, 52px)/1.05 var(--display); letter-spacing: -0.03em; text-wrap: balance; }
+h1 { margin: 0 0 14px; font: 700 28px/1.2 var(--display); letter-spacing: -0.02em; text-wrap: balance; }
 .lead { font-size: 19px; line-height: 1.6; color: var(--ink-2); margin: 0 0 12px; }
 h2 {
   margin: 64px 0 14px; padding-top: 28px; border-top: 1px solid var(--line-2);
@@ -71,10 +81,12 @@ code { font: 0.88em var(--mono); background: var(--code-bg); padding: 1px 5px; b
 pre { background: var(--code-bg); border: 1px solid var(--line-2); border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 0 0 18px; }
 pre code { background: none; padding: 0; font-size: 13.5px; line-height: 1.6; }
 .formula {
-  margin: 4px 0 18px; padding: 14px 18px; background: var(--soft); border-radius: 10px; border: 1px solid var(--line-2);
-  font: 16px/1.6 var(--mono); overflow-x: auto; white-space: nowrap;
+  margin: 4px 0 18px; padding: 6px 18px; background: var(--soft); border-radius: 10px; border: 1px solid var(--line-2);
+  overflow-x: auto; overflow-y: hidden;
 }
-.formula sub, .formula sup { font-size: 0.72em; }
+.formula .katex-display { margin: 10px 0; }
+.katex { font-size: 1.08em; }
+td .katex { font-size: 1em; }
 .note { margin: 0 0 18px; padding: 12px 16px; border-left: 3px solid var(--blue); background: var(--blue-soft); border-radius: 0 8px 8px 0; color: var(--ink-2); font-size: 15px; }
 .note strong { color: var(--ink); }
 .table-wrap { overflow-x: auto; margin: 0 0 20px; border: 1px solid var(--line); border-radius: 10px; }
@@ -95,3 +107,48 @@ td code { white-space: nowrap; }
   display: grid; place-items: center; background: var(--blue-soft); color: var(--blue); font: 600 13px/1 var(--sans);
 }
 .refs li { font-size: 15px; color: var(--ink-2); }
+.wip {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 6px 12px;
+  border: 1px dashed #c9cfd8; border-radius: 999px; background: #fff;
+  font: 500 13px/1.2 var(--mono); color: var(--muted);
+}
+.wip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #e0a526; }
+
+/* hover/focus definitions: a link-styled term reveals a small popup right below it
+   (docs.js nudges it sideways so it never leaves the viewport) */
+.term-wrap { position: relative; }
+.term {
+  font: inherit; color: var(--blue); background: none; border: 0; padding: 0; cursor: help; white-space: nowrap;
+  text-decoration: underline dotted; text-underline-offset: 3px;
+}
+.term-pop {
+  position: absolute; left: 0; top: calc(100% + 4px); z-index: 10; width: min(280px, calc(100vw - 32px));
+  padding: 12px 14px; background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(11, 11, 11, 0.08); font-size: 14px; line-height: 1.55; color: var(--ink-2);
+  white-space: normal; text-align: left;
+  opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity .15s, transform .15s, visibility .15s;
+}
+.term-pop strong { color: var(--ink); }
+.term strong { color: inherit; }
+/* invisible bridge over the gap so the pointer can move into the popup (e.g. to click a link) */
+.term-pop::before { content: ""; position: absolute; left: 0; right: 0; top: -8px; height: 8px; }
+.pop-figs { display: flex; gap: 16px; margin-bottom: 8px; }
+.pop-fig { display: flex; flex-direction: column; align-items: center; font-size: 12px; color: var(--muted); }
+.term-wrap:hover .term-pop, .term-wrap:focus-within .term-pop { opacity: 1; visibility: visible; transform: none; }
+@media (prefers-reduced-motion: reduce) { .term-pop { transition: none; } }
+
+/* degree-distribution chart */
+.chart { margin: 8px 0 24px; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); margin-bottom: 20px; }
+.chart-legend i { display: inline-block; width: 14px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 6px; }
+.chart-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+/* centred over the plot area (the SVG reserves 44/300 on the left for ticks, 12/300 on the right) */
+.chart-sub { font: 600 14px/1.3 var(--sans); color: var(--ink-2); text-align: center; margin: 0 0 6px; padding: 0 4% 0 14.7%; }
+.chart-panel { width: 100%; height: auto; display: block; overflow: visible; }
+.chart-panel .grid { stroke: var(--line-2); stroke-width: 1; }
+.chart-panel .axis { stroke: var(--line); stroke-width: 1; }
+.chart-panel .tick { font: 10px var(--sans); fill: var(--muted); }
+.chart-panel .axis-label { font: 11px var(--sans); fill: var(--ink-2); }
+.chart-panel .hit { fill: transparent; cursor: default; }
+.chart-panel .hit:hover { fill: rgba(11, 11, 11, 0.08); }
+.chart figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 8px; }
