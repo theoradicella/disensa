@@ -65,7 +65,7 @@
                 <option value="erdos_renyi">Random (Erdős–Rényi)</option>
               </select>
             </label>
-            <label class="f">Agents <input type="number" id="n" value="40" min="3" max="500"></label>
+            <label class="f">Agents <input type="number" id="n" value="50" min="3" max="500"></label>
           </div>
           <div class="row" data-topo="watts_strogatz">
             <label class="f">Neighbours k <input type="number" id="k" value="6" min="2" step="2"></label>
@@ -78,6 +78,7 @@
             <label class="f">Edge probability p <input type="number" id="p" value="0.12" min="0" max="1" step="0.01"></label>
           </div>
         </fieldset>
+          <div class="checks" data-checks="network" aria-live="polite"></div>
         </section>
         <section class="wiz-step" data-step="opinions" hidden>
           <h3>Initial opinions</h3>
@@ -98,6 +99,7 @@
             <label class="f">Spread (std) <input type="number" id="std" value="1" min="0" step="0.1"></label>
           </div>
         </fieldset>
+          <div class="checks" data-checks="opinions" aria-live="polite"></div>
         </section>
         <section class="wiz-step" data-step="algorithm" hidden>
           <h3>Algorithm</h3>
@@ -118,6 +120,7 @@
               <label class="f" data-algo="bc">Rate μ <input type="number" id="mu" value="0.5" min="0" max="1" step="0.05"></label>
             </div>
           </fieldset>
+          <div class="checks" data-checks="algorithm" aria-live="polite"></div>
         </section>
         <section class="wiz-step" data-step="models" hidden>
           <h3>Topic and models</h3>
@@ -147,10 +150,12 @@
               <label class="f">max <input type="number" id="imax" value="5" min="1"></label>
             </div>
           </fieldset>
+          <div class="checks" data-checks="interactions" aria-live="polite"></div>
         </section>
         <section class="wiz-step" data-step="review" hidden>
           <h3>Review and run</h3>
           <p class="intro">Check your choices. Use Edit to go back to any step.</p>
+          <div class="checks" data-checks="review" aria-live="polite"></div>
           <div class="review" id="review"></div>
         </section>
         <div class="wiz-nav">

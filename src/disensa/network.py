@@ -10,9 +10,13 @@ from disensa.config import InitialOpinions, NetworkConfig
 
 
 def build_network(cfg: NetworkConfig, seed: int = 0, max_tries: int = 100) -> nx.Graph:
-    """Build the configured topology. Nodes are 0..n-1. Resampled until connected."""
+    """Build the configured topology. Nodes are 0..n-1. Resampled until connected.
+
+    The first draw uses `seed` itself; redraws use seeds derived from (seed, attempt), so the
+    redraws of one run never reuse another run's network (as `seed + attempt` did).
+    """
     for attempt in range(max_tries):
-        s = seed + attempt
+        s = seed if attempt == 0 else _redraw_seed(seed, attempt)
         if cfg.topology == "erdos_renyi":
             g = nx.erdos_renyi_graph(cfg.n, cfg.p, seed=s)
         elif cfg.topology == "watts_strogatz":
@@ -22,6 +26,10 @@ def build_network(cfg: NetworkConfig, seed: int = 0, max_tries: int = 100) -> nx
         if nx.is_connected(g):
             return g
     raise RuntimeError(f"Could not build a connected {cfg.topology} graph in {max_tries} tries")
+
+
+def _redraw_seed(seed: int, attempt: int) -> int:
+    return int(np.random.SeedSequence([abs(seed), attempt]).generate_state(1)[0])
 
 
 def initial_opinions(cfg: InitialOpinions, n: int, seed: int = 0) -> np.ndarray:

@@ -48,7 +48,12 @@
   <article>
     <p class="eyebrow">Documentation</p>
     <h1 id="introduction">Introduction</h1>
-    <p class="wip">Work in progress</p>
+    <p class="lead">disensa simulates how opinions change in a community of agents connected by a network. The same experiment can run with classic numeric rules or with LLM agents that exchange messages, each possibly driven by a different model.</p>
+    <p>Each agent holds an opinion on a single statement, a number on \([-2, 2]\) from strongly against to strongly in favour. At every step agents interact with their neighbours and update their opinion. In a classic <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-abm">agent-based model</button><span class="term-pop" role="tooltip" id="pop-abm">An <strong>agent-based model</strong> (ABM) simulates a system as many individual agents, each following simple rules. The behaviour of the whole is not specified anywhere: it emerges from the interactions.</span></span> the update is an equation: an agent moves towards the average opinion of its neighbours (DeGroot), or only of those close enough to its own (bounded confidence). These rules are transparent and fast, but they reduce every interaction to a number.</p>
+    <p>LLM agents replace the equation with language. Each agent reads the messages its neighbours shared, reasons about them, and replies with a new opinion, a new message and an updated memory. This follows the Social Simulation Framework of Wang et al. (2025), which showed that LLM agents placed on different network topologies reproduce <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-echo">echo chambers</button><span class="term-pop" role="tooltip" id="pop-echo">An <strong>echo chamber</strong> forms when agents end up surrounded mostly by opinions like their own, so those opinions reinforce each other and groups drift apart.</span></span>.</p>
+    <p>disensa extends that framework in two ways. The first is <strong>model diversity</strong>: in Wang et al. every agent runs on the same LLM, so agents differ only in their prompt while the reasoning underneath is identical. Here different agents can run on different models, each bringing its own tendencies and susceptibility to persuasion. The second is <strong>individual-level inspection</strong>: every reply is saved with its reasoning and memory, so a run can be followed agent by agent, showing not only where opinions end up but why each agent moved.</p>
+    <p>Both kinds of agents share the same engine, networks and metrics, so a numeric run and an LLM run of the same setup can be compared directly.</p>
+    <p><a href="#quick-start">Quick start</a> gets a first run going and <a href="#how-a-run-works">How a run works</a> describes the loop. The sections after that cover each part of a run in turn: the agents, the network, the initial opinions, the metrics, and the files a run produces.</p>
     <h2 id="quick-start">Quick start</h2>
     <p class="wip">Work in progress</p>
     <h2 id="how-a-run-works">How a run works</h2>
@@ -64,10 +69,10 @@
       <div class="card">
         <svg width="84" height="56" viewBox="0 0 84 56" aria-hidden="true"><g stroke="#9ec5f4" stroke-width="1.2"><line x1="12" y1="12" x2="40" y2="44"/><line x1="12" y1="12" x2="70" y2="16"/><line x1="40" y1="44" x2="70" y2="16"/><line x1="26" y1="30" x2="58" y2="40"/><line x1="58" y1="40" x2="70" y2="16"/><line x1="12" y1="12" x2="26" y2="30"/></g><g fill="#2a78d6"><circle cx="12" cy="12" r="4"/><circle cx="40" cy="44" r="4"/><circle cx="70" cy="16" r="4"/><circle cx="26" cy="30" r="4"/><circle cx="58" cy="40" r="4"/></g></svg>
         <h4>Random (Erdős–Rényi)</h4>
-        <p>Every pair of nodes is linked with the same probability \(p\). Because links are placed purely at random, there are no clusters and no hubs. <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-clusters-hubs">What's the difference?</button><span class="term-pop" role="tooltip" id="pop-clusters-hubs"><strong>Clustering</strong> means an agent's neighbours are also linked to each other, forming triangles: tight groups where everyone knows everyone. <strong>Hubs</strong> are single agents with far more links than average. The two are independent: a network can have one without the other.</span></span></p>
+        <p>Every pair of nodes is linked with the same probability \(p\). Because links are placed purely at random, clustering is low and there are no hubs. <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-clusters-hubs">What's the difference?</button><span class="term-pop" role="tooltip" id="pop-clusters-hubs"><strong>Clustering</strong> means an agent's neighbours are also linked to each other, forming triangles: tight groups where everyone knows everyone. <strong>Hubs</strong> are single agents with far more links than average. The two are independent: a network can have one without the other.</span></span></p>
       </div>
       <div class="card">
-        <svg width="84" height="56" viewBox="0 0 84 56" aria-hidden="true"><g stroke="#9ec5f4" stroke-width="1.2" fill="none"><circle cx="42" cy="28" r="22"/><line x1="20" y1="28" x2="64" y2="28"/></g><g fill="#2a78d6"><circle cx="42" cy="6" r="3.5"/><circle cx="62" cy="17" r="3.5"/><circle cx="64" cy="28" r="3.5"/><circle cx="62" cy="39" r="3.5"/><circle cx="42" cy="50" r="3.5"/><circle cx="22" cy="39" r="3.5"/><circle cx="20" cy="28" r="3.5"/><circle cx="22" cy="17" r="3.5"/></g></svg>
+        <svg width="84" height="56" viewBox="0 0 84 56" aria-hidden="true"><g stroke="#9ec5f4" stroke-width="1.2"><line x1="42.0" y1="6.0" x2="57.6" y2="12.4"/><line x1="57.6" y1="12.4" x2="64.0" y2="28.0"/><line x1="64.0" y1="28.0" x2="57.6" y2="43.6"/><line x1="57.6" y1="43.6" x2="42.0" y2="50.0"/><line x1="42.0" y1="50.0" x2="26.4" y2="43.6"/><line x1="26.4" y1="43.6" x2="20.0" y2="28.0"/><line x1="20.0" y1="28.0" x2="26.4" y2="12.4"/><line x1="26.4" y1="12.4" x2="42.0" y2="6.0"/><line x1="42.0" y1="6.0" x2="64.0" y2="28.0"/><line x1="57.6" y1="12.4" x2="57.6" y2="43.6"/><line x1="64.0" y1="28.0" x2="42.0" y2="50.0"/><line x1="57.6" y1="43.6" x2="26.4" y2="43.6"/><line x1="42.0" y1="50.0" x2="20.0" y2="28.0"/><line x1="26.4" y1="43.6" x2="26.4" y2="12.4"/><line x1="20.0" y1="28.0" x2="42.0" y2="6.0"/></g><g stroke="#2a78d6" stroke-width="1.2" opacity="0.75"><line x1="57.6" y1="12.4" x2="26.4" y2="43.6"/></g><g fill="#2a78d6"><circle cx="42.0" cy="6.0" r="3.5"/><circle cx="57.6" cy="12.4" r="3.5"/><circle cx="64.0" cy="28.0" r="3.5"/><circle cx="57.6" cy="43.6" r="3.5"/><circle cx="42.0" cy="50.0" r="3.5"/><circle cx="26.4" cy="43.6" r="3.5"/><circle cx="20.0" cy="28.0" r="3.5"/><circle cx="26.4" cy="12.4" r="3.5"/></g></svg>
         <h4>Small-world (Watts–Strogatz)</h4>
         <p>A ring where each agent links to its \(k\) nearest neighbours, and a share \(\beta\) of the links are rewired at random. Neighbours share neighbours, so clustering is high, while the rewired links act as shortcuts that keep paths short. Tight local groups, no hubs.</p>
       </div>
@@ -105,20 +110,20 @@
         <tr><td>Clustering coefficient \(C_i\)</td><td>\(C_i = \dfrac{2L_i}{k_i(k_i - 1)}\)</td><td>\(L_i\) is the number of links among \(i\)'s neighbours: the share of \(i\)'s neighbours that are also linked to each other. Averaged over nodes it gives \(\langle C \rangle\).</td></tr>
       </tbody>
     </table></div>
-    <p>A network is <strong>connected</strong> when there is a path between every pair of nodes; otherwise it splits into components. Real networks are <strong>sparse</strong>: \(L\) is far below the maximum possible number of links, which for an undirected network is \(N(N-1)/2\), every pair linked once (a directed network can have twice as many, \(N(N-1)\)).</p>
+    <p>A network is <strong>connected</strong> when there is a path between every pair of nodes; otherwise it splits into components. Real networks are <strong>sparse</strong>: \(L\) is far below the maximum possible number of links, which for an undirected network is \(N(N-1)/2\), every pair linked once.</p>
 
     <h3 id="erdos-renyi">Random (Erdős–Rényi)</h3>
     <p>Every pair of the \(N\) nodes is linked independently with probability \(p\).</p>
     <div class="formula">\[ \langle L \rangle = p\,\frac{N(N-1)}{2} \qquad \langle k \rangle = p\,(N-1) \]</div>
     <p><strong>Degrees.</strong> The degree distribution is binomial, and for sparse networks (\(\langle k \rangle \ll N\)) it is well approximated by a Poisson distribution, narrowly peaked around \(\langle k \rangle\). High degrees are exponentially rare, so there are <strong>no hubs</strong>: most agents have about the same number of neighbours.</p>
     <div class="formula">\[ p_k = e^{-\langle k \rangle} \frac{\langle k \rangle^{k}}{k!} \]</div>
-    <p><strong>Connectedness.</strong> As \(\langle k \rangle\) grows the network goes through distinct regimes: below \(\langle k \rangle = 1\) it is a set of small fragments; above \(1\) a <strong>giant component</strong> appears; above \(\langle k \rangle = \ln N\) the whole network is connected.</p>
+    <p><strong>Connectedness.</strong> As \(\langle k \rangle\) grows the network goes through distinct regimes: below \(\langle k \rangle = 1\) it is a set of small fragments; above \(1\) a <strong>giant component</strong> appears; around \(\langle k \rangle = \ln N\) the whole network becomes connected. The transition is sharp only for very large \(N\): with 50 agents it is gradual (see <a href="#choosing-p">Choosing \(p\)</a> below).</p>
     <p><strong>Small world.</strong> Distances are short and grow only logarithmically with size:</p>
     <div class="formula">\[ \langle d \rangle \approx \frac{\ln N}{\ln \langle k \rangle} \]</div>
     <p><strong>Clustering.</strong> Two neighbours of a node are linked with the same probability \(p\) as any other pair, so clustering is low, independent of degree, and shrinks as the network grows:</p>
-    <div class="formula">\[ \langle C \rangle = p = \frac{\langle k \rangle}{N} \]</div>
+    <div class="formula">\[ \langle C \rangle = p = \frac{\langle k \rangle}{N-1} \approx \frac{\langle k \rangle}{N} \]</div>
     <p>Real networks have far more clustering and far broader degree distributions than this model predicts. It is used as the <strong>null model</strong>: what a network looks like when links are placed purely at random.</p>
-    <div class="note"><strong>Choosing \(p\).</strong> The network is connected once \(\langle k \rangle > \ln N\). With 50 agents \(\ln 50 \approx 3.9\), so \(p \gtrsim 3.9 / 49 \approx 0.08\). Below that, most draws are disconnected and get redrawn (see <a href="#topologies-in-disensa">below</a>).</div>
+    <div class="note" id="choosing-p"><strong>Choosing \(p\).</strong> The network becomes connected around \(\langle k \rangle = \ln N\). With 50 agents \(\ln 50 \approx 3.9\), so \(p \approx 3.9 / 49 \approx 0.08\). That is the threshold, not a safe value: at \(p = 0.08\) only about 40% of draws are connected, and the rest get redrawn (see <a href="#topologies-in-disensa">below</a>). With \(p \approx 0.12\) (\(\langle k \rangle \approx 6\)), over 90% of draws are connected.</div>
 
     <h3 id="watts-strogatz">Small-world (Watts–Strogatz)</h3>
     <p>Real networks are both <strong>clustered</strong> (your neighbours know each other) and <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-small-world">small worlds</button><span class="term-pop" role="tooltip" id="pop-small-world">The <strong>small-world property</strong>: the average distance between two nodes grows only like \(\ln N\), so even in a huge network anyone is a few steps from anyone (&ldquo;six degrees of separation&rdquo;). Random networks already have it: in \(d\) steps a node reaches about \(\langle k \rangle^d\) others, so a few steps cover the whole network. <a href="https://networksciencebook.com/chapter/3#small-worlds" target="_blank" rel="noopener">Network Science, ch. 3 &rarr;</a></span></span> (short paths between anyone). A <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-lattice">regular lattice</button><span class="term-pop" role="tooltip" id="pop-lattice"><span class="pop-figs"><span class="pop-fig"><svg width="80" height="72" viewBox="0 0 80 72" aria-hidden="true"><g stroke="#9ec5f4" stroke-width="1.2"><line x1="40.0" y1="10.0" x2="55.3" y2="15.0"/><line x1="40.0" y1="10.0" x2="64.7" y2="28.0"/><line x1="55.3" y1="15.0" x2="64.7" y2="28.0"/><line x1="55.3" y1="15.0" x2="64.7" y2="44.0"/><line x1="64.7" y1="28.0" x2="64.7" y2="44.0"/><line x1="64.7" y1="28.0" x2="55.3" y2="57.0"/><line x1="64.7" y1="44.0" x2="55.3" y2="57.0"/><line x1="64.7" y1="44.0" x2="40.0" y2="62.0"/><line x1="55.3" y1="57.0" x2="40.0" y2="62.0"/><line x1="55.3" y1="57.0" x2="24.7" y2="57.0"/><line x1="40.0" y1="62.0" x2="24.7" y2="57.0"/><line x1="40.0" y1="62.0" x2="15.3" y2="44.0"/><line x1="24.7" y1="57.0" x2="15.3" y2="44.0"/><line x1="24.7" y1="57.0" x2="15.3" y2="28.0"/><line x1="15.3" y1="44.0" x2="15.3" y2="28.0"/><line x1="15.3" y1="44.0" x2="24.7" y2="15.0"/><line x1="15.3" y1="28.0" x2="24.7" y2="15.0"/><line x1="15.3" y1="28.0" x2="40.0" y2="10.0"/><line x1="24.7" y1="15.0" x2="40.0" y2="10.0"/><line x1="24.7" y1="15.0" x2="55.3" y2="15.0"/></g><g fill="#2a78d6"><circle cx="40.0" cy="10.0" r="3.5"/><circle cx="55.3" cy="15.0" r="3.5"/><circle cx="64.7" cy="28.0" r="3.5"/><circle cx="64.7" cy="44.0" r="3.5"/><circle cx="55.3" cy="57.0" r="3.5"/><circle cx="40.0" cy="62.0" r="3.5"/><circle cx="24.7" cy="57.0" r="3.5"/><circle cx="15.3" cy="44.0" r="3.5"/><circle cx="15.3" cy="28.0" r="3.5"/><circle cx="24.7" cy="15.0" r="3.5"/></g></svg><span>Ring, \(k = 4\)</span></span><span class="pop-fig"><svg width="80" height="72" viewBox="0 0 80 72" aria-hidden="true"><g stroke="#9ec5f4" stroke-width="1.2"><line x1="12" y1="14" x2="30" y2="14"/><line x1="30" y1="14" x2="48" y2="14"/><line x1="48" y1="14" x2="66" y2="14"/><line x1="12" y1="36" x2="30" y2="36"/><line x1="30" y1="36" x2="48" y2="36"/><line x1="48" y1="36" x2="66" y2="36"/><line x1="12" y1="58" x2="30" y2="58"/><line x1="30" y1="58" x2="48" y2="58"/><line x1="48" y1="58" x2="66" y2="58"/><line x1="12" y1="14" x2="12" y2="36"/><line x1="12" y1="36" x2="12" y2="58"/><line x1="30" y1="14" x2="30" y2="36"/><line x1="30" y1="36" x2="30" y2="58"/><line x1="48" y1="14" x2="48" y2="36"/><line x1="48" y1="36" x2="48" y2="58"/><line x1="66" y1="14" x2="66" y2="36"/><line x1="66" y1="36" x2="66" y2="58"/></g><g fill="#2a78d6"><circle cx="12" cy="14" r="3.5"/><circle cx="12" cy="36" r="3.5"/><circle cx="12" cy="58" r="3.5"/><circle cx="30" cy="14" r="3.5"/><circle cx="30" cy="36" r="3.5"/><circle cx="30" cy="58" r="3.5"/><circle cx="48" cy="14" r="3.5"/><circle cx="48" cy="36" r="3.5"/><circle cx="48" cy="58" r="3.5"/><circle cx="66" cy="14" r="3.5"/><circle cx="66" cy="36" r="3.5"/><circle cx="66" cy="58" r="3.5"/></g></svg><span>Square grid</span></span></span>A <strong>regular lattice</strong> places nodes on a regular pattern and links each only to its nearest neighbours, so every node looks the same. It has high clustering but long paths: distances grow like \(N\) on a ring or \(\sqrt{N}\) on a grid, not \(\ln N\).</span></span> has the first but not the second; a random network has the second but not the first. The Watts–Strogatz model interpolates between the two:</p>
@@ -132,6 +137,9 @@
       <li>Small \(\beta\) (for example \(0.01\)–\(0.1\)): a few rewired links act as shortcuts across the ring, so \(\langle d \rangle\) drops sharply, while almost all local triangles survive and clustering stays high. This is the <strong>small-world regime</strong>.</li>
     </ul>
     <p>Every node starts with degree \(k\) and rewiring moves only one end of a link, so degrees stay close to \(k\): \(\langle k \rangle = k\) and there are <strong>no hubs</strong>.</p>
+    <p><strong>Clustering.</strong> On the ring, \(C(0) = \dfrac{3(k-2)}{4(k-1)}\): \(0.5\) for \(k = 4\), \(0.6\) for \(k = 6\), and \(0\) for \(k = 2\), where an agent's two neighbours are never linked. A triangle survives only if none of its three links is rewired, so clustering falls as</p>
+    <div class="formula">\[ C(\beta) \approx C(0)\,(1-\beta)^3 \]</div>
+    <p>At \(\beta = 0.1\) about 73% of the ring's clustering is left; past \(\beta \approx 0.2\) less than half is, and the network looks increasingly random.</p>
 
     <h3 id="barabasi-albert">Scale-free (Barabási–Albert)</h3>
     <p>This topology introduces the <strong>scale-free property</strong>: as in many real networks, the degree distribution follows a power law rather than a Poisson distribution:</p>
@@ -152,16 +160,16 @@
       <li>\(\gamma = 3\): the boundary case, \(\langle d \rangle \sim \ln N / \ln \ln N\), still shorter than in a random network.</li>
       <li>\(\gamma > 3\): hubs are too small to matter and the network behaves much like a random one, \(\langle d \rangle \sim \ln N\).</li>
     </ul>
-    <p><strong>The model.</strong> Barabási–Albert produces this with two mechanisms:</p>
+    <p>Barabási–Albert produces a power-law degree distribution with two mechanisms:</p>
     <ol class="list">
       <li><strong>Growth.</strong> Start from a few nodes and add one node at a time, each with \(m\) links.</li>
       <li><strong>Preferential attachment.</strong> Each new link goes to existing node \(i\) with probability proportional to its degree:</li>
     </ol>
     <div class="formula">\[ \Pi(k_i) = \frac{k_i}{\sum_j k_j} \]</div>
     <p>Well-connected nodes get more new links, so they become better connected (“the rich get richer”). A node that arrived at time \(t_i\) has, at time \(t\),</p>
-    <div class="formula">\[ k_i(t) = m \left( \frac{t}{t_i} \right)^{1/2} \]</div>
+    <div class="formula">\[ \langle k_i(t) \rangle \approx m \left( \frac{t}{t_i} \right)^{1/2} \]</div>
     <p>so the oldest nodes become the hubs (<em>first-mover advantage</em>). The resulting degree distribution is a power law with \(\gamma = 3\), whatever the value of \(m\):</p>
-    <div class="formula">\[ p_k \approx 2m^2 k^{-3} \qquad \langle k \rangle = 2m \]</div>
+    <div class="formula">\[ p_k \approx 2m(m+1)\,k^{-3} \qquad \langle k \rangle \approx 2m \]</div>
     <p><strong>Both mechanisms are needed.</strong> Growth without preferential attachment gives an exponential degree distribution (no hubs). Preferential attachment without growth gives no stationary power law: the network eventually becomes fully connected.</p>
     <p><strong>Clustering</strong> is low, \(\langle C \rangle \sim (\ln N)^2 / N\). That is higher than in a random network of the same size, but it still vanishes as \(N\) grows.</p>
 
@@ -170,25 +178,34 @@
       <thead><tr><th></th><th>Random</th><th>Small-world</th><th>Scale-free</th></tr></thead>
       <tbody>
         <tr><td>Parameters</td><td>\(p\)</td><td>\(k,\ \beta\)</td><td>\(m\)</td></tr>
-        <tr><td>\(\langle k \rangle\)</td><td>\(p\,(N-1)\)</td><td>\(k\)</td><td>\(2m\)</td></tr>
+        <tr><td>\(\langle k \rangle\)</td><td>\(p\,(N-1)\)</td><td>\(k\)</td><td>\(\approx 2m\)</td></tr>
         <tr><td>Degree distribution</td><td>Poisson, narrow</td><td>Narrow, around \(k\)</td><td>Power law, \(k^{-3}\)</td></tr>
         <tr><td>Hubs</td><td>No</td><td>No</td><td>Yes</td></tr>
         <tr><td>Clustering</td><td>Low, \(= p\)</td><td>High (small \(\beta\))</td><td>Low, \(\sim (\ln N)^2 / N\)</td></tr>
         <tr><td>Average path length</td><td>Short, \(\sim \ln N / \ln \langle k \rangle\)</td><td>Short once \(\beta > 0\)</td><td>Shorter, \(\sim \ln N / \ln \ln N\)</td></tr>
       </tbody>
     </table></div>
-    <div class="note"><strong>Small networks.</strong> The results above are asymptotic, for large \(N\). With 50 agents they are approximate: a scale-free network of 50 nodes has visible hubs, but too few nodes to show a clean power law.</div>
+    <div class="note"><strong>Real social networks</strong> combine high clustering, short paths and hubs; each model reproduces only part of this. Random networks are the usual baseline; small-world adds clustering, scale-free adds hubs.</div>
+    <div class="note" id="small-networks"><strong>Small networks.</strong> The results above are asymptotic, for large \(N\). With 50 agents they are approximate: a scale-free network of 50 nodes has visible hubs, but too few nodes to show a clean power law.</div>
 
     <h3 id="topologies-in-disensa">In disensa</h3>
-    <p>Networks are built with NetworkX (<code>network.py</code>). Every network is <strong>seeded</strong>, so the same seed gives the same network, and always <strong>connected</strong>: a disconnected draw is redrawn with the next seed, up to 100 times. All topologies take <code>n</code>, the number of agents (default 50).</p>
+    <p>Networks are built with NetworkX (<code>network.py</code>). Every network is <strong>seeded</strong>, so the same seed gives the same network, and always <strong>connected</strong>: a disconnected draw is redrawn with a new seed derived from the original, up to 100 times. This matters for two reasons. Opinions only travel along links, so separate parts of a network would never influence each other and would evolve as independent simulations. And only Erdős–Rényi can split (Barabási–Albert is connected by construction, and Watts–Strogatz is built connected), so allowing it would add a difference between topologies that has nothing to do with their structure. All topologies take <code>n</code>, the number of agents (default 50).</p>
     <div class="table-wrap"><table>
       <thead><tr><th>Topology</th><th>Config parameters</th><th>Typical values (50 agents)</th></tr></thead>
       <tbody>
-        <tr><td><code>erdos_renyi</code></td><td><code>p</code>: link probability \(p \in [0, 1]\)</td><td>\(p = 0.08\)–\(0.15\) &nbsp;(\(\langle k \rangle \approx 4\)–\(7\))</td></tr>
-        <tr><td><code>watts_strogatz</code></td><td><code>k</code>: neighbours on the ring (even); <code>beta</code>: rewiring probability \(\beta \in [0, 1]\)</td><td>\(k = 4\)–\(6\), \(\beta = 0.1\)</td></tr>
-        <tr><td><code>barabasi_albert</code></td><td><code>m</code>: links per new agent</td><td>\(m = 2\)–\(3\) &nbsp;(\(\langle k \rangle \approx 4\)–\(6\))</td></tr>
+        <tr><td><code>erdos_renyi</code></td><td><code>p</code>: link probability \(p \in [0, 1]\)</td><td>\(p = 0.12\text{–}0.15\) &nbsp;\((\langle k \rangle \approx 6\text{–}7)\)</td></tr>
+        <tr><td><code>watts_strogatz</code></td><td><code>k</code>: neighbours on the ring (even); <code>beta</code>: rewiring probability \(\beta \in [0, 1]\)</td><td>\(k = 4\text{–}6\), \(\beta = 0.1\)</td></tr>
+        <tr><td><code>barabasi_albert</code></td><td><code>m</code>: links per new agent</td><td>\(m = 2\text{–}3\) &nbsp;\((\langle k \rangle \approx 3.8\text{–}5.6)\)</td></tr>
       </tbody>
     </table></div>
+    <div class="note" id="ba-average-degree"><strong>Why Barabási–Albert gives slightly fewer links.</strong> NetworkX starts the network from a small star of \(m + 1\) agents (<a href="https://networkx.org/documentation/stable/reference/generated/networkx.generators.random_graphs.barabasi_albert_graph.html" target="_blank" rel="noopener">NetworkX docs</a>). Every agent added afterwards brings \(m\) links, but the starting agents have fewer. For \(m = 3\) and 50 agents the average is \(5.64\) links per agent instead of \(6\).</div>
+    <div class="note" id="comparing-topologies"><strong>Comparing topologies.</strong> To see the effect of structure alone, every topology should have the same number of agents and about the same number of links per agent; otherwise one network is simply denser than another. For 50 agents and about 6 links per agent:
+      <ul style="margin: 6px 0 0">
+        <li>Random: \(p = 0.12\)</li>
+        <li>Small-world: \(k = 6\)</li>
+        <li>Scale-free: \(m = 3\) (5.64 links per agent, see above)</li>
+      </ul>
+    </div>
 
     <h2 id="initial-opinions">Initial opinions</h2>
     <p class="wip">Work in progress</p>
@@ -206,6 +223,12 @@
     <p class="wip">Work in progress</p>
     <ul class="refs">
       <li>Barabási, A.-L. (2016). <em>Network Science</em>. Cambridge University Press. Ch. 2–5. <a href="https://networksciencebook.com" target="_blank" rel="noopener">networksciencebook.com</a></li>
+      <li>Barabási, A.-L. &amp; Albert, R. (1999). Emergence of scaling in random networks. <em>Science</em>, 286, 509–512. <a href="https://doi.org/10.1126/science.286.5439.509" target="_blank" rel="noopener">doi:10.1126/science.286.5439.509</a></li>
+      <li>Barrat, A. &amp; Weigt, M. (2000). On the properties of small-world network models. <em>The European Physical Journal B</em>, 13, 547–560. <a href="https://arxiv.org/abs/cond-mat/9903411" target="_blank" rel="noopener">arXiv:cond-mat/9903411</a></li>
+      <li>Erdős, P. &amp; Rényi, A. (1959). On random graphs I. <em>Publicationes Mathematicae Debrecen</em>, 6, 290–297. <a href="https://publi.math.unideb.hu/paper/2769" target="_blank" rel="noopener">publi.math.unideb.hu</a></li>
+      <li>Hagberg, A. A., Schult, D. A. &amp; Swart, P. J. (2008). Exploring network structure, dynamics, and function using NetworkX. In <em>Proceedings of the 7th Python in Science Conference (SciPy 2008)</em>, 11–15. <a href="https://proceedings.scipy.org/articles/TCWV9851.pdf" target="_blank" rel="noopener">proceedings.scipy.org</a></li>
+      <li>Wang, C., Liu, Z., Yang, D. &amp; Chen, X. (2025). Decoding echo chambers: LLM-powered simulations revealing polarization in social networks. In <em>Proceedings of COLING 2025</em>. <a href="https://arxiv.org/abs/2409.19338" target="_blank" rel="noopener">arXiv:2409.19338</a></li>
+      <li>Watts, D. J. &amp; Strogatz, S. H. (1998). Collective dynamics of ‘small-world’ networks. <em>Nature</em>, 393, 440–442. <a href="https://doi.org/10.1038/30918" target="_blank" rel="noopener">doi:10.1038/30918</a></li>
     </ul>
   </article>
 </div>

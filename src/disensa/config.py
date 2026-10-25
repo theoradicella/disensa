@@ -39,6 +39,12 @@ class NetworkConfig(BaseModel):
         missing = [name for name in required if getattr(self, name) is None]
         if missing:
             raise ValueError(f"{self.topology} requires: {', '.join(missing)}")
+        if self.topology == "watts_strogatz" and not 2 <= self.k < self.n:
+            raise ValueError(f"watts_strogatz needs 2 ≤ k < n (got k = {self.k}, n = {self.n})")
+        if self.topology == "watts_strogatz" and self.k % 2:
+            raise ValueError(f"watts_strogatz needs an even k (got k = {self.k})")
+        if self.topology == "barabasi_albert" and self.m >= self.n:
+            raise ValueError(f"barabasi_albert needs m < n (got m = {self.m}, n = {self.n})")
         return self
 
 
@@ -78,6 +84,12 @@ class InteractionsConfig(BaseModel):
 
     min: int = Field(1, ge=0)
     max: int = Field(5, ge=1)
+
+    @model_validator(mode="after")
+    def _check_range(self) -> InteractionsConfig:
+        if self.min > self.max:
+            raise ValueError(f"interactions min ({self.min}) is above max ({self.max})")
+        return self
 
 
 class LLMDynamics(BaseModel):

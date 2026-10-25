@@ -10,6 +10,7 @@ Standard library only (http.server), bound to 127.0.0.1.
   GET  /api/options             installed Ollama models, offline fake models, presets
   GET  /api/runs                past and running runs, newest first
   POST /api/runs                {"config": {...}} -> {"id": ...}   starts a run
+  POST /api/check               {"config": {...}} -> {"checks": [...]}  warnings (checks.py)
   GET  /api/runs/<id>           the run's data for the viewer (works while it is running)
   GET  /api/runs/<id>/status    {"status", "step", "steps", "error"}
   POST /api/runs/<id>/cancel    stop a running simulation after the current step
@@ -281,6 +282,10 @@ def make_handler(manager: RunManager, config_dir: Path):
                 except (ValueError, TypeError) as e:
                     return self._error(400, str(e))
                 return self._json({"id": job.id}, HTTPStatus.CREATED)
+            if path == "/api/check":
+                from disensa.checks import raw_checks
+
+                return self._json({"checks": raw_checks(body.get("config") or {})})
             parts = path.strip("/").split("/")
             if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "cancel":
                 return self._json({"cancelled": manager.cancel(parts[2])})

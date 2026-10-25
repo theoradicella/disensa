@@ -40,3 +40,11 @@ def test_metrics_on_a_path():
     # DG_i: node0 4, node1 (4+4)/2=4, node2 4 -> 12 / (2*3)
     assert global_disagreement(g, x) == pytest.approx(2.0)
     assert np.isnan(neighbor_correlation(g, np.zeros(3)))
+
+
+def test_redraws_do_not_reuse_other_seeds():
+    from disensa.network import _redraw_seed
+
+    redraws = {_redraw_seed(s, a) for s in range(20) for a in range(1, 10)}
+    assert not redraws & set(range(20))
+    assert len(redraws) == 20 * 9

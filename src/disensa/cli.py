@@ -9,6 +9,7 @@ from pathlib import Path
 import typer
 from dotenv import load_dotenv
 
+from disensa.checks import config_checks
 from disensa.config import ExperimentConfig
 from disensa.runs import new_run_dir
 
@@ -24,6 +25,11 @@ def run(config: Path, steps: int = typer.Option(None, help="override `steps`")):
     cfg = ExperimentConfig.from_yaml(config)
     if steps:
         cfg.steps = steps
+    for c in config_checks(cfg):
+        typer.secho(f"warning: {c.message}", fg="yellow", err=True)
+        typer.secho(
+            f"         see the docs: {c.docs_title} (/docs#{c.docs})", fg="yellow", err=True
+        )
     run_dir = new_run_dir(cfg)
     d = cfg.dynamics
     what = f"numeric/{d.rule}" if d.type == "numeric" else ", ".join(m.name for m in d.models)

@@ -488,6 +488,7 @@
     $("eng-llm").setAttribute("aria-pressed", e === "llm"); $("eng-num").setAttribute("aria-pressed", e === "numeric");
     syncVisibility();
     if (typeof renderWizard === "function") renderWizard();
+    if (typeof scheduleChecks === "function") scheduleChecks();
   }
   $("eng-llm").addEventListener("click", () => setEngine("llm"));
   $("eng-num").addEventListener("click", () => setEngine("numeric"));
@@ -682,6 +683,43 @@
     });
   }
 
+  // ---------------------------------------------------------------- warnings (checks.py)
+  // Settings that are allowed but probably not intended, shown under the step they belong to
+  // and again on the review step. Each links to the docs section that explains it.
+  const checkStep = (field) => field.startsWith("network.") ? "network"
+    : field.startsWith("opinions.") ? "opinions"
+    : field.startsWith("dynamics.interactions") ? "interactions"
+    : field.startsWith("dynamics.") ? "algorithm" : null;
+  let CHECKS = [], checkTimer = null, checkSeq = 0;
+  async function runChecks() {
+    const seq = ++checkSeq;
+    try {
+      const res = await api("/api/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ config: buildConfig() }) });
+      if (seq !== checkSeq) return; // a newer check is on its way
+      CHECKS = res.checks || []; renderChecks();
+    } catch (e) { /* server gone: no advice */ }
+  }
+  function scheduleChecks() { clearTimeout(checkTimer); checkTimer = setTimeout(runChecks, 200); }
+  function checkNode(c) {
+    const box = el("div", c.level === "error" ? "check check-error" : "notice check");
+    box.appendChild(document.createTextNode(c.message + " "));
+    if (c.docs) {
+      const a = document.createElement("a");
+      a.href = `/docs#${c.docs}`; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Read more →";
+      a.title = c.docs_title;
+      box.appendChild(a);
+    }
+    return box;
+  }
+  function renderChecks() {
+    document.querySelectorAll("[data-checks]").forEach((box) => {
+      const step = box.dataset.checks;
+      box.replaceChildren(...CHECKS.filter((c) => step === "review" || checkStep(c.field) === step).map(checkNode));
+    });
+  }
+  $("form").addEventListener("input", scheduleChecks);
+  $("form").addEventListener("change", scheduleChecks);
+
   $("preset").addEventListener("change", (e) => {
     const p = OPTIONS.presets.find((x) => x.file === e.target.value);
     if (p) applyConfig(p.config);
@@ -713,6 +751,7 @@
     else addModelRow(OPTIONS.ollama_models[0] || "fake/tribal", 1);
     syncVisibility();
     renderWizard();
+    runChecks();
     await loadRuns();
     setDrawer("new");
     requestAnimationFrame(frame);

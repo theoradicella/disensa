@@ -124,6 +124,11 @@ textarea { resize: vertical; min-height: 54px; }
 .primary:disabled { opacity: .5; cursor: default; }
 .error { color: var(--bad); font-size: 12px; white-space: pre-wrap; }
 .notice { background: #fff6e5; border: 1px solid #f3d9a4; color: #6b4a00; border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+.checks { display: grid; gap: 6px; margin: 0 0 12px; }
+.checks:empty { display: none; }
+.check { line-height: 1.45; }
+.check a { color: inherit; font-weight: 600; white-space: nowrap; }
+.check-error { background: #fdecec; border: 1px solid #f2b8b8; color: var(--bad); border-radius: 8px; padding: 8px 10px; font-size: 12px; }
 
 /* ---------- runs list ---------- */
 .run-item { width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 4px; margin-bottom: 8px; }
