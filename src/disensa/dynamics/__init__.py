@@ -3,7 +3,8 @@
 The engine owns the loop; a dynamics object only answers "given everyone's opinions at t-1,
 what are the opinions at t?". Two implementations:
 
-  NumericAgents  (numeric.py)    a fixed rule on numbers: DeGroot, bounded confidence
+  NumericAgents  (numeric.py)    a fixed rule on numbers: DeGroot, bounded confidence,
+                                 Friedkin–Johnsen
   LLMAgents      (llm_agent.py)  each agent interacts with others and asks its LLM
 
 Both are async so the engine does not care which one it runs; numeric steps simply never wait.

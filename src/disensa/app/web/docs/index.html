@@ -28,6 +28,7 @@
         <ol>
           <li><a href="#degroot">DeGroot</a></li>
           <li><a href="#bounded-confidence">Bounded confidence</a></li>
+          <li><a href="#friedkin-johnsen">Friedkin–Johnsen</a></li>
           <li><a href="#algorithms-in-disensa">In disensa</a></li>
         </ol>
       </li>
@@ -67,7 +68,7 @@
     <h2 id="agents">LLM agents</h2>
     <p class="wip">Work in progress</p>
     <h2 id="algorithms">Numeric algorithms</h2>
-    <p>Numeric agents are the classic baseline: instead of asking a model, each agent applies a fixed equation to the opinions of its neighbours. disensa has two rules, both in <code>dynamics/numeric.py</code>. Like LLM agents, every agent reads the opinions of step \(t-1\) and all updates apply together, using the adjacency matrix \(A\) from <a href="#describing-a-network">Describing a network</a>. Both rules belong to the family of <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-assimilative">assimilative influence</button><span class="term-pop" role="tooltip" id="pop-assimilative"><strong>Assimilative influence</strong>: when an agent is influenced, its opinion moves <em>towards</em> the source, never away from it. Models where opinions can also be pushed apart (repulsion) are a separate family, not implemented here. See Flache et al. (2017), §2.</span></span> models.</p>
+    <p>Numeric agents are the classic baseline: instead of asking a model, each agent applies a fixed equation to the opinions of its neighbours. disensa has three rules, all in <code>dynamics/numeric.py</code>: DeGroot is plain averaging, and the other two each add one mechanism to it, a similarity filter (bounded confidence) or stubbornness (Friedkin–Johnsen). The last two are the numeric baselines of Wang et al. Like LLM agents, every agent reads the opinions of step \(t-1\) and all updates apply together, using the adjacency matrix \(A\) from <a href="#describing-a-network">Describing a network</a>. All three belong to the family of <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-assimilative">assimilative influence</button><span class="term-pop" role="tooltip" id="pop-assimilative"><strong>Assimilative influence</strong>: when an agent is influenced, its opinion moves <em>towards</em> the source, never away from it. Models where opinions can also be pushed apart (repulsion) are a separate family, not implemented here. See Flache et al. (2017), §2.</span></span> models.</p>
 
     <h3 id="degroot">DeGroot (averaging)</h3>
     <p>Every agent moves to the plain average of its own opinion and those of its neighbours \(N(i)\). This is the oldest model of opinion pooling (DeGroot, 1974; earlier French, 1956).</p>
@@ -116,17 +117,27 @@
     <div class="note" id="bc-mu-one"><strong>Avoid \(\mu = 1\).</strong> Because the agent is not in its own set, \(\mu = 1\) means jumping straight to the neighbours' average and forgetting one's own opinion. Two agents who only listen to each other then swap opinions every step forever instead of meeting in the middle. Any \(\mu &lt; 1\) avoids this; \(0.5\) means meeting halfway.</div>
     <div class="note" id="bc-large-epsilon"><strong>Large \(\varepsilon\).</strong> Opinions are at most \(4\) apart, so with \(\varepsilon \ge 4\) every neighbour is always in the confidence set and the rule becomes plain averaging, close to DeGroot.</div>
 
+    <h3 id="friedkin-johnsen">Friedkin–Johnsen (stubbornness)</h3>
+    <p>Agents average with their neighbours, but never fully let go of where they started. Each agent keeps its initial opinion \(s_i = x_i(0)\) as an anchor (its <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-innate">innate opinion</button><span class="term-pop" role="tooltip" id="pop-innate">The <strong>innate opinion</strong> \(s_i\) is the view an agent holds on its own, before any influence; it never changes. What changes is the opinion it <em>expresses</em>, \(x_i(t)\), which mixes \(s_i\) with what its neighbours say. Friedkin and Johnsen call the pull of \(s_i\) the agent's <em>prejudice</em> or stubbornness.</span></span>) and mixes it with its neighbours' current opinions, as in Chitra &amp; Musco (2020, eq. 1), the version Wang et al. cite:</p>
+    <div class="formula">\[ x_i(t) = \frac{\lambda\, s_i + \sum_j A_{ij}\, x_j(t-1)}{\lambda + k_i} \]</div>
+    <p>\(\lambda\) (<code>stubbornness</code>) is how much the anchor weighs compared with one neighbour. Chitra &amp; Musco use \(\lambda = 1\): the anchor counts as one extra neighbour. Rewritten, the agent takes a share \(\lambda / (\lambda + k_i)\) of its innate opinion and the rest from its neighbours' average, so agents with many neighbours are pulled harder by the group. The original model (Friedkin &amp; Johnsen, 1990) lets every agent have its own share; this form ties it to the degree.</p>
+    <p><strong>Where it goes.</strong> Not to consensus. Every agent keeps pulling back towards its own \(s_i\), so the run settles at a fixed point where both pulls balance. Setting \(x_i(t) = x_i(t-1)\) in the update gives it in closed form:</p>
+    <div class="formula">\[ x^\ast = \lambda\,(\lambda I + L)^{-1}\, s \qquad L = D - A \]</div>
+    <p>where \(L\) is the <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-laplacian">graph Laplacian</button><span class="term-pop" role="tooltip" id="pop-laplacian">\(L = D - A\), with \(D\) the diagonal matrix of degrees \(k_i\). Multiplying it by an opinion vector gives, for each agent, \(\sum_j A_{ij}(x_i - x_j)\): how far it sits from its neighbours in total. It is \(0\) exactly when neighbours agree.</span></span>. With \(\lambda = 1\) this is Chitra &amp; Musco's \(x^\ast = (I + L)^{-1} s\) (their eq. 3). Neighbours end up closer than they started, but disagreement never disappears: large \(\lambda\) keeps agents near their initial opinions, small \(\lambda\) brings them close to consensus. Opinions stay within the initial range, as with the other two rules.</p>
+    <p>This is the second numeric baseline of Wang et al. (Table 2). In their runs it lowers polarization on every topology while neighbours become more alike, which they read as echo chambers forming without the extremes seen with LLM agents.</p>
+
     <h3 id="algorithms-in-disensa">In disensa</h3>
-    <p>Set <code>dynamics.type: numeric</code> and pick a rule. Numeric runs take no LLM calls and finish instantly (<code>configs/numeric_bc.yaml</code>).</p>
+    <p>Set <code>dynamics.type: numeric</code> and pick a rule. Numeric runs take no LLM calls and finish instantly (<code>configs/numeric_degroot.yaml</code>, <code>numeric_bc.yaml</code>, <code>numeric_fj.yaml</code>).</p>
     <div class="table-wrap"><table>
       <thead><tr><th>Parameter</th><th>Values</th><th>Default</th></tr></thead>
       <tbody>
-        <tr><td><code>rule</code></td><td><code>degroot</code> or <code>bounded_confidence</code></td><td><code>bounded_confidence</code></td></tr>
+        <tr><td><code>rule</code></td><td><code>degroot</code>, <code>bounded_confidence</code> or <code>friedkin_johnsen</code></td><td><code>bounded_confidence</code></td></tr>
         <tr><td><code>epsilon</code></td><td>confidence bound \(\varepsilon &gt; 0\) (bounded confidence only)</td><td>\(1.0\)</td></tr>
         <tr><td><code>mu</code></td><td>step size \(0 &lt; \mu \le 1\) (bounded confidence only)</td><td>\(0.5\)</td></tr>
+        <tr><td><code>stubbornness</code></td><td>anchor weight \(\lambda &gt; 0\) (Friedkin–Johnsen only)</td><td>\(1.0\)</td></tr>
       </tbody>
     </table></div>
-    <div class="note" id="algorithms-parked"><strong>Not here yet.</strong> The first prototype also had pairwise Deffuant updates and the Friedkin–Johnsen model (Friedkin &amp; Johnsen, 1990), where agents stay partly anchored to their initial opinion; Wang et al. compare against both. They are parked in the <code>v0.1-full</code> tag.</div>
+    <div class="note" id="algorithms-parked"><strong>Not here yet.</strong> The first prototype also had the pairwise Deffuant update, the form Wang et al. state for bounded confidence. It is parked in the <code>v0.1-full</code> tag.</div>
 
     <h2 id="topologies">Network topologies</h2>
     <p>Each agent is a node in the network, with its own independent state. In an LLM run, different nodes can be driven by different models (e.g. Llama, Gemma, Grok); see <a href="#agents">LLM agents</a> for how models are assigned to nodes. A link between two nodes means those agents interact. Networks are undirected and unweighted: if \(i\) is linked to \(j\), then \(j\) is linked to \(i\), and every link counts the same. Three classic models are available to generate the network:</p>
@@ -290,6 +301,7 @@
       <li>Barabási, A.-L. (2016). <em>Network Science</em>. Cambridge University Press. Ch. 2–5. <a href="https://networksciencebook.com" target="_blank" rel="noopener">networksciencebook.com</a></li>
       <li>Barabási, A.-L. &amp; Albert, R. (1999). Emergence of scaling in random networks. <em>Science</em>, 286, 509–512. <a href="https://doi.org/10.1126/science.286.5439.509" target="_blank" rel="noopener">doi:10.1126/science.286.5439.509</a></li>
       <li>Barrat, A. &amp; Weigt, M. (2000). On the properties of small-world network models. <em>The European Physical Journal B</em>, 13, 547–560. <a href="https://doi.org/10.1007/s100510050067" target="_blank" rel="noopener">doi:10.1007/s100510050067</a></li>
+      <li>Chitra, U. &amp; Musco, C. (2020). Analyzing the impact of filter bubbles on social network polarization. In <em>Proceedings of the 13th ACM International Conference on Web Search and Data Mining (WSDM 2020)</em>, 115–123. <a href="https://doi.org/10.1145/3336191.3371825" target="_blank" rel="noopener">doi:10.1145/3336191.3371825</a></li>
       <li>Deffuant, G., Neau, D., Amblard, F. &amp; Weisbuch, G. (2000). Mixing beliefs among interacting agents. <em>Advances in Complex Systems</em>, 3, 87–98. <a href="https://doi.org/10.1142/S0219525900000078" target="_blank" rel="noopener">doi:10.1142/S0219525900000078</a></li>
       <li>DeGroot, M. H. (1974). Reaching a consensus. <em>Journal of the American Statistical Association</em>, 69(345), 118–121. <a href="https://doi.org/10.1080/01621459.1974.10480137" target="_blank" rel="noopener">doi:10.1080/01621459.1974.10480137</a></li>
       <li>Erdős, P. &amp; Rényi, A. (1959). On random graphs I. <em>Publicationes Mathematicae Debrecen</em>, 6, 290–297. <a href="https://publi.math.unideb.hu/paper/2769" target="_blank" rel="noopener">publi.math.unideb.hu</a></li>

@@ -1,0 +1,11 @@
+# Friedkin–Johnsen on a small world: agents average with their neighbours but stay
+# anchored to their initial opinion, so disagreement never fully disappears. Instant.
+name: numeric_fj
+seed: 3
+network: {topology: watts_strogatz, n: 60, k: 6, beta: 0.15}
+opinions: {distribution: uniform}
+steps: 40
+dynamics:
+  type: numeric
+  rule: friedkin_johnsen
+  stubbornness: 1.0

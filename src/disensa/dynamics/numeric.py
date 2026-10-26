@@ -34,6 +34,17 @@ def bounded_confidence(a: np.ndarray, x: np.ndarray, epsilon: float, mu: float) 
     return x + mu * pull
 
 
+def friedkin_johnsen(a: np.ndarray, x: np.ndarray, s: np.ndarray, lam: float) -> np.ndarray:
+    """Friedkin–Johnsen (1990), in the form of Chitra & Musco (2020) cited by Wang et al. §2.
+
+    Every agent keeps its initial opinion s_i as an anchor, weighted by the stubbornness λ,
+    and averages it with its neighbours' current opinions:
+    x_i(t) = (λ s_i + Σ_j A_ij x_j(t-1)) / (λ + k_i)
+    With λ = 1 this is exactly Chitra & Musco's update.
+    """
+    return (lam * s + a @ x) / (lam + a.sum(axis=1))
+
+
 class NumericAgents:
     """Numeric rules behind the same interface as LLM agents (see dynamics/__init__.py)."""
 
@@ -41,14 +52,18 @@ class NumericAgents:
         self.cfg = cfg
         self.n = graph.number_of_nodes()
         self.a = nx.to_numpy_array(graph, nodelist=range(self.n))
+        self.x0: np.ndarray | None = None  # initial opinions, the anchor of Friedkin–Johnsen
 
     def labels(self) -> list[str]:
         return [f"numeric/{self.cfg.rule}"] * self.n
 
     async def start(self, x0: np.ndarray) -> list[dict]:
+        self.x0 = x0.copy()
         return []
 
     async def step(self, x: np.ndarray, t: int) -> tuple[np.ndarray, list[dict]]:
         if self.cfg.rule == "degroot":
             return degroot(self.a, x), []
+        if self.cfg.rule == "friedkin_johnsen":
+            return friedkin_johnsen(self.a, x, self.x0, self.cfg.stubbornness), []
         return bounded_confidence(self.a, x, self.cfg.epsilon, self.cfg.mu), []

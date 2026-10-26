@@ -2,7 +2,7 @@ import networkx as nx
 import numpy as np
 import pytest
 
-from disensa.dynamics.numeric import bounded_confidence, degroot
+from disensa.dynamics.numeric import bounded_confidence, degroot, friedkin_johnsen
 
 
 def adj(g):
@@ -30,3 +30,23 @@ def test_bounded_confidence_ignores_distant_neighbours():
     assert new[2] == 2.0  # its only neighbour is 3.5 away: nobody to listen to
     assert new[0] == pytest.approx(-2.0 + 0.5 * 0.5)
     assert new[1] == pytest.approx(-1.5 + 0.5 * (-0.5))  # listens to node 0 only
+
+
+def test_friedkin_johnsen_mixes_anchor_and_neighbours():
+    a = adj(nx.path_graph(3))
+    s = np.array([-2.0, 0.0, 2.0])
+    x = np.array([-1.0, 1.0, 1.0])
+    new = friedkin_johnsen(a, x, s, lam=1.0)
+    assert new == pytest.approx([(-2.0 + 1.0) / 2, (0.0 - 1.0 + 1.0) / 3, (2.0 + 1.0) / 2])
+
+
+def test_friedkin_johnsen_settles_short_of_consensus():
+    g = nx.watts_strogatz_graph(30, 4, 0.2, seed=1)
+    a = adj(g)
+    s = np.random.default_rng(0).uniform(-2, 2, 30)
+    x = s.copy()
+    for _ in range(500):
+        x = friedkin_johnsen(a, x, s, lam=1.0)
+    laplacian = np.diag(a.sum(axis=1)) - a
+    assert x == pytest.approx(np.linalg.solve(np.eye(30) + laplacian, s))  # (I + L)^-1 s
+    assert x.std() > 0.05  # disagreement persists

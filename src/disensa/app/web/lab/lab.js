@@ -501,6 +501,7 @@
     $("mean-label").firstChild.textContent = dist === "bimodal" ? "Camp position (±) " : "Mean ";
     const algo = $("algo").value;
     document.querySelectorAll("[data-algo=bc]").forEach((n) => { n.hidden = algo !== "bounded_confidence"; });
+    document.querySelectorAll("[data-algo=fj]").forEach((n) => { n.hidden = algo !== "friedkin_johnsen"; });
   }
   ["topology", "dist", "algo"].forEach((id) => $(id).addEventListener("change", syncVisibility));
 
@@ -559,7 +560,7 @@
     };
     if (engine === "numeric") {
       cfg.steps = num("steps");
-      cfg.dynamics = { type: "numeric", rule: $("algo").value, epsilon: num("eps"), mu: num("mu") };
+      cfg.dynamics = { type: "numeric", rule: $("algo").value, epsilon: num("eps"), mu: num("mu"), stubbornness: num("lam") };
       return cfg;
     }
     const models = readModels();
@@ -584,7 +585,7 @@
     set("topology", nw.topology); set("n", nw.n); set("k", nw.k); set("beta", nw.beta); set("m", nw.m); set("p", nw.p);
     const op = c.opinions || {};
     set("dist", op.distribution || "uniform"); set("mean", op.mean ?? 0); set("std", op.std ?? 1);
-    if (d.type === "numeric") { set("algo", d.rule); set("steps", c.steps); set("eps", d.epsilon); set("mu", d.mu); }
+    if (d.type === "numeric") { set("algo", d.rule); set("steps", c.steps); set("eps", d.epsilon); set("mu", d.mu); set("lam", d.stubbornness ?? 1); }
     else {
       set("llm-steps", c.steps); set("statement", d.statement);
       set("imin", d.interactions && d.interactions.min); set("imax", d.interactions && d.interactions.max);
@@ -653,7 +654,7 @@
   });
 
   const TOPO_LABEL = { watts_strogatz: "Small-world (Watts–Strogatz)", barabasi_albert: "Scale-free (Barabási–Albert)", erdos_renyi: "Random (Erdős–Rényi)" };
-  const ALGO_LABEL = { bounded_confidence: "Bounded confidence", degroot: "DeGroot" };
+  const ALGO_LABEL = { bounded_confidence: "Bounded confidence", degroot: "DeGroot", friedkin_johnsen: "Friedkin–Johnsen" };
   const optText = (id) => { const sel = $(id); return sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : sel.value; };
   function renderReview() {
     const c = buildConfig(), nw = c.network, op = c.opinions;
@@ -666,7 +667,8 @@
     const d = c.dynamics;
     if (engine === "numeric") {
       blocks.push(["algorithm", [["Rule", ALGO_LABEL[d.rule]], ["Steps", c.steps],
-        ...(d.rule === "bounded_confidence" ? [["Confidence ε", d.epsilon], ["Rate μ", d.mu]] : [])]]);
+        ...(d.rule === "bounded_confidence" ? [["Confidence ε", d.epsilon], ["Rate μ", d.mu]]
+          : d.rule === "friedkin_johnsen" ? [["Stubbornness λ", d.stubbornness]] : [])]]);
     } else {
       blocks.push(["models", [["Statement", d.statement], ["Models", d.models.map((m) => `${short(m.name)} ×${m.weight}`).join(", ")]]]);
       blocks.push(["interactions", [["Steps", c.steps], ["Interactions per step", `${d.interactions.min}–${d.interactions.max}`]]]);

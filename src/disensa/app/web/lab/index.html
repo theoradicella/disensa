@@ -110,6 +110,7 @@
               <select id="algo">
                 <option value="bounded_confidence">Bounded confidence (Hegselmann–Krause)</option>
                 <option value="degroot">DeGroot</option>
+                <option value="friedkin_johnsen">Friedkin–Johnsen</option>
               </select>
             </label>
             <div class="row">
@@ -118,6 +119,7 @@
             </div>
             <div class="row">
               <label class="f" data-algo="bc">Rate μ <input type="number" id="mu" value="0.5" min="0" max="1" step="0.05"></label>
+              <label class="f" data-algo="fj">Stubbornness λ <input type="number" id="lam" value="1" min="0.1" step="0.1"></label>
             </div>
           </fieldset>
           <div class="checks" data-checks="algorithm" aria-live="polite"></div>

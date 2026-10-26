@@ -3,7 +3,7 @@
 An experiment is: a network, initial opinions, a number of steps, and the *dynamics* that
 decide how an agent updates its opinion each step. `dynamics.type` switches between
 
-  numeric   a classic opinion-dynamics rule (DeGroot, bounded confidence)
+  numeric   a classic opinion-dynamics rule (DeGroot, bounded confidence, Friedkin–Johnsen)
   llm       every agent is a language model that interacts with others through messages
 
 Everything else (network, opinions, seed, steps, metrics, storage) is shared by both.
@@ -62,9 +62,12 @@ class NumericDynamics(BaseModel):
     """A fixed mathematical update rule (see dynamics/numeric.py)."""
 
     type: Literal["numeric"] = "numeric"
-    rule: Literal["degroot", "bounded_confidence"] = "bounded_confidence"
+    rule: Literal["degroot", "bounded_confidence", "friedkin_johnsen"] = "bounded_confidence"
     epsilon: float = Field(1.0, gt=0, description="confidence bound (bounded confidence)")
     mu: float = Field(0.5, gt=0, le=1, description="convergence rate (bounded confidence)")
+    stubbornness: float = Field(
+        1.0, gt=0, description="weight on the initial opinion (Friedkin–Johnsen)"
+    )
 
 
 class ModelSpec(BaseModel):
