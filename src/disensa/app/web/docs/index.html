@@ -24,7 +24,13 @@
       <li><a href="#quick-start">Quick start</a></li>
       <li><a href="#how-a-run-works">How a run works</a></li>
       <li><a href="#agents">LLM agents</a></li>
-      <li><a href="#algorithms">Numeric algorithms</a></li>
+      <li><a href="#algorithms">Numeric algorithms</a>
+        <ol>
+          <li><a href="#degroot">DeGroot</a></li>
+          <li><a href="#bounded-confidence">Bounded confidence</a></li>
+          <li><a href="#algorithms-in-disensa">In disensa</a></li>
+        </ol>
+      </li>
       <li><a href="#topologies">Network topologies</a>
         <ol>
           <li><a href="#describing-a-network">Describing a network</a></li>
@@ -61,7 +67,66 @@
     <h2 id="agents">LLM agents</h2>
     <p class="wip">Work in progress</p>
     <h2 id="algorithms">Numeric algorithms</h2>
-    <p class="wip">Work in progress</p>
+    <p>Numeric agents are the classic baseline: instead of asking a model, each agent applies a fixed equation to the opinions of its neighbours. disensa has two rules, both in <code>dynamics/numeric.py</code>. Like LLM agents, every agent reads the opinions of step \(t-1\) and all updates apply together, using the adjacency matrix \(A\) from <a href="#describing-a-network">Describing a network</a>. Both rules belong to the family of <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-assimilative">assimilative influence</button><span class="term-pop" role="tooltip" id="pop-assimilative"><strong>Assimilative influence</strong>: when an agent is influenced, its opinion moves <em>towards</em> the source, never away from it. Models where opinions can also be pushed apart (repulsion) are a separate family, not implemented here. See Flache et al. (2017), §2.</span></span> models.</p>
+
+    <h3 id="degroot">DeGroot (averaging)</h3>
+    <p>Every agent moves to the plain average of its own opinion and those of its neighbours \(N(i)\). This is the oldest model of opinion pooling (DeGroot, 1974; earlier French, 1956).</p>
+    <div class="formula">\[ x_i(t) = \frac{1}{k_i + 1} \sum_{j \in N(i) \cup \{i\}} x_j(t-1) \]</div>
+    <p>In matrix form the whole step is one multiplication, \(x(t) = W\,x(t-1)\), with \(W_{ij} = (A_{ij} + \delta_{ij}) / (k_i + 1)\). \(W\) is <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-stochastic">row-stochastic</button><span class="term-pop" role="tooltip" id="pop-stochastic">Every entry is \(\ge 0\) and every row sums to \(1\). So each new opinion is a <strong>weighted average</strong> of old ones, with weights \(W_{ij}\): how much \(i\) listens to \(j\). Here every agent gives the same weight to itself and to each neighbour; the general DeGroot model allows any weights.</span></span>, so every new opinion is a weighted average of old ones.</p>
+    <p><strong>Where it goes.</strong> On a connected network, averaging always ends in <strong>consensus</strong>: every agent converges to the same opinion (DeGroot, 1974; Flache et al., 2017, §2). disensa networks are always connected, so a DeGroot run always ends in consensus. Because each update is an average, opinions also never leave the range of the initial ones: no agent can end up more extreme than the most extreme agent at the start.</p>
+    <p><strong>The consensus value.</strong> It is not the plain average of the initial opinions. Well-connected agents are listened to by more agents, so they count more: with the equal weights above, each agent counts in proportion to \(k_i + 1\) (Golub &amp; Jackson, 2010).</p>
+    <div class="formula">\[ x^\ast = \frac{\sum_i (k_i + 1)\, x_i(0)}{\sum_i (k_i + 1)} \]</div>
+    <p>In a scale-free network this gives hubs a visibly larger say. For example, with 50 agents and seed 1, the initial opinions average \(0.079\), but the consensus is \(0.012\) on the random network, \(0.098\) on the small world and \(0.064\) on the scale-free one, each matching the formula. Convergence is fast: the gap between the highest and lowest opinion falls below \(0.01\) in 14–26 steps on these networks.</p>
+    <p>That is also the model's limit. It cannot produce polarization or echo chambers, only consensus, which makes it the reference point: anything else a run shows comes from what the other rules add.</p>
+
+    <h3 id="bounded-confidence">Bounded confidence</h3>
+    <p>Agents only listen to neighbours whose opinion is already close to their own: within a <strong>confidence bound</strong> \(\varepsilon\). Neighbours further away are ignored. For agent \(i\), the neighbours it listens to form its <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-confidence-set">confidence set</button><span class="term-pop" role="tooltip" id="pop-confidence-set">The neighbours \(j\) of \(i\) with \(|x_i - x_j| \le \varepsilon\) at step \(t-1\). It changes every step as opinions move, so two agents can stop listening to each other once they drift apart, and start again if they come close.</span></span> \(C_i(t-1) = \{\, j \in N(i) : |x_i(t-1) - x_j(t-1)| \le \varepsilon \,\}\), and the agent moves a share \(\mu\) of the way towards their average:</p>
+    <div class="formula">\[ x_i(t) = x_i(t-1) + \mu \left( \frac{1}{|C_i|} \sum_{j \in C_i} x_j(t-1) \;-\; x_i(t-1) \right) \]</div>
+    <p>If nobody is within \(\varepsilon\), the agent keeps its opinion.</p>
+    <ul>
+      <li>\(\varepsilon\) (<code>epsilon</code>): how open-minded agents are. It decides the outcome.</li>
+      <li>\(\mu\) (<code>mu</code>, \(0 &lt; \mu \le 1\)): how far an agent moves per step. It mostly sets the speed, not where the run ends.</li>
+    </ul>
+    <p><strong>Two classic versions.</strong> Bounded confidence has two standard forms, and disensa's rule sits between them:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Model</th><th>Who updates</th><th>Update</th></tr></thead>
+      <tbody>
+        <tr><td>Deffuant et al. (2000)</td><td>One random pair at a time</td><td>Each moves \(\mu\) towards the other, if within \(\varepsilon\). Wang et al. (§3.4) state the model in this form.</td></tr>
+        <tr><td>Hegselmann–Krause (2002)</td><td>Everyone at once</td><td>Each takes the plain average of <em>all</em> agents within \(\varepsilon\), itself included (\(\mu = 1\)), originally with everyone able to see everyone.</td></tr>
+        <tr><td>disensa</td><td>Everyone at once</td><td>Averages all confident <em>neighbours</em> like Hegselmann–Krause, but moves only \(\mu\) of the way like Deffuant, and the agent is not in its own set (its weight on itself is \(1 - \mu\)).</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Where it goes.</strong> If \(\varepsilon\) is large, everyone is eventually linked by chains of agents who listen to each other and the run ends in consensus, as with DeGroot. If \(\varepsilon\) is small, the population splits into separate <strong>opinion clusters</strong> that no longer listen to each other; the smaller \(\varepsilon\), the more and smaller the clusters (Flache et al., 2017, §2). Hegselmann and Krause (2002, §4.1) describe three phases as \(\varepsilon\) grows: many surviving opinions (<em>plurality</em>), two camps (<em>polarization</em>), then consensus. On their \([0, 1]\) scale two camps appear around \(\varepsilon = 0.15\) and consensus around \(0.25\); on the \([-2, 2]\) scale, four times wider, that is about \(0.6\) and \(1.0\).</p>
+    <p>On a network the bound is not the only obstacle: an agent can only be pulled by its own neighbours, so clusters also form where the network itself keeps groups apart. Final number of distinct opinions with disensa's rule (50 agents, uniform initial opinions, \(\mu = 0.5\), average of 20 seeds):</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>\(\varepsilon\)</th><th>Everyone linked</th><th>Random \((p = 0.12)\)</th><th>Small-world \((k = 6, \beta = 0.1)\)</th><th>Scale-free \((m = 3)\)</th></tr></thead>
+      <tbody>
+        <tr><td>0.2</td><td>7.3</td><td>31.4</td><td>32.1</td><td>32.3</td></tr>
+        <tr><td>0.4</td><td>3.8</td><td>19.4</td><td>21.1</td><td>21.1</td></tr>
+        <tr><td>0.6</td><td>2.8</td><td>10.0</td><td>12.7</td><td>13.2</td></tr>
+        <tr><td>0.8</td><td>2.0</td><td>5.7</td><td>6.4</td><td>8.1</td></tr>
+        <tr><td>1.0</td><td>1.6</td><td>3.6</td><td>3.7</td><td>5.0</td></tr>
+        <tr><td>1.2</td><td>1.1</td><td>2.6</td><td>2.4</td><td>3.4</td></tr>
+        <tr><td>1.6</td><td>1.0</td><td>1.6</td><td>1.1</td><td>1.8</td></tr>
+        <tr><td>2.0</td><td>1.0</td><td>1.1</td><td>1.0</td><td>1.2</td></tr>
+      </tbody>
+    </table></div>
+    <p>With everyone linked the phases match Hegselmann–Krause: about two camps at \(\varepsilon = 0.8\), consensus from about \(1.2\). On the sparse networks the same \(\varepsilon\) leaves many more groups, often single agents with no neighbour close enough. Changing \(\mu\) from \(0.1\) to \(1\) barely changes these counts.</p>
+    <p>As with DeGroot, every update is an average (for \(\mu \le 1\)), so opinions stay within the initial range: the model can split a population into camps, but not make it more extreme than its initial extremists (Flache et al., 2017, §2).</p>
+    <div class="note" id="bc-mu-one"><strong>Avoid \(\mu = 1\).</strong> Because the agent is not in its own set, \(\mu = 1\) means jumping straight to the neighbours' average and forgetting one's own opinion. Two agents who only listen to each other then swap opinions every step forever instead of meeting in the middle. Any \(\mu &lt; 1\) avoids this; \(0.5\) means meeting halfway.</div>
+    <div class="note" id="bc-large-epsilon"><strong>Large \(\varepsilon\).</strong> Opinions are at most \(4\) apart, so with \(\varepsilon \ge 4\) every neighbour is always in the confidence set and the rule becomes plain averaging, close to DeGroot.</div>
+
+    <h3 id="algorithms-in-disensa">In disensa</h3>
+    <p>Set <code>dynamics.type: numeric</code> and pick a rule. Numeric runs take no LLM calls and finish instantly (<code>configs/numeric_bc.yaml</code>).</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Parameter</th><th>Values</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>rule</code></td><td><code>degroot</code> or <code>bounded_confidence</code></td><td><code>bounded_confidence</code></td></tr>
+        <tr><td><code>epsilon</code></td><td>confidence bound \(\varepsilon &gt; 0\) (bounded confidence only)</td><td>\(1.0\)</td></tr>
+        <tr><td><code>mu</code></td><td>step size \(0 &lt; \mu \le 1\) (bounded confidence only)</td><td>\(0.5\)</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note" id="algorithms-parked"><strong>Not here yet.</strong> The first prototype also had pairwise Deffuant updates and the Friedkin–Johnsen model (Friedkin &amp; Johnsen, 1990), where agents stay partly anchored to their initial opinion; Wang et al. compare against both. They are parked in the <code>v0.1-full</code> tag.</div>
 
     <h2 id="topologies">Network topologies</h2>
     <p>Each agent is a node in the network, with its own independent state. In an LLM run, different nodes can be driven by different models (e.g. Llama, Gemma, Grok); see <a href="#agents">LLM agents</a> for how models are assigned to nodes. A link between two nodes means those agents interact. Networks are undirected and unweighted: if \(i\) is linked to \(j\), then \(j\) is linked to \(i\), and every link counts the same. Three classic models are available to generate the network:</p>
@@ -224,9 +289,16 @@
     <ul class="refs">
       <li>Barabási, A.-L. (2016). <em>Network Science</em>. Cambridge University Press. Ch. 2–5. <a href="https://networksciencebook.com" target="_blank" rel="noopener">networksciencebook.com</a></li>
       <li>Barabási, A.-L. &amp; Albert, R. (1999). Emergence of scaling in random networks. <em>Science</em>, 286, 509–512. <a href="https://doi.org/10.1126/science.286.5439.509" target="_blank" rel="noopener">doi:10.1126/science.286.5439.509</a></li>
-      <li>Barrat, A. &amp; Weigt, M. (2000). On the properties of small-world network models. <em>The European Physical Journal B</em>, 13, 547–560. <a href="https://arxiv.org/abs/cond-mat/9903411" target="_blank" rel="noopener">arXiv:cond-mat/9903411</a></li>
+      <li>Barrat, A. &amp; Weigt, M. (2000). On the properties of small-world network models. <em>The European Physical Journal B</em>, 13, 547–560. <a href="https://doi.org/10.1007/s100510050067" target="_blank" rel="noopener">doi:10.1007/s100510050067</a></li>
+      <li>Deffuant, G., Neau, D., Amblard, F. &amp; Weisbuch, G. (2000). Mixing beliefs among interacting agents. <em>Advances in Complex Systems</em>, 3, 87–98. <a href="https://doi.org/10.1142/S0219525900000078" target="_blank" rel="noopener">doi:10.1142/S0219525900000078</a></li>
+      <li>DeGroot, M. H. (1974). Reaching a consensus. <em>Journal of the American Statistical Association</em>, 69(345), 118–121. <a href="https://doi.org/10.1080/01621459.1974.10480137" target="_blank" rel="noopener">doi:10.1080/01621459.1974.10480137</a></li>
       <li>Erdős, P. &amp; Rényi, A. (1959). On random graphs I. <em>Publicationes Mathematicae Debrecen</em>, 6, 290–297. <a href="https://publi.math.unideb.hu/paper/2769" target="_blank" rel="noopener">publi.math.unideb.hu</a></li>
+      <li>Flache, A., Mäs, M., Feliciani, T., Chattoe-Brown, E., Deffuant, G., Huet, S. &amp; Lorenz, J. (2017). Models of social influence: towards the next frontiers. <em>Journal of Artificial Societies and Social Simulation</em>, 20(4), 2. <a href="https://www.jasss.org/20/4/2.html" target="_blank" rel="noopener">jasss.org/20/4/2</a></li>
+      <li>French, J. R. P. (1956). A formal theory of social power. <em>Psychological Review</em>, 63(3), 181–194. <a href="https://doi.org/10.1037/h0046123" target="_blank" rel="noopener">doi:10.1037/h0046123</a></li>
+      <li>Friedkin, N. E. &amp; Johnsen, E. C. (1990). Social influence and opinions. <em>Journal of Mathematical Sociology</em>, 15(3–4), 193–206. <a href="https://doi.org/10.1080/0022250X.1990.9990069" target="_blank" rel="noopener">doi:10.1080/0022250X.1990.9990069</a></li>
+      <li>Golub, B. &amp; Jackson, M. O. (2010). Naïve learning in social networks and the wisdom of crowds. <em>American Economic Journal: Microeconomics</em>, 2(1), 112–149. <a href="https://doi.org/10.1257/mic.2.1.112" target="_blank" rel="noopener">doi:10.1257/mic.2.1.112</a></li>
       <li>Hagberg, A. A., Schult, D. A. &amp; Swart, P. J. (2008). Exploring network structure, dynamics, and function using NetworkX. In <em>Proceedings of the 7th Python in Science Conference (SciPy 2008)</em>, 11–15. <a href="https://proceedings.scipy.org/articles/TCWV9851.pdf" target="_blank" rel="noopener">proceedings.scipy.org</a></li>
+      <li>Hegselmann, R. &amp; Krause, U. (2002). Opinion dynamics and bounded confidence: models, analysis and simulation. <em>Journal of Artificial Societies and Social Simulation</em>, 5(3), 2. <a href="https://www.jasss.org/5/3/2.html" target="_blank" rel="noopener">jasss.org/5/3/2</a></li>
       <li>Wang, C., Liu, Z., Yang, D. &amp; Chen, X. (2025). Decoding echo chambers: LLM-powered simulations revealing polarization in social networks. In <em>Proceedings of the 31st International Conference on Computational Linguistics (COLING 2025)</em>, 3913–3923. <a href="https://aclanthology.org/2025.coling-main.264/" target="_blank" rel="noopener">aclanthology.org/2025.coling-main.264</a></li>
       <li>Watts, D. J. &amp; Strogatz, S. H. (1998). Collective dynamics of ‘small-world’ networks. <em>Nature</em>, 393, 440–442. <a href="https://doi.org/10.1038/30918" target="_blank" rel="noopener">doi:10.1038/30918</a></li>
     </ul>
