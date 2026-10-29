@@ -64,7 +64,7 @@ class NumericDynamics(BaseModel):
     type: Literal["numeric"] = "numeric"
     rule: Literal["degroot", "bounded_confidence", "friedkin_johnsen"] = "bounded_confidence"
     epsilon: float = Field(1.0, gt=0, description="confidence bound (bounded confidence)")
-    mu: float = Field(0.5, gt=0, le=1, description="convergence rate (bounded confidence)")
+    mu: float = Field(0.5, gt=0, le=1, description="step size (bounded confidence)")
     stubbornness: float = Field(
         1.0, gt=0, description="weight on the initial opinion (Friedkin–Johnsen)"
     )

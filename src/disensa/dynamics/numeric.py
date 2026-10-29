@@ -22,15 +22,15 @@ def degroot(a: np.ndarray, x: np.ndarray) -> np.ndarray:
 
 
 def bounded_confidence(a: np.ndarray, x: np.ndarray, epsilon: float, mu: float) -> np.ndarray:
-    """Bounded confidence on a graph (Hegselmann–Krause style, as in Wang et al. §3.4).
+    """Inertial Hegselmann–Krause on a graph (Chazelle & Wang, 2017).
 
-    Agents only listen to neighbours whose opinion is within ε of their own:
-    x_i(t) = x_i(t-1) + μ · mean_{j ∈ N(i), |x_i - x_j| ≤ ε} (x_j(t-1) - x_i(t-1))
+    Agent i averages the opinions within ε of its own among its neighbours and itself, and
+    moves a fraction μ of the way towards that average (μ = 1 is plain Hegselmann–Krause):
+    x_i(t) = x_i(t-1) + μ · (mean_{j ∈ N(i) ∪ {i}, |x_i - x_j| ≤ ε} x_j(t-1) - x_i(t-1))
     """
     diff = x[None, :] - x[:, None]  # diff[i, j] = x_j - x_i
-    confident = (a > 0) & (np.abs(diff) <= epsilon)
-    counts = confident.sum(axis=1)
-    pull = (diff * confident).sum(axis=1) / np.maximum(counts, 1)  # 0 if nobody is close
+    confident = ((a > 0) | np.eye(len(x), dtype=bool)) & (np.abs(diff) <= epsilon)
+    pull = (diff * confident).sum(axis=1) / confident.sum(axis=1)  # i itself is always in
     return x + mu * pull
 
 

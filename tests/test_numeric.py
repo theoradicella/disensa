@@ -27,9 +27,22 @@ def test_bounded_confidence_ignores_distant_neighbours():
     a = adj(nx.path_graph(3))
     x = np.array([-2.0, -1.5, 2.0])
     new = bounded_confidence(a, x, epsilon=1.0, mu=0.5)
-    assert new[2] == 2.0  # its only neighbour is 3.5 away: nobody to listen to
-    assert new[0] == pytest.approx(-2.0 + 0.5 * 0.5)
-    assert new[1] == pytest.approx(-1.5 + 0.5 * (-0.5))  # listens to node 0 only
+    assert new[2] == 2.0  # its only neighbour is 3.5 away: it only listens to itself
+    assert new[0] == pytest.approx(-2.0 + 0.5 * (-1.75 + 2.0))  # mean of itself and node 1
+    assert new[1] == pytest.approx(-1.5 + 0.5 * (-1.75 + 1.5))  # node 0 and itself, not node 2
+
+
+def test_bounded_confidence_with_mu_one_is_hegselmann_krause():
+    a = adj(nx.path_graph(2))
+    x = np.array([-0.5, 0.5])
+    # both in each other's set: they meet in the middle instead of swapping
+    assert bounded_confidence(a, x, epsilon=2.0, mu=1.0) == pytest.approx([0.0, 0.0])
+
+
+def test_bounded_confidence_with_large_epsilon_and_mu_one_is_degroot():
+    a = adj(nx.watts_strogatz_graph(20, 4, 0.2, seed=1))
+    x = np.random.default_rng(0).uniform(-2, 2, 20)
+    assert bounded_confidence(a, x, epsilon=4.0, mu=1.0) == pytest.approx(degroot(a, x))
 
 
 def test_friedkin_johnsen_mixes_anchor_and_neighbours():
