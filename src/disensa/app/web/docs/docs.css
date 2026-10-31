@@ -153,6 +153,28 @@ td code { white-space: nowrap; }
 .chart-panel .hit:hover { fill: rgba(11, 11, 11, 0.08); }
 .chart figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 8px; }
 
+/* run flow diagram (How a run works): boxes in a row, the loop in a dashed panel;
+   on narrow screens the rows stack and the arrows point down */
+.flow { margin: 8px 0 24px; }
+.flow-row { display: flex; align-items: stretch; gap: 6px; }
+.flow-box {
+  flex: 1 1 0; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff;
+  font: 600 14px/1.3 var(--sans); color: var(--ink); text-align: center;
+}
+.flow-sub { display: block; margin-top: 4px; font: 400 12.5px/1.4 var(--sans); color: var(--muted); }
+.flow-box.hl { background: var(--blue-soft); border-color: #b9d0ee; color: var(--blue); }
+.flow-box.hl .flow-sub { color: var(--ink-2); }
+.flow-arrow { flex: none; align-self: center; color: var(--muted); font-size: 14px; line-height: 1; }
+.flow-down { text-align: center; color: var(--muted); line-height: 1; margin: 8px 0; }
+.flow-loop { padding: 10px 12px 12px; border: 1px dashed #c9cfd8; border-radius: 12px; background: #fbfbfb; }
+.flow-loop-label { margin: 0 0 8px; font: 500 12.5px/1.3 var(--mono); color: var(--muted); }
+.flow-loop-label code { font-size: 1em; }
+.flow figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; }
+@media (max-width: 560px) {
+  .flow-row { flex-direction: column; }
+  .flow-arrow { align-self: center; transform: rotate(90deg); }
+}
+
 /* collapsible worked example */
 .example { margin: 4px 0 20px; border: 1px solid var(--line); border-radius: 10px; background: #fbfbfb; }
 .example > summary { display: flex; align-items: center; gap: 10px; padding: 11px 16px; cursor: pointer; list-style: none; font-weight: 600; font-size: 15px; color: var(--ink-2); border-radius: 10px; }

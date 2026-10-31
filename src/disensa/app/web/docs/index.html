@@ -22,7 +22,13 @@
     <ol class="top">
       <li><a href="#introduction">Introduction</a></li>
       <li><a href="#quick-start">Quick start</a></li>
-      <li><a href="#how-a-run-works">How a run works</a></li>
+      <li><a href="#how-a-run-works">How a run works</a>
+        <ol>
+          <li><a href="#run-setup">Setup</a></li>
+          <li><a href="#run-step">One step</a></li>
+          <li><a href="#run-end">At the end</a></li>
+        </ol>
+      </li>
       <li><a href="#topologies">Network topologies</a>
         <ol>
           <li><a href="#describing-a-network">Describing a network</a></li>
@@ -41,7 +47,17 @@
           <li><a href="#algorithms-in-disensa">In disensa</a></li>
         </ol>
       </li>
-      <li><a href="#agents">LLM agents</a></li>
+      <li><a href="#agents">LLM agents</a>
+        <ol>
+          <li><a href="#agent-state">What an agent is</a></li>
+          <li><a href="#agent-initial">Initial opinion</a></li>
+          <li><a href="#agent-interactions">Interactions</a></li>
+          <li><a href="#agent-update">Updating the opinion</a></li>
+          <li><a href="#agent-models">Models</a></li>
+          <li><a href="#agent-reliability">Error handling</a></li>
+          <li><a href="#agents-in-disensa">In disensa</a></li>
+        </ol>
+      </li>
       <li><a href="#initial-opinions">Initial opinions</a></li>
       <li><a href="#simulation">Simulation settings</a></li>
       <li><a href="#metrics">Metrics</a></li>
@@ -64,7 +80,58 @@
     <h2 id="quick-start">Quick start</h2>
     <p class="wip">Work in progress</p>
     <h2 id="how-a-run-works">How a run works</h2>
-    <p class="wip">Work in progress</p>
+    <p>A run is one simulation: a group of agents, linked by a network, each holding an opinion on the same statement. Time moves in rounds called <strong>steps</strong>. At every step each agent looks at what its neighbours think and updates its own opinion. Everything about a run is set in a config file: how many agents there are, how they are linked, how many steps to run, and what kind of agents to use.</p>
+    <p>Every run goes through two phases. The <strong>setup</strong> builds the network and gives every agent a starting opinion. The <strong>loop</strong> then runs one step after another, as many as the config asks for, and saves the opinions after each one.</p>
+    <p>Agents come in two kinds, and each run uses one of them. <strong>Numeric agents</strong> update their opinion with a mathematical rule, such as moving towards the average of their neighbours. <strong>LLM agents</strong> each ask a language model: they read messages from their neighbours and decide on a new opinion. The kind is chosen in the config (<code>dynamics.type</code>), and each kind brings its own settings: a rule and its parameters for numeric agents, the statement and the models for LLM agents. The kind only changes how an agent updates its opinion inside a step. The network, the starting opinions, the loop and what gets saved work the same way for both, so runs of the two kinds can be compared directly.</p>
+    <figure class="flow">
+      <div class="flow-row">
+        <div class="flow-box">Config<span class="flow-sub">the settings of the run</span></div>
+        <span class="flow-arrow" aria-hidden="true">&rarr;</span>
+        <div class="flow-box">Network<span class="flow-sub">the agents and who is linked to whom</span></div>
+        <span class="flow-arrow" aria-hidden="true">&rarr;</span>
+        <div class="flow-box">Initial opinions<span class="flow-sub">one per agent, from &minus;2 to +2</span></div>
+        <span class="flow-arrow" aria-hidden="true">&rarr;</span>
+        <div class="flow-box">Starting point<span class="flow-sub">saved as step 0, before any update</span></div>
+      </div>
+      <div class="flow-down" aria-hidden="true">&darr;</div>
+      <div class="flow-loop">
+        <p class="flow-loop-label">&#8635; repeat for every step (1, 2, 3, &hellip;)</p>
+        <div class="flow-row">
+          <div class="flow-box">Look around<span class="flow-sub">each agent sees its neighbours&rsquo; opinions from the previous step</span></div>
+          <span class="flow-arrow" aria-hidden="true">&rarr;</span>
+          <div class="flow-box hl">Update<span class="flow-sub">each agent picks a new opinion, with a rule or a language model</span></div>
+          <span class="flow-arrow" aria-hidden="true">&rarr;</span>
+          <div class="flow-box">Save<span class="flow-sub">the new opinions and the metrics</span></div>
+        </div>
+      </div>
+      <figcaption>Only the highlighted box differs between numeric and LLM agents. Everything else is the same for both.</figcaption>
+    </figure>
+
+    <h3 id="run-setup">Setup</h3>
+    <ol class="steps">
+      <li><strong>Read the config.</strong> The file is checked before anything runs: a missing or out-of-range parameter stops the run with an error. The <code>seed</code> fixes every random draw, so the same config always gives the same network and the same starting opinions.</li>
+      <li><strong>Build the network.</strong> Agents are its nodes, numbered \(0\) to \(N-1\), and an agent only ever interacts with its neighbours. The network is redrawn until it is connected. See <a href="#topologies">Network topologies</a>.</li>
+      <li><strong>Draw the initial opinions</strong>, one per agent. Together they are written \(x(0)\), the opinions at step 0; in general \(x(t)\) are the opinions after step \(t\). See <a href="#initial-opinions">Initial opinions</a>.</li>
+      <li><strong>Prepare the agents.</strong> Numeric agents need no further setup. With LLM agents, two more things happen. First, every agent is given a model: each model gets the share of agents set by its <code>weight</code>, placed at random on the network. Then every agent writes a <strong>first message</strong> stating its initial opinion. These are the messages the others will read at step 1.</li>
+    </ol>
+
+    <h3 id="run-step">One step</h3>
+    <p>At step \(t\), every agent computes its new opinion from the state at step \(t-1\): its own opinion and what its neighbours held or said. Updates are <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-synchronous">synchronous</button><span class="term-pop" role="tooltip" id="pop-synchronous"><strong>Synchronous update</strong>: every agent works from the same snapshot, the state at step \(t-1\), and all new opinions replace the old ones at once. In an <em>asynchronous</em> update agents would go one at a time, each seeing the changes made before it, so the order in which they go would matter.</span></span>: no agent sees another&rsquo;s step-\(t\) opinion until the step is over, so the order in which agents are processed never matters. How an agent turns what it sees into a new opinion depends on its kind:</p>
+    <div class="cards">
+      <div class="card">
+        <h4>Numeric agents</h4>
+        <p>Every agent applies the same equation to its own opinion and its neighbours&rsquo; opinions at \(t-1\). The whole step is one matrix operation on the opinion vector, with no randomness, so it takes no time. The three rules are in <a href="#algorithms">Numeric algorithms</a>.</p>
+      </div>
+      <div class="card">
+        <h4>LLM agents</h4>
+        <p>Every agent reads the messages of a few neighbours, reasons about them with its model, and replies with a new opinion, a new message and an updated memory. One step is one model call per agent. How this works is explained in <a href="#agents">LLM agents</a>.</p>
+      </div>
+    </div>
+    <p>Then, for both kinds of agents, the step ends the same way. Opinions are kept on the scale from \(-2\) to \(+2\): if a language model replies with a value outside it, say \(3\), it is set to the nearest end, \(+2\). Then the <a href="#metrics">metrics</a> are computed, and the step is written to disk. A run with <code>steps: 10</code> records 11 states: step 0 and ten updates.</p>
+
+    <h3 id="run-end">At the end</h3>
+    <p>Each run gets its own folder, <code>runs/&lt;timestamp&gt;_&lt;name&gt;_s&lt;seed&gt;/</code>, filled step by step while the run goes: if a run is stopped, every finished step is kept. When the loop is done the run is marked as finished, with its duration and, for LLM runs, the number of model calls. What each file holds is in <a href="#outputs">Run files</a>; how to follow a run in the lab, agent by agent, is in <a href="#reading-a-run">Reading a run</a>.</p>
+    <div class="note"><strong>Reproducibility.</strong> A numeric run is fully determined by its config. An LLM run is too, once its replies are cached: every reply is stored on disk under its exact request, so running the same config again replays the same replies instead of calling the models, and the run comes out identical.</div>
     <h2 id="topologies">Network topologies</h2>
     <p>Each agent is a node in the network, with its own independent state. In an LLM run, different nodes can be driven by different models (e.g. Llama, Gemma, Grok); see <a href="#agents">LLM agents</a> for how models are assigned to nodes. A link between two nodes means those agents interact. Networks are undirected and unweighted: if \(i\) is linked to \(j\), then \(j\) is linked to \(i\), and every link counts the same. Three classic models are available to generate the network:</p>
     <div class="cards">
@@ -328,7 +395,137 @@
     </table></div>
 
     <h2 id="agents">LLM agents</h2>
-    <p class="wip">Work in progress</p>
+    <p>An LLM agent replaces the update equation with a language model. Instead of computing a new opinion from numbers, it reads what a few of its neighbours said, reasons about it, and replies with a new opinion, a new message and an updated memory. Everything else in a run (the network, the initial opinions, the loop, the metrics) is the same as with <a href="#algorithms">numeric agents</a>.</p>
+    <p>Agents in the same run can use <strong>different models</strong>: every agent is assigned a model, so one community can mix models from different labs, each reasoning in its own way. Agents are members of a community who exchange messages about a single statement; nothing in the prompts refers to a specific platform or medium. The code is in <code>dynamics/llm_agent.py</code>, and every prompt is in <code>llm/prompts.py</code>, quoted in full below.</p>
+
+    <h3 id="agent-state">What an agent is</h3>
+    <p>Each agent is a node of the network with a model attached and three things that carry over from one step to the next:</p>
+    <div class="cards">
+      <div class="card"><h4>Opinion</h4><p>A number on \([-2, 2]\), exactly as for numeric agents. This is what the metrics measure.</p></div>
+      <div class="card"><h4>Message</h4><p>The last thing it said, 1&ndash;3 sentences. This is what its neighbours read at the next step.</p></div>
+      <div class="card"><h4>Memory</h4><p>A short summary of what it has heard and thought so far, which the agent rewrites itself at every step.</p></div>
+    </div>
+    <p>The model call is <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-stateless">stateless</button><span class="term-pop" role="tooltip" id="pop-stateless">A language model remembers nothing between calls. Everything the agent &ldquo;knows&rdquo; at step \(t\) has to be written into the prompt of that call: its opinion, its memory and the messages it hears.</span></span>: the agent only knows what is written in its prompt. Its <strong>identity</strong> is minimal: the system prompt calls it &ldquo;Agent \(i\), a member of a community&rdquo;, with no name, age or personality.</p>
+    <div class="note" id="personas"><strong>No personas.</strong> Wang et al. give each agent a gender, an age, an education level and Big Five personality traits; Chuang et al. add political leaning, ethnicity and occupation. disensa leaves them out on purpose: without personas, two agents that start from the same opinion can only differ because of their model, which is one of the effects under study.</div>
+
+    <h3 id="agent-initial">Initial opinion and first message</h3>
+    <p>An LLM agent does not choose its starting opinion: it is drawn from <code>opinions.distribution</code>, exactly as for numeric agents (see <a href="#initial-opinions">Initial opinions</a>). The number is then put into words. It is rounded to the nearest integer and turned into one of five <strong>stance labels</strong>, and both the label and the exact value go into the prompt:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Opinion (rounded)</th><th>\(-2\)</th><th>\(-1\)</th><th>\(0\)</th><th>\(+1\)</th><th>\(+2\)</th></tr></thead>
+      <tbody><tr><td>Label</td><td>strongly oppose</td><td>somewhat oppose</td><td>neutral / undecided</td><td>somewhat support</td><td>strongly support</td></tr></tbody>
+    </table></div>
+    <p>At step 0 every agent writes a <strong>first message</strong> from that position, e.g. &ldquo;You somewhat oppose this statement (your position: \(-0.8\) on a scale from \(-2\) to \(+2\))&rdquo;. These first messages are what the agents hear at step 1. Step 0 does not change any opinion.</p>
+    <div class="note"><strong>The starting opinion is given, not chosen.</strong> The model does not pick its own starting position. This keeps LLM and numeric runs comparable, since both start from the same opinions. The cost is that a model&rsquo;s own leaning on the statement is hidden at the start, and can only show up later.</div>
+    <details class="example">
+      <summary>Prompt: first message</summary>
+      <div class="example-body">
+<pre><code>[system]
+You are Agent {i}, a member of a community. You interact with other people and share your views with them.
+Think and speak as this person would, in plain everyday language.
+
+[user]
+Topic: "{statement}"
+
+You {label} this statement (your position: {value} on a scale from -2 = strongly oppose to +2 = strongly support).
+
+Write a short message (1-3 sentences) stating your view.
+Respond ONLY with JSON: {"message": "&lt;your message&gt;"}</code></pre>
+      </div>
+    </details>
+
+    <h3 id="agent-interactions">Interactions</h3>
+    <p>At each step an agent interacts with a few of its neighbours: it hears the message each of them shared at step \(t-1\). How many is random, drawn every step between <code>interactions.min</code> and <code>interactions.max</code> (default \(1\) to \(5\)), and capped at the agent&rsquo;s number of neighbours: an agent with 3 neighbours that draws 5 hears all 3. The neighbours are then picked uniformly at random: every neighbour is equally likely, whatever its opinion or degree. Both draws are new at every step and separate for each agent, so hearing is not mutual: agent \(i\) can hear \(j\) at a step without \(j\) hearing \(i\). A message from a neighbour reaches the agent as one line of the prompt: <code>- Agent 7 said: "..."</code>.</p>
+    <p>This is a different kind of influence from the numeric rules. There, an agent sees the <em>opinions</em> of <em>all</em> its neighbours, every step. Here it sees the <em>messages</em> of <em>some</em> of them, and never their numbers: whatever a neighbour&rsquo;s opinion is, only the words reach the agent. A hub can still hear only five others per step, but it is heard by many.</p>
+
+    <h3 id="agent-update">Updating the opinion</h3>
+    <figure class="flow">
+      <div class="flow-row">
+        <div class="flow-box">Pick interactions<span class="flow-sub">a few neighbours and their step \(t-1\) messages</span></div>
+        <span class="flow-arrow" aria-hidden="true">&rarr;</span>
+        <div class="flow-box">Write the prompt<span class="flow-sub">statement, own position, memory, interactions</span></div>
+        <span class="flow-arrow" aria-hidden="true">&rarr;</span>
+        <div class="flow-box hl">Call the model<span class="flow-sub">one call per agent, all agents at once</span></div>
+        <span class="flow-arrow" aria-hidden="true">&rarr;</span>
+        <div class="flow-box">Read the reply<span class="flow-sub">new opinion, message and memory, applied together</span></div>
+      </div>
+      <figcaption>One step for one LLM agent. All agents do this from the same step \(t-1\) state.</figcaption>
+    </figure>
+    <p>The prompt gives the agent its current position (label and value), its memory and its interactions, and asks it to reflect on them &ldquo;as the person you are&rdquo;: it may keep, soften, strengthen or change its position. It must reply with JSON holding four fields:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Field</th><th>What it is</th><th>What happens to it</th></tr></thead>
+      <tbody>
+        <tr><td><code>reasoning</code></td><td>2&ndash;4 sentences on how the interactions affect its view</td><td>Saved for inspection only; never shown to other agents</td></tr>
+        <tr><td><code>belief</code></td><td>Its new opinion, a number from \(-2\) to \(2\)</td><td>Becomes \(x_i(t)\), clipped to \([-2, 2]\)</td></tr>
+        <tr><td><code>message</code></td><td>1&ndash;3 sentences</td><td>What its neighbours hear at step \(t+1\)</td></tr>
+        <tr><td><code>memory</code></td><td>An updated summary, at most <code>memory_words</code> words (default 60)</td><td>Replaces the old memory in the next prompt</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>There is no update rule.</strong> Unlike the <a href="#algorithms">numeric algorithms</a>, there are no parameters that shape the update: no confidence bound \(\varepsilon\), no step size \(\mu\), no stubbornness. The new opinion is whatever number the model reports. If LLM agents end up listening only to similar views (as in <a href="#bounded-confidence">bounded confidence</a>) or clinging to where they started (as in <a href="#friedkin-johnsen">Friedkin&ndash;Johnsen</a>), that behaviour comes from the model, not from the code.</p>
+    <div class="note"><strong>Self-reported opinions.</strong> The opinion is what the agent says it is. Chuang et al. found that scoring the agent&rsquo;s message with a separate classifier model is more reliable than asking for a number. disensa uses the self-report for now; the <code>reasoning</code> and <code>message</code> are saved, so a classifier could be run on them afterwards.</div>
+    <details class="example">
+      <summary>Prompt: one step</summary>
+      <div class="example-body">
+<pre><code>Topic: "{statement}"
+
+What you remember from previous interactions: {memory}
+
+Your current position: you {label} the statement ({value} on a scale from -2 = strongly oppose to +2 = strongly support).
+
+In this step you interacted with:
+- Agent {j} said: "{message}"
+- ...
+
+Reflect on these interactions, as the person you are. You may keep, soften, strengthen or change your position.
+Respond ONLY with JSON:
+{"reasoning": "&lt;2-4 sentences: how these interactions affect your view&gt;",
+ "belief": &lt;number from -2 to 2&gt;,
+ "message": "&lt;your new message, 1-3 sentences&gt;",
+ "memory": "&lt;updated summary of what you have heard and thought so far, at most {memory_words} words&gt;"}</code></pre>
+        <p>The system prompt is the same as for the first message. At step 1 the memory is &ldquo;(nothing yet)&rdquo;; an agent with no interactions sees &ldquo;(nobody in this step)&rdquo; and can still reconsider on its own.</p>
+      </div>
+    </details>
+
+    <h3 id="agent-models">Models</h3>
+    <p>The models of a run are listed under <code>dynamics.models</code>. Each has a <code>weight</code>, and each model gets that share of the agents: three models with equal weight and 20 agents give \(7 + 7 + 6\). Shares are rounded so the counts always add up to \(N\) (<span class="term-wrap"><button type="button" class="term" aria-describedby="pop-largest-remainder">largest remainder</button><span class="term-pop" role="tooltip" id="pop-largest-remainder">Each model first gets the whole part of its exact share (\(20/3 = 6.67 \to 6\)). The agents left over go one each to the models with the largest fractional parts.</span></span>). The agents are then placed on the network at random: the list of model labels is shuffled and handed out to the agents. The shuffle has its own random generator, separate from the rest of the run, so two runs with the same seed but different models have the same network, initial opinions and interactions; only the models differ.</p>
+    <p>A model is written as <code>provider/model</code>, e.g. <code>ollama_chat/llama3.1:8b</code>: the part before the slash says which service runs the model, the part after is the model&rsquo;s name there. disensa sends every request through <a href="https://docs.litellm.ai/docs/providers" target="_blank" rel="noopener">LiteLLM</a>, a library that speaks to all these services the same way.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Where it runs</th><th>Model name</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Your Mac (Ollama)</td><td><code>ollama_chat/llama3.1:8b</code></td><td>Free; pull the model first. See <code>configs/mixed_local.yaml</code></td></tr>
+        <tr><td>A model server (vLLM, Ollama&hellip;)</td><td><code>openai/&lt;model&gt;</code> + <code>api_base</code></td><td>Any OpenAI-compatible server, local or remote</td></tr>
+        <tr><td>Paid APIs</td><td><code>anthropic/&hellip;</code>, <code>openai/&hellip;</code>, <code>xai/&hellip;</code>, <code>deepseek/&hellip;</code></td><td>Need an API key; every call costs</td></tr>
+      </tbody>
+    </table></div>
+    <p><code>api_base</code> is the address of the server, e.g. <code>{name: openai/&lt;model&gt;, api_base: http://&lt;host&gt;:8000/v1}</code>. Without it, Ollama models go to the local server at <code>http://localhost:11434</code>.</p>
+    <p>Each request also carries settings that are not part of the prompt. The <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-temperature"><strong>temperature</strong></button><span class="term-pop" role="tooltip" id="pop-temperature"><strong>Temperature</strong> \(T\): a model writes one token at a time, giving each candidate \(k\) a score \(z_k\) and drawing it with probability \(p_k \propto e^{z_k / T}\). As \(T \to 0\) the top token almost always wins; at \(T = 1\) the model&rsquo;s own probabilities are used; above \(1\) unlikely tokens get through more often.</span></span> (default \(0.7\)) sets how varied the replies are: low values give nearly the same reply to the same prompt, higher values more varied ones. <strong><code>max_tokens</code></strong> caps the length of the reply. Every model gets the same prompts and the same settings unless set otherwise, so that differences between agents come from the models. The same temperature does not make two models equally random, though: it reshapes each model&rsquo;s own word probabilities, so it treats them the same way, not makes them behave the same.</p>
+
+    <h3 id="agent-reliability">Error handling and reproducibility</h3>
+    <p>Models do not always follow the format. disensa asks for JSON mode when the provider supports it, and repairs common mistakes (text around the JSON, trailing commas). If that fails, it asks the model once more to fix its reply. If the reply is still unusable, or the provider returns an error, the run does not stop: the agent keeps its previous opinion, message and memory for that step, and the error is saved with the step so it can be counted and inspected. A missing <code>message</code> or <code>memory</code> also keeps the previous one. The one case with nothing to keep is step 0: an agent whose first message fails has no message yet, so its neighbours cannot hear it until it says something.</p>
+    <p>Every reply is <strong>cached</strong> on disk under its exact request: the model, the full prompt, the temperature, <code>max_tokens</code> and the seed. Running the same config again replays the same replies without calling any model, so an LLM run is reproducible once it has been run once. Changing anything in the prompt (the statement, a neighbour&rsquo;s message, the memory) makes it a new request.</p>
+
+    <h3 id="agents-in-disensa">In disensa</h3>
+    <p>Set <code>dynamics.type: llm</code>, a statement and at least one model. <code>configs/quick.yaml</code> is the smallest run, one small Ollama model; <code>configs/mixed_local.yaml</code> mixes three Ollama models on a Mac.</p>
+<pre><code>dynamics:
+  type: llm
+  statement: Euthanasia should be legal for terminally ill adults who clearly request it.
+  models:
+    - {name: ollama_chat/llama3.1:8b}
+    - {name: ollama_chat/gemma2:9b}
+    - {name: ollama_chat/mistral:7b, weight: 2, temperature: 0.7}
+  interactions: {min: 1, max: 4}</code></pre>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Parameter</th><th>Values</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>statement</code></td><td>the statement agents take a position on</td><td>euthanasia statement</td></tr>
+        <tr><td><code>models</code></td><td>list of <code>name</code>, <code>weight</code>, <code>temperature</code>, <code>api_base</code></td><td>required</td></tr>
+        <tr><td><code>interactions.min</code>, <code>.max</code></td><td>how many neighbours an agent hears per step</td><td>\(1\), \(5\)</td></tr>
+        <tr><td><code>memory_words</code></td><td>word limit asked for the memory</td><td>\(60\)</td></tr>
+        <tr><td><code>max_tokens</code></td><td>longest reply allowed</td><td>\(400\)</td></tr>
+        <tr><td><code>max_concurrency</code></td><td>parallel requests per provider</td><td>\(4\)</td></tr>
+        <tr><td><code>cache_dir</code></td><td>where replies are cached</td><td><code>.cache/llm</code></td></tr>
+      </tbody>
+    </table></div>
+    <p>To follow a run agent by agent, with each step&rsquo;s interactions, reasoning and memory, see <a href="#reading-a-run">Reading a run</a>.</p>
 
     <h2 id="initial-opinions">Initial opinions</h2>
     <p class="wip">Work in progress</p>
