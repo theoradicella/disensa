@@ -43,6 +43,9 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
 .enter:hover { background: #104281; }
 .enter:active { transform: translateY(1px); }
 .enter:focus-visible { outline: 2px solid #1c5cab; outline-offset: 3px; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; position: relative; z-index: 2; }
+.enter.secondary { background: transparent; color: #0b0b0b; box-shadow: inset 0 0 0 1.5px #0b0b0b; }
+.enter.secondary:hover { background: transparent; color: #104281; box-shadow: inset 0 0 0 1.5px #104281; }
 .right { display: grid; place-items: center; padding: 150px 32px 32px; }
 .social { display: flex; align-items: center; gap: 4px; margin-top: -14px; }
 .social .icon-link { width: 40px; height: 40px; color:#2b2d30 }
