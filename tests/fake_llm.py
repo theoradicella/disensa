@@ -1,4 +1,4 @@
-"""Deterministic offline LLM for tests, demos and dry runs (no network, no cost).
+"""Offline stand-in for a language model, used only by the tests (no network, no cost).
 
 A fake agent embeds its position in its messages ("My position is +0.75.") and, after its
 interactions, moves towards (or away from) the positions it heard, bounded-confidence style.

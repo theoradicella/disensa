@@ -29,7 +29,6 @@ uv run disensa ping ollama_chat/llama3.2:3b      # check it answers
 ```bash
 uv run disensa app                               # the web app at http://127.0.0.1:8765
 uv run disensa run configs/numeric_bc.yaml       # numeric, instant
-uv run disensa run configs/demo_camps.yaml       # LLM pipeline with offline fake models, seconds
 uv run disensa run configs/quick.yaml            # real LLM on Ollama, minutes
 ```
 
@@ -37,7 +36,6 @@ uv run disensa run configs/quick.yaml            # real LLM on Ollama, minutes
 |---|---|
 | `numeric_bc.yaml` | Bounded confidence on a small world: opinion clusters |
 | `numeric_degroot.yaml` | DeGroot on a scale-free network: consensus |
-| `demo_fake.yaml`, `demo_camps.yaml` | LLM agents with offline fake models, free |
 | `quick.yaml` | Smallest real run on Ollama |
 | `mixed_local.yaml` | Three open-weight models from three labs, on Ollama |
 
@@ -86,7 +84,7 @@ src/disensa/
   runs.py            writing and reading run folders
   cli.py             `disensa run | app | ping`
   dynamics/          how an agent updates: numeric.py (DeGroot, bounded confidence), llm_agent.py
-  llm/               client.py (LiteLLM + cache), fake.py (offline model), prompts.py
+  llm/               client.py (LiteLLM + cache), prompts.py
   app/               server.py (HTTP + JSON API), payload.py (run -> viewer JSON)
     web/             shared/ (base.css, header.js), landing/, lab/, docs/, vendor/d3.min.js
 ```
@@ -105,4 +103,4 @@ See `runs.py`.
 uv run pytest && uv run ruff check . && uv run ruff format --check .
 ```
 
-Tests only use the offline `fake/` models; they never call real APIs.
+Tests replace every model call with an offline stand-in (`tests/fake_llm.py`); they never call real APIs.

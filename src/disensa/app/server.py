@@ -7,7 +7,7 @@ Standard library only (http.server), bound to 127.0.0.1.
   GET  /docs                    documentation      web/docs/index.html
   GET  /<folder>/<file>         any other file under web/ (css, js, vendor/d3.min.js)
 
-  GET  /api/options             installed Ollama models, offline fake models, presets
+  GET  /api/options             installed Ollama models, presets
   GET  /api/runs                past and running runs, newest first
   POST /api/runs                {"config": {...}} -> {"id": ...}   starts a run
   POST /api/check               {"config": {...}} -> {"checks": [...]}  warnings (checks.py)
@@ -37,7 +37,6 @@ import yaml
 from pydantic import ValidationError
 
 from disensa.config import ExperimentConfig
-from disensa.llm.fake import BEHAVIOURS
 
 OLLAMA_URL = "http://localhost:11434"
 WEB = resources.files("disensa").joinpath("app", "web")
@@ -230,12 +229,10 @@ def make_handler(manager: RunManager, config_dir: Path):
                 return self._send(200, html, "text/html; charset=utf-8")
             if path == "/api/options":
                 models, err = ollama_models()
-                fakes = ["fake/bounded", *(f"fake/{b}" for b in BEHAVIOURS)]
                 return self._json(
                     {
                         "ollama_models": models,
                         "ollama_error": err,
-                        "fake_models": fakes,
                         "presets": presets(config_dir),
                     }
                 )

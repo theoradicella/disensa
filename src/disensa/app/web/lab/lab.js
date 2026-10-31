@@ -481,7 +481,7 @@
   document.addEventListener("pointerdown", (e) => { if (drawerOpen && !$("labcard").contains(e.target)) setDrawer(null); });
 
   // ---------------------------------------------------------------- form
-  let OPTIONS = { ollama_models: [], fake_models: [], presets: [] };
+  let OPTIONS = { ollama_models: [], presets: [] };
   let engine = "llm";
   function setEngine(e) {
     engine = e;
@@ -507,11 +507,11 @@
 
   function modelOptions(select, value) {
     select.replaceChildren();
-    const groups = [["Ollama (on this Mac)", OPTIONS.ollama_models], ["Offline test models", OPTIONS.fake_models]];
+    const groups = [["Ollama (on this Mac)", OPTIONS.ollama_models]];
     groups.forEach(([label, list]) => {
       if (!list.length) return;
       const g = document.createElement("optgroup"); g.label = label;
-      list.forEach((m) => g.appendChild(new Option(short(m) + (m.startsWith("fake/") ? " (fake)" : ""), m)));
+      list.forEach((m) => g.appendChild(new Option(short(m), m)));
       select.appendChild(g);
     });
     if (value && ![...select.options].some((o) => o.value === value)) {
@@ -527,8 +527,8 @@
     const w = document.createElement("input"); w.type = "number"; w.min = "0.1"; w.step = "any"; w.value = weight ?? 1; w.title = "Weight: share of agents"; w.setAttribute("aria-label", "Weight");
     const rm = el("button", "icon-btn", "×"); rm.type = "button"; rm.setAttribute("aria-label", "Remove model");
     const custom = document.createElement("input"); custom.type = "text"; custom.className = "custom"; custom.placeholder = "e.g. anthropic/claude-haiku-4-5 or ollama_chat/gemma2:9b";
-    const known = modelOptions(sel, name ?? (OPTIONS.ollama_models[0] || "fake/bounded"));
-    custom.hidden = known; if (!known && name) custom.value = name;
+    modelOptions(sel, name ?? OPTIONS.ollama_models[0]);
+    custom.hidden = sel.value !== "__custom__";
     sel.addEventListener("change", () => { custom.hidden = sel.value !== "__custom__"; });
     rm.addEventListener("click", () => { if ($("models").children.length > 1) row.remove(); });
     row.append(sel, w, rm, custom);
@@ -570,7 +570,7 @@
       statement: $("statement").value.trim(),
       models,
       interactions: { min: num("imin"), max: num("imax") },
-      max_concurrency: models.every((m) => m.name.startsWith("fake/")) ? 64 : 4,
+      max_concurrency: 4,
     };
     return cfg;
   }
@@ -746,11 +746,11 @@
 
   async function init() {
     try { OPTIONS = await api("/api/options"); } catch (e) { $("form-error").textContent = "Cannot reach the local server. Start it again from Terminal."; }
-    if (OPTIONS.ollama_error) { $("ollama-note").hidden = false; $("ollama-note").textContent = OPTIONS.ollama_error + " Offline test models still work."; }
+    if (OPTIONS.ollama_error) { $("ollama-note").hidden = false; $("ollama-note").textContent = OPTIONS.ollama_error; }
     OPTIONS.presets.forEach((p) => $("preset").appendChild(new Option(p.file.replace(/\.yaml$/, ""), p.file)));
-    const start = OPTIONS.presets.find((p) => p.file === "demo_camps.yaml");
+    const start = OPTIONS.presets.find((p) => p.file === "quick.yaml");
     if (start) { applyConfig(start.config); $("preset").value = start.file; }
-    else addModelRow(OPTIONS.ollama_models[0] || "fake/tribal", 1);
+    else addModelRow(OPTIONS.ollama_models[0], 1);
     syncVisibility();
     renderWizard();
     runChecks();

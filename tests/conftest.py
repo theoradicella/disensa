@@ -1,11 +1,23 @@
 import pytest
+from fake_llm import fake_reply
 
 from disensa.config import ExperimentConfig
+from disensa.llm import client as llm_client
+
+
+@pytest.fixture(autouse=True)
+def offline_models(monkeypatch):
+    """Every model call in the tests goes to the offline stand-in in fake_llm.py."""
+
+    async def fake_call(self, model, messages, params, api_base, json_mode):
+        return llm_client.LLMResponse(text=fake_reply(model, messages), model=model)
+
+    monkeypatch.setattr(llm_client.LLMClient, "_call_litellm", fake_call)
 
 
 @pytest.fixture
 def make_cfg(tmp_path):
-    """Build a small config; `dynamics` defaults to offline fake LLM agents."""
+    """Build a small config; `dynamics` defaults to LLM agents on the offline stand-in."""
 
     def make(**overrides) -> ExperimentConfig:
         raw = {

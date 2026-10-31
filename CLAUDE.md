@@ -26,8 +26,9 @@ Research questions are deliberately not fixed yet — do not invent or add them.
   an *author* and the *message* they shared at t−1. Say *step*, never *day*; *message*, never
   *post*; *interactions*, never *feed*. Prompts describe a community, not a platform. Same
   mechanism as Wang et al.
-- LLM calls go through `LLMClient` only (LiteLLM + disk cache). `fake/<behaviour>` models run
-  offline and deterministically; use them in tests. Never call real APIs in tests.
+- LLM calls go through `LLMClient` only (LiteLLM + disk cache). The app has no fake models.
+  Tests replace `LLMClient._call_litellm` with the offline stand-in in `tests/fake_llm.py`
+  (`conftest.py`, autouse); never call real APIs in tests.
 - Model output is untrusted: parse with `parse_json`, and a malformed reply must never crash a
   run — log it in `error` and keep the previous state. In the web pages, insert model text
   with `textContent` only.
@@ -53,7 +54,6 @@ src/disensa/
     llm_agent.py     LLM agents (Wang et al. §3), model assignment by weight
   llm/
     client.py        LiteLLM client, cache, JSON parsing/repair
-    fake.py          offline deterministic backend
     prompts.py       every prompt template (quoted verbatim in the thesis)
   app/
     server.py        stdlib HTTP server + JSON API, runs in threads
@@ -67,7 +67,6 @@ src/disensa/
 uv sync
 uv run pytest && uv run ruff check . && uv run ruff format --check .
 uv run disensa run configs/numeric_bc.yaml    # numeric, instant
-uv run disensa run configs/demo_camps.yaml    # fake LLM agents, offline, seconds
 uv run disensa run configs/quick.yaml         # Ollama, minutes
 uv run disensa app                            # web app: configure, run, watch live
 ```

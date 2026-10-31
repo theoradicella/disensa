@@ -1,4 +1,4 @@
-"""Talking to language models: the client, an offline fake model, and the prompts."""
+"""Talking to language models: the client and the prompts."""
 
 from disensa.llm.client import LLMClient, parse_json
 

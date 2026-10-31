@@ -78,7 +78,6 @@ def test_options_list_only_valid_presets(server):
     code, o = call(f"{server}/api/options")
     assert code == 200
     assert [p["file"] for p in o["presets"]] == ["a.yaml"]
-    assert "fake/tribal" in o["fake_models"]
 
 
 @pytest.mark.parametrize("config,engine", [(LLM, "llm"), (NUMERIC, "numeric")])

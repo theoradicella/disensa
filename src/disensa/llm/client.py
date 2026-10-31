@@ -4,7 +4,6 @@ Model strings follow LiteLLM conventions, e.g.
   "ollama_chat/llama3.2:3b"            local Ollama (default http://localhost:11434)
   "anthropic/claude-sonnet-4-5", "openai/gpt-4o-mini", "xai/grok-3", "deepseek/deepseek-chat"
   "openai/<model>" + api_base=<url>    any OpenAI-compatible server, e.g. vLLM on INDACO
-  "fake/<behaviour>"                   deterministic offline backend (see fake.py)
 """
 
 from __future__ import annotations
@@ -18,8 +17,6 @@ from pathlib import Path
 from typing import Any
 
 import diskcache
-
-from disensa.llm.fake import fake_reply
 
 Message = dict[str, str]
 
@@ -109,10 +106,7 @@ class LLMClient:
             return LLMResponse(text=hit["text"], model=model, cached=True, usage=hit["usage"])
 
         async with self._semaphore(model):
-            if model.startswith("fake/"):
-                resp = LLMResponse(text=fake_reply(model, messages), model=model)
-            else:
-                resp = await self._call_litellm(model, messages, params, api_base, json_mode)
+            resp = await self._call_litellm(model, messages, params, api_base, json_mode)
 
         if use_cache:
             self.cache[key] = {"text": resp.text, "usage": resp.usage}
@@ -148,7 +142,7 @@ class LLMClient:
         api_base: str | None,
         json_mode: bool,
     ) -> LLMResponse:
-        import litellm  # imported lazily: heavy, and not needed for fake/offline runs
+        import litellm  # imported lazily: heavy
 
         litellm.suppress_debug_info = True
         litellm.drop_params = True  # e.g. Anthropic rejects `seed`; drop instead of failing
