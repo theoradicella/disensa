@@ -58,9 +58,23 @@
           <li><a href="#agents-in-disensa">In disensa</a></li>
         </ol>
       </li>
-      <li><a href="#initial-opinions">Initial opinions</a></li>
-      <li><a href="#simulation">Simulation settings</a></li>
-      <li><a href="#metrics">Metrics</a></li>
+      <li><a href="#initial-opinions">Initial opinions</a>
+        <ol>
+          <li><a href="#opinion-distributions">Distributions</a></li>
+          <li><a href="#opinion-placement">Placement on the network</a></li>
+          <li><a href="#opinion-effects">Why it matters</a></li>
+          <li><a href="#opinions-in-disensa">In disensa</a></li>
+        </ol>
+      </li>
+      <li><a href="#metrics">Metrics</a>
+        <ol>
+          <li><a href="#metric-polarization">Polarization</a></li>
+          <li><a href="#metric-disagreement">Global disagreement</a></li>
+          <li><a href="#metric-correlation">Neighbour correlation</a></li>
+          <li><a href="#metric-patterns">Reading them together</a></li>
+          <li><a href="#metrics-in-disensa">In disensa</a></li>
+        </ol>
+      </li>
       <li><a href="#reading-a-run">Reading a run</a></li>
       <li><a href="#outputs">Run files</a></li>
       <li><a href="#parameters">All parameters</a></li>
@@ -81,7 +95,7 @@
     <p class="wip">Work in progress</p>
     <h2 id="how-a-run-works">How a run works</h2>
     <p>A run is one simulation: a group of agents, linked by a network, each holding an opinion on the same statement. Time moves in rounds called <strong>steps</strong>. At every step each agent looks at what its neighbours think and updates its own opinion. Everything about a run is set in a config file: how many agents there are, how they are linked, how many steps to run, and what kind of agents to use.</p>
-    <p>Every run goes through two phases. The <strong>setup</strong> builds the network and gives every agent a starting opinion. The <strong>loop</strong> then runs one step after another, as many as the config asks for, and saves the opinions after each one.</p>
+    <p>Every run goes through two phases. The <strong>setup</strong> builds the network and gives every agent a starting opinion. The <strong>loop</strong> then runs one step after another, as many as the config asks for (<code>steps</code>, default 10), and saves the opinions after each one.</p>
     <p>Agents come in two kinds, and each run uses one of them. <strong>Numeric agents</strong> update their opinion with a mathematical rule, such as moving towards the average of their neighbours. <strong>LLM agents</strong> each ask a language model: they read messages from their neighbours and decide on a new opinion. The kind is chosen in the config (<code>dynamics.type</code>), and each kind brings its own settings: a rule and its parameters for numeric agents, the statement and the models for LLM agents. The kind only changes how an agent updates its opinion inside a step. The network, the starting opinions, the loop and what gets saved work the same way for both, so runs of the two kinds can be compared directly.</p>
     <figure class="flow">
       <div class="flow-row">
@@ -528,11 +542,92 @@ Respond ONLY with JSON:
     <p>To follow a run agent by agent, with each step&rsquo;s interactions, reasoning and memory, see <a href="#reading-a-run">Reading a run</a>.</p>
 
     <h2 id="initial-opinions">Initial opinions</h2>
-    <p class="wip">Work in progress</p>
-    <h2 id="simulation">Simulation settings</h2>
-    <p class="wip">Work in progress</p>
+    <p>Before the first step, every agent gets a starting opinion \(x_i(0)\) on the scale from \(-2\) (strongly oppose) to \(+2\) (strongly support), with \(0\) as neutral. Together they form \(x(0)\), the input to every rule. The opinions are drawn at random from a <strong>distribution</strong> chosen in the config, once per run, from the run&rsquo;s <code>seed</code>.</p>
+
+    <h3 id="opinion-distributions">Distributions</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Distribution</th><th>Draw</th><th>What you get</th></tr></thead>
+      <tbody>
+        <tr><td><code>uniform</code></td><td>\(x_i(0) \sim \mathcal{U}(-2, 2)\)</td><td>Every opinion on the scale is equally likely. No starting leaning and no camps.</td></tr>
+        <tr><td><code>normal</code></td><td>\(x_i(0) \sim \mathcal{N}(m, \sigma^2)\)</td><td>Most agents start near \(m\). A small \(\sigma\) is close to consensus from the start; \(m \ne 0\) gives the whole group a leaning.</td></tr>
+        <tr><td><code>bimodal</code></td><td>\(x_i(0) \sim \mathcal{N}(\pm m, \sigma^2)\), each sign with probability \(\tfrac12\)</td><td>Two camps centred at \(-m\) and \(+m\), \(2m\) apart: the group is polarized from the start. The camps are only roughly equal in size, since each agent&rsquo;s side is a coin flip.</td></tr>
+      </tbody>
+    </table></div>
+    <p>\(m\) is <code>mean</code> and \(\sigma\) is <code>std</code>. For <code>bimodal</code> only the size of <code>mean</code> matters (\(-1.5\) and \(1.5\) give the same camps), and with <code>mean: 0</code> it is just a normal distribution.</p>
+    <div class="note" id="opinion-clipping"><strong>Clipping.</strong> A normal draw can fall outside \([-2, 2]\). Those values are set to the nearest end, so wide distributions stack agents at exactly \(\pm 2\). The default <code>normal</code> (\(m = 0\), \(\sigma = 1\)) clips about \(5\%\) of agents. <code>bimodal</code> with \(m = 1.5\), \(\sigma = 1\) clips about \(30\%\) of each camp, which puts a spike of extremists at both ends. The lab warns when more than \(10\%\) of agents would be clipped, or when the two camps overlap so much (\(\sigma \ge m\)) that they are not really two camps.</div>
+
+    <h3 id="opinion-placement">Where opinions land on the network</h3>
+    <p>Opinions are given out independently of the network: agent \(i\)&rsquo;s opinion does not depend on its links or its position. Neighbours are no more alike than any two agents, and hubs get opinions drawn like everyone else&rsquo;s. Any group of like-minded neighbours that appears later was produced by the dynamics, not by the setup.</p>
+    <p>The network and the opinions use separate random draws from the same <code>seed</code>. Changing the distribution keeps the same network, so distributions can be compared on one network. Numeric and LLM runs with the same seed also start from exactly the same \(x(0)\).</p>
+
+    <h3 id="opinion-effects">Why the starting point matters</h3>
+    <p>Each rule uses \(x(0)\) differently:</p>
+    <ul>
+      <li><strong><a href="#degroot">DeGroot</a></strong> always ends in consensus, so the distribution only decides <em>where</em>: the consensus value is the average of \(x(0)\) weighted by \(k_i + 1\). A group that starts with a leaning (<code>normal</code> with \(m \ne 0\)) ends near that leaning. On a scale-free network, the hubs&rsquo; starting opinions matter more.</li>
+      <li><strong><a href="#bounded-confidence">Bounded confidence</a></strong> depends most on the starting point: what matters is \(\varepsilon\) compared with how spread out \(x(0)\) is. A narrow start can reach consensus with a small \(\varepsilon\); a wide or <code>bimodal</code> start tends to split into clusters or stay as two camps.</li>
+      <li><strong><a href="#friedkin-johnsen">Friedkin–Johnsen</a></strong> uses \(x(0)\) as the innate opinions \(s\), so the starting point never goes away. The equilibrium \(x^\ast = \lambda(\lambda I + L)^{-1} s\) is fixed by \(x(0)\), the network and \(\lambda\). A polarized start leaves a polarized equilibrium, softened but not removed.</li>
+      <li><strong><a href="#agents">LLM agents</a></strong> receive their starting opinion as words and a number (see <a href="#agent-initial">Initial opinion and first message</a>). After that, nothing ties them to it: a model&rsquo;s own leaning on the statement can pull it away. Chuang et al. (2024) found the initial distribution mattered less than expected: agents drifted toward the scientifically accurate view unless the prompt explicitly added confirmation bias.</li>
+    </ul>
+    <p>All three numeric rules are weighted averages, so opinions never leave the range of \(x(0)\) (see <a href="#algorithms">Numeric algorithms</a>). Whoever starts most extreme sets the limit for the whole run.</p>
+
+    <h3 id="opinions-in-disensa">In disensa</h3>
+    <p>Opinions are drawn by <code>initial_opinions</code> in <code>network.py</code>. All example configs use <code>uniform</code>.</p>
+<pre><code>opinions: {distribution: uniform}
+
+opinions: {distribution: normal, mean: 0.5, std: 0.6}
+
+opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Parameter</th><th>Values</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>distribution</code></td><td><code>uniform</code>, <code>normal</code> or <code>bimodal</code></td><td><code>uniform</code></td></tr>
+        <tr><td><code>mean</code></td><td>\(m\): centre (<code>normal</code>) or camp position \(\pm m\) (<code>bimodal</code>)</td><td>\(0\)</td></tr>
+        <tr><td><code>std</code></td><td>\(\sigma \ge 0\): spread around \(m\)</td><td>\(1\)</td></tr>
+      </tbody>
+    </table></div>
+    <p><code>mean</code> and <code>std</code> are ignored by <code>uniform</code>.</p>
     <h2 id="metrics">Metrics</h2>
-    <p class="wip">Work in progress</p>
+    <p>After every step, including step 0, disensa sums up the opinions \(x(t)\) in three numbers that together measure polarization and echo chambers. They are the three metrics of Wang et al. (2025, §4.2). One looks only at the opinions; the other two also look at who is linked to whom. They are in <code>metrics.py</code>.</p>
+
+    <h3 id="metric-polarization">Polarization</h3>
+    <p>How spread out the opinions are across the whole group: the variance of \(x\) (Chitra &amp; Musco, 2020).</p>
+    <div class="formula">\[ P_z = \frac{1}{N} \sum_{i=1}^{N} \left( x_i - \bar{x} \right)^2, \qquad \bar{x} = \frac{1}{N} \sum_{i=1}^{N} x_i \]</div>
+    <p>It is \(0\) at consensus and largest, \(4\), when half the agents sit at \(-2\) and half at \(+2\). A <code>uniform</code> start gives about \(1.33\). It ignores the network: the same opinions shuffled across the agents give the same \(P_z\).</p>
+
+    <h3 id="metric-disagreement">Global disagreement</h3>
+    <p>How much linked agents disagree. Each agent&rsquo;s <strong>local disagreement</strong> is the average squared gap to its neighbours, and the global value averages it over all agents:</p>
+    <div class="formula">\[ DG_i = \frac{1}{k_i} \sum_{j \in N(i)} (x_i - x_j)^2, \qquad DG = \frac{1}{2N} \sum_{i=1}^{N} DG_i \]</div>
+    <p>It is \(0\) when every agent agrees with all its neighbours, even if the group as a whole is split. The factor \(\tfrac12\) follows Wang et al.: with it, if opinions are placed on the network at random, \(DG\) comes out at about \(P_z\).</p>
+
+    <h3 id="metric-correlation">Neighbour correlation</h3>
+    <p>How closely an agent&rsquo;s opinion matches its neighbours&rsquo;: the Pearson correlation between each agent&rsquo;s opinion and the average opinion of its neighbours, across all agents (Cinus et al., 2021).</p>
+    <div class="formula">\[ NC = \operatorname{corr}\!\left( x_i,\ \bar{x}_{N(i)} \right), \qquad \bar{x}_{N(i)} = \frac{1}{k_i} \sum_{j \in N(i)} x_j \]</div>
+    <p>It runs from \(-1\) to \(+1\). Near \(0\), an agent&rsquo;s opinion says nothing about its neighbours&rsquo;, which is how every run starts (see <a href="#opinion-placement">Where opinions land on the network</a>). Close to \(+1\), agents are surrounded by people who think like them: the signature of an echo chamber. At full consensus there is nothing left to correlate, so it is undefined and left empty.</p>
+    <div class="note"><strong>Name.</strong> Wang et al. call it the &ldquo;Normalized Clustering Index (NCI)&rdquo; in §4.2 and &ldquo;Neighbors Correlation&rdquo; in their results table. disensa uses the second name.</div>
+
+    <h3 id="metric-patterns">Reading them together</h3>
+    <p>No single metric tells the story; the combination does:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Outcome</th><th>\(P_z\)</th><th>\(DG\)</th><th>\(NC\)</th></tr></thead>
+      <tbody>
+        <tr><td>Consensus</td><td>near \(0\)</td><td>near \(0\)</td><td>undefined</td></tr>
+        <tr><td>Echo chambers: camps that agree inside and are apart from each other</td><td>high</td><td>low, well below \(P_z\)</td><td>high</td></tr>
+        <tr><td>Scattered disagreement, no structure</td><td>high</td><td>about \(P_z\)</td><td>near \(0\)</td></tr>
+      </tbody>
+    </table></div>
+    <p>The key comparison is \(DG\) against \(P_z\). If the group disagrees but linked agents agree, opinions have sorted themselves along the network. This is what Wang et al. observe on small-world and scale-free networks, where neighbour correlation rises sharply, and not on random ones.</p>
+
+    <h3 id="metrics-in-disensa">In disensa</h3>
+    <p>Metrics are saved to <code>metrics.parquet</code>, one row per step (see <a href="#outputs">Run files</a>), and plotted over time in the lab. Besides the three metrics, each row has:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>polarization</code>, <code>global_disagreement</code>, <code>neighbor_correlation</code></td><td>\(P_z\), \(DG\), \(NC\)</td></tr>
+        <tr><td><code>mean_opinion</code></td><td>\(\bar{x}\), the average opinion: shows whether the group drifts towards one side</td></tr>
+        <tr><td><code>mean_opinion[&lt;model&gt;]</code></td><td>runs with several models only: the average opinion of the agents of each model</td></tr>
+        <tr><td><code>errors</code></td><td>LLM runs: agents whose reply failed at that step (see <a href="#agent-reliability">Error handling</a>)</td></tr>
+      </tbody>
+    </table></div>
     <h2 id="reading-a-run">Reading a run</h2>
     <p class="wip">Work in progress</p>
     <h2 id="outputs">Run files</h2>
