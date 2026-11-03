@@ -49,6 +49,7 @@ def build_payload(run: Run) -> dict:
     dyn = cfg["dynamics"]
     return {
         "name": cfg["name"],
+        "config": cfg,
         "topic": dyn.get("statement", "") if dyn["type"] == "llm" else "",
         "topology": cfg["network"]["topology"],
         "seed": cfg["seed"],

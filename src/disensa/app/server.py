@@ -18,6 +18,7 @@ Standard library only (http.server), bound to 127.0.0.1.
   GET  /api/runs/<id>/status    {"status", "step", "steps", "error", "agents", "replies",
                                  "failed", "elapsed"}  (live counters while running)
   POST /api/runs/<id>/cancel    stop a running simulation now (finished steps are kept)
+  DELETE /api/runs/<id>         delete a run folder (not while it is running)
 
 Each run executes in its own thread with its own asyncio loop, writing the usual run folder.
 Ollama is started on launch if it is installed but not running (llm/ollama.py).
@@ -28,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import json
 import mimetypes
+import shutil
 import threading
 import time
 import traceback
@@ -128,7 +130,7 @@ class RunManager:
             log("finished")
         except asyncio.CancelledError:
             job.status = "cancelled"
-            update_meta(job.run_dir, cancelled=True)
+            update_meta(job.run_dir, cancelled=True, seconds=round(time.time() - job.started, 1))
             log("cancelled")
         except Exception as e:
             job.status, job.error = "failed", f"{type(e).__name__}: {e}"
@@ -176,13 +178,26 @@ class RunManager:
         )
         return {"status": status, "step": None, "steps": None, "error": None}
 
+    def delete(self, run_id: str) -> bool:
+        """Remove a run folder from disk. Refused while the run is going."""
+        job = self.jobs.get(run_id)
+        if job and job.status == "running":
+            return False
+        d = self.run_dir(run_id)
+        if d is None:
+            return False
+        shutil.rmtree(d)
+        self.jobs.pop(run_id, None)
+        return True
+
     def list(self) -> list[dict]:
         if not self.runs_root.exists():
             return []
         out = []
         for d in sorted(self.runs_root.iterdir(), reverse=True):
             try:
-                cfg = json.loads((d / "meta.json").read_text())["config"]
+                meta = json.loads((d / "meta.json").read_text())
+                cfg = meta["config"]
                 dyn = cfg["dynamics"]
             except (OSError, json.JSONDecodeError, KeyError):
                 continue  # not a run folder, or one from an older version
@@ -193,14 +208,18 @@ class RunManager:
             )
             out.append(
                 {
+                    **self.status(d.name),  # first, so its "steps": None does not hide the config's
                     "id": d.name,
                     "name": cfg["name"],
                     "started": d.name.split("_", 1)[0],
                     "engine": dyn["type"],
                     "topology": cfg["network"]["topology"],
                     "n": cfg["network"]["n"],
+                    "steps": cfg.get("steps"),
+                    "seed": cfg.get("seed"),
+                    "seconds": meta.get("seconds"),  # how long it ran; not saved by older versions
                     "models": models,
-                    **self.status(d.name),
+                    "config": cfg,  # for "Duplicate" in the lab
                 }
             )
         return out[:100]
@@ -341,6 +360,14 @@ def make_handler(manager: RunManager):
             parts = path.strip("/").split("/")
             if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "cancel":
                 return self._json({"cancelled": manager.cancel(parts[2])})
+            self._error(404, "not found")
+
+        def do_DELETE(self):  # noqa: N802
+            parts = self.path.split("?", 1)[0].strip("/").split("/")
+            if len(parts) == 3 and parts[:2] == ["api", "runs"]:
+                if manager.delete(parts[2]):
+                    return self._json({"deleted": parts[2]})
+                return self._error(409, "this run is still going or does not exist")
             self._error(404, "not found")
 
     return Handler
