@@ -17,6 +17,7 @@ flushed, so a crash or a cancelled run keeps all finished steps.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -40,7 +41,8 @@ def _git_commit() -> str | None:
 
 def new_run_dir(cfg: ExperimentConfig) -> Path:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    base = cfg.output_dir / f"{stamp}_{cfg.name}_s{cfg.seed}"
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", cfg.name).strip("_") or "run"  # the name itself is kept as typed
+    base = cfg.output_dir / f"{stamp}_{slug}_s{cfg.seed}"
     run_dir, i = base, 1
     while run_dir.exists():  # two runs in the same second
         run_dir = base.with_name(f"{base.name}-{i}")

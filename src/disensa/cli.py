@@ -7,14 +7,12 @@ import time
 from pathlib import Path
 
 import typer
-from dotenv import load_dotenv
 
 from disensa.checks import config_checks
 from disensa.config import ExperimentConfig
 from disensa.runs import new_run_dir
 
 app = typer.Typer(no_args_is_help=True, help="disensa: opinion dynamics with numeric or LLM agents")
-load_dotenv()  # API keys from .env, if present
 
 
 @app.command()
@@ -30,8 +28,13 @@ def run(config: Path, steps: int = typer.Option(None, help="override `steps`")):
         typer.secho(
             f"         see the docs: {c.docs_title} (/docs#{c.docs})", fg="yellow", err=True
         )
-    run_dir = new_run_dir(cfg)
     d = cfg.dynamics
+    if d.type == "llm" and any(m.name.startswith("ollama") and not m.api_base for m in d.models):
+        from disensa.llm import ollama
+
+        if err := ollama.ensure_running():
+            raise typer.BadParameter(err)
+    run_dir = new_run_dir(cfg)
     what = f"numeric/{d.rule}" if d.type == "numeric" else ", ".join(m.name for m in d.models)
     typer.echo(
         f"{cfg.name}: {cfg.network.n} agents on {cfg.network.topology}, {cfg.steps} steps, {what}"
@@ -61,8 +64,11 @@ def app_cmd(
 
 @app.command()
 def ping(model: str, prompt: str = "In one sentence: is remote work good for society?"):
-    """Send one prompt to a model, to check API keys or a local Ollama."""
-    from disensa.llm import LLMClient
+    """Send one prompt to a model, to check that it answers."""
+    from disensa.llm import LLMClient, ollama
+
+    if model.startswith("ollama") and (err := ollama.ensure_running()):
+        raise typer.BadParameter(err)
 
     resp = asyncio.run(
         LLMClient().complete(model, [{"role": "user", "content": prompt}], use_cache=False)

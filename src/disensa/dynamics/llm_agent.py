@@ -16,6 +16,7 @@ it is logged in `error` and the agent keeps its previous state.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import networkx as nx
@@ -59,6 +60,8 @@ class LLMAgents:
         self.state = [TextState() for _ in range(self.n)]
         self.rng = np.random.default_rng(seed)  # whom each agent interacts with
         self.client = LLMClient(cfg.cache_dir, cfg.max_concurrency)
+        # called after every reply with (step, agent, error or None); used for live progress
+        self.on_reply: Callable[[int, int, str | None], None] | None = None
 
     def labels(self) -> list[str]:
         return [m.name for m in self.models]
@@ -85,6 +88,17 @@ class LLMAgents:
         except Exception as e:  # malformed JSON after repair, provider error, ...
             return {}, "", f"{type(e).__name__}: {e}"[:500]
 
+    async def ask_all(self, t: int, prompts: list[str]) -> list[tuple[dict, str, str | None]]:
+        """Ask every agent concurrently; report each reply to `on_reply` as it arrives."""
+
+        async def one(i: int, p: str):
+            reply = await self.ask(i, p)
+            if self.on_reply:
+                self.on_reply(t, i, reply[2])
+            return reply
+
+        return await asyncio.gather(*(one(i, p) for i, p in enumerate(prompts)))
+
     # ---------------------------------------------------------------- interactions
 
     def interactions(self, i: int) -> list[tuple[int, str]]:
@@ -104,7 +118,7 @@ class LLMAgents:
 
     async def start(self, x0: np.ndarray) -> list[dict]:
         prompts = [initial_message_prompt(self.cfg.statement, float(v)) for v in x0]
-        replies = await asyncio.gather(*(self.ask(i, p) for i, p in enumerate(prompts)))
+        replies = await self.ask_all(0, prompts)
         events = []
         for i, (obj, raw, err) in enumerate(replies):
             self.state[i].message = str(obj.get("message", "")).strip()
@@ -124,7 +138,7 @@ class LLMAgents:
             )
             for i in range(self.n)
         ]
-        replies = await asyncio.gather(*(self.ask(i, p) for i, p in enumerate(prompts)))
+        replies = await self.ask_all(t, prompts)
 
         new_x = x.copy()
         new_state, events = [], []

@@ -27,6 +27,7 @@ from disensa.network import build_network, initial_opinions
 from disensa.runs import RunWriter, update_meta
 
 Progress = Callable[[int, dict], None]
+OnReply = Callable[[int, int, str | None], None]  # (step, agent, error)
 
 
 def step_metrics(graph, x: np.ndarray, labels: list[str], events: list[dict]) -> dict:
@@ -41,12 +42,21 @@ def step_metrics(graph, x: np.ndarray, labels: list[str], events: list[dict]) ->
 
 
 async def run(
-    cfg: ExperimentConfig, run_dir: Path | None = None, progress: Progress | None = None
+    cfg: ExperimentConfig,
+    run_dir: Path | None = None,
+    progress: Progress | None = None,
+    on_reply: OnReply | None = None,
 ) -> list[dict]:
-    """Run one experiment. Writes to `run_dir` if given; returns the metrics of every step."""
+    """Run one experiment. Writes to `run_dir` if given; returns the metrics of every step.
+
+    `progress(t, metrics)` is called after every step; `on_reply(t, agent, error)` after every
+    single LLM reply (LLM agents only), for live progress inside a step.
+    """
     graph = build_network(cfg.network, seed=cfg.seed)
     x = initial_opinions(cfg.opinions, graph.number_of_nodes(), seed=cfg.seed)
     dynamics = make_dynamics(cfg, graph)
+    if on_reply and hasattr(dynamics, "on_reply"):
+        dynamics.on_reply = on_reply
     labels = dynamics.labels()
     writer = RunWriter(run_dir) if run_dir else None
     t0 = time.time()

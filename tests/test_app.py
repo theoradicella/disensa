@@ -24,10 +24,7 @@ NUMERIC = {**BASE, "dynamics": {"type": "numeric", "rule": "degroot"}}
 @pytest.fixture
 def server(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # LLM cache goes to tmp
-    (tmp_path / "configs").mkdir()
-    (tmp_path / "configs" / "a.yaml").write_text(json.dumps(LLM))
-    (tmp_path / "configs" / "old.yaml").write_text("name: x\nsimulation: {days: 3}\n")  # invalid
-    handler = make_handler(RunManager(tmp_path / "runs"), tmp_path / "configs")
+    handler = make_handler(RunManager(tmp_path / "runs"))
     srv = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{srv.server_address[1]}"
@@ -72,12 +69,6 @@ def test_pages_and_assets_are_served(server):
         assert code == 200 and len(body) > 100, path
     assert call(server + "/lab/../../server.py")[0] == 404
     assert call(server + "/nope.css")[0] == 404
-
-
-def test_options_list_only_valid_presets(server):
-    code, o = call(f"{server}/api/options")
-    assert code == 200
-    assert [p["file"] for p in o["presets"]] == ["a.yaml"]
 
 
 @pytest.mark.parametrize("config,engine", [(LLM, "llm"), (NUMERIC, "numeric")])

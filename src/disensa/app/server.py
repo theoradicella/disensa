@@ -7,15 +7,20 @@ Standard library only (http.server), bound to 127.0.0.1.
   GET  /docs                    documentation      web/docs/index.html
   GET  /<folder>/<file>         any other file under web/ (css, js, vendor/d3.min.js)
 
-  GET  /api/options             installed Ollama models, presets
+  GET  /api/options             installed Ollama models, suggested downloads, download progress
+  GET  /api/models/pull         {"<model>": {"status", "progress", "error"}}  download progress
+  POST /api/models/pull         {"name": "<model>"}  start downloading a suggested model
+  POST /api/models/cancel       {"name": "<model>"}  stop that download
   GET  /api/runs                past and running runs, newest first
   POST /api/runs                {"config": {...}} -> {"id": ...}   starts a run
   POST /api/check               {"config": {...}} -> {"checks": [...]}  warnings (checks.py)
   GET  /api/runs/<id>           the run's data for the viewer (works while it is running)
-  GET  /api/runs/<id>/status    {"status", "step", "steps", "error"}
+  GET  /api/runs/<id>/status    {"status", "step", "steps", "error", "agents", "replies",
+                                 "failed", "elapsed"}  (live counters while running)
   POST /api/runs/<id>/cancel    stop a running simulation after the current step
 
 Each run executes in its own thread with its own asyncio loop, writing the usual run folder.
+Ollama is started on launch if it is installed but not running (llm/ollama.py).
 """
 
 from __future__ import annotations
@@ -24,8 +29,8 @@ import asyncio
 import json
 import mimetypes
 import threading
+import time
 import traceback
-import urllib.request
 import webbrowser
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -33,12 +38,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
 
-import yaml
 from pydantic import ValidationError
 
 from disensa.config import ExperimentConfig
+from disensa.llm import ollama
 
-OLLAMA_URL = "http://localhost:11434"
 WEB = resources.files("disensa").joinpath("app", "web")
 PAGES = {"/": "landing", "/lab": "lab", "/docs": "docs"}
 TYPES = {
@@ -55,7 +59,11 @@ class Job:
     run_dir: Path
     steps: int
     status: str = "running"  # running | done | failed | cancelled
-    step: int = -1
+    step: int = -1  # last finished step; -1 until the first messages (step 0) are in
+    agents: int = 0
+    replies: int = 0  # replies received for the step in progress
+    failed: int = 0  # of those, how many were malformed / errored
+    started: float = 0.0
     error: str | None = None
     loop: asyncio.AbstractEventLoop | None = None
     task: asyncio.Task | None = None
@@ -71,7 +79,13 @@ class RunManager:
 
         cfg = ExperimentConfig.model_validate({**raw, "output_dir": str(self.runs_root)})
         run_dir = new_run_dir(cfg)
-        job = Job(id=run_dir.name, run_dir=run_dir, steps=cfg.steps)
+        job = Job(
+            id=run_dir.name,
+            run_dir=run_dir,
+            steps=cfg.steps,
+            agents=cfg.network.n,
+            started=time.time(),
+        )
         self.jobs[job.id] = job
         threading.Thread(target=self._run, args=(job, cfg), daemon=True).start()
         return job
@@ -80,20 +94,45 @@ class RunManager:
         from disensa.engine import run
         from disensa.runs import update_meta
 
-        def progress(t: int, _m: dict) -> None:
-            job.step = t
+        llm = cfg.dynamics.type == "llm"
 
+        def log(msg: str) -> None:
+            print(f"[{job.id}] {msg}  [{time.time() - job.started:.0f}s]", flush=True)
+
+        def progress(t: int, m: dict) -> None:
+            job.step, job.replies, job.failed = t, 0, 0
+            what = "first messages written" if t == 0 else f"step {t}/{job.steps} done"
+            log(
+                f"{what}  pol {m['polarization']:.3f}  dis {m['global_disagreement']:.3f}"
+                + (f"  errors {m['errors']}" if llm else "")
+            )
+
+        def on_reply(t: int, _agent: int, err: str | None) -> None:
+            job.replies += 1
+            job.failed += err is not None
+            if err:
+                log(f"step {t}: agent {_agent} reply failed: {err[:160]}")
+
+        what = (
+            f"numeric/{cfg.dynamics.rule}"
+            if not llm
+            else ", ".join(m.name for m in cfg.dynamics.models)
+        )
+        log(f"started: {cfg.network.n} agents, {cfg.steps} steps, {what}")
         loop = asyncio.new_event_loop()
         job.loop = loop
         try:
-            job.task = loop.create_task(run(cfg, job.run_dir, progress))
+            job.task = loop.create_task(run(cfg, job.run_dir, progress, on_reply))
             loop.run_until_complete(job.task)
             job.status = "done"
+            log("finished")
         except asyncio.CancelledError:
             job.status = "cancelled"
             update_meta(job.run_dir, cancelled=True)
+            log("cancelled")
         except Exception as e:
             job.status, job.error = "failed", f"{type(e).__name__}: {e}"
+            log(f"failed: {job.error}")
             traceback.print_exc()
         finally:
             loop.close()
@@ -116,7 +155,16 @@ class RunManager:
     def status(self, run_id: str) -> dict:
         job = self.jobs.get(run_id)
         if job:
-            return {"status": job.status, "step": job.step, "steps": job.steps, "error": job.error}
+            return {
+                "status": job.status,
+                "step": job.step,
+                "steps": job.steps,
+                "error": job.error,
+                "agents": job.agents,
+                "replies": job.replies,
+                "failed": job.failed,
+                "elapsed": round(time.time() - job.started, 1),
+            }
         d = self.run_dir(run_id)
         meta = json.loads((d / "meta.json").read_text()) if d else {}
         status = (
@@ -170,26 +218,18 @@ class RunManager:
             return None  # nothing written yet
 
 
+DOWNLOADS = ollama.Downloads()
+
+
 def ollama_models() -> tuple[list[str], str | None]:
+    """Installed models as LiteLLM names ("ollama_chat/<name>"), or an error message."""
+    err = ollama.ensure_running(wait=3.0)
+    if err:
+        return [], err
     try:
-        with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=1.5) as r:
-            tags = json.loads(r.read())
-        return sorted(f"ollama_chat/{m['name']}" for m in tags.get("models", [])), None
+        return [f"ollama_chat/{m}" for m in ollama.installed()], None
     except Exception:
-        return [], "Ollama is not running (start it with `ollama serve`)."
-
-
-def presets(config_dir: Path) -> list[dict]:
-    """Every valid YAML config under configs/, offered as a starting point in the lab."""
-    out = []
-    for p in sorted(config_dir.rglob("*.yaml")) if config_dir.exists() else []:
-        try:
-            raw = yaml.safe_load(p.read_text())
-            ExperimentConfig.model_validate(raw)
-        except (yaml.YAMLError, ValidationError):
-            continue
-        out.append({"file": str(p.relative_to(config_dir)), "config": raw})
-    return out
+        return [], ollama.NOT_STARTED
 
 
 def web_file(path: str):
@@ -201,7 +241,7 @@ def web_file(path: str):
     return f if f.is_file() else None
 
 
-def make_handler(manager: RunManager, config_dir: Path):
+def make_handler(manager: RunManager):
     class Handler(BaseHTTPRequestHandler):
         server_version = "disensa"
 
@@ -233,9 +273,13 @@ def make_handler(manager: RunManager, config_dir: Path):
                     {
                         "ollama_models": models,
                         "ollama_error": err,
-                        "presets": presets(config_dir),
+                        "ollama_missing": err == ollama.NOT_INSTALLED,
+                        "suggested": ollama.SUGGESTED,
+                        "downloads": DOWNLOADS.status(),
                     }
                 )
+            if path == "/api/models/pull":
+                return self._json(DOWNLOADS.status())
             if path == "/api/runs":
                 return self._json(manager.list())
             parts = path.strip("/").split("/")
@@ -279,6 +323,17 @@ def make_handler(manager: RunManager, config_dir: Path):
                 except (ValueError, TypeError) as e:
                     return self._error(400, str(e))
                 return self._json({"id": job.id}, HTTPStatus.CREATED)
+            if path == "/api/models/pull":
+                name = body.get("name")
+                if name not in {m["name"] for m in ollama.SUGGESTED}:
+                    return self._error(400, "unknown model")
+                if err := ollama.ensure_running():
+                    return self._error(503, err)
+                DOWNLOADS.start(name)
+                return self._json(DOWNLOADS.status(), HTTPStatus.ACCEPTED)
+            if path == "/api/models/cancel":
+                DOWNLOADS.cancel(body.get("name"))
+                return self._json(DOWNLOADS.status())
             if path == "/api/check":
                 from disensa.checks import raw_checks
 
@@ -294,14 +349,16 @@ def make_handler(manager: RunManager, config_dir: Path):
 def serve(
     port: int = 8765,
     runs_root: Path = Path("runs"),
-    config_dir: Path = Path("configs"),
     open_browser: bool = True,
 ) -> None:
     runs_root.mkdir(parents=True, exist_ok=True)
-    server = ThreadingHTTPServer(
-        ("127.0.0.1", port), make_handler(RunManager(runs_root), config_dir)
-    )
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(RunManager(runs_root)))
     url = f"http://127.0.0.1:{port}/"
+    if not ollama.is_running():
+        print("Starting Ollama…")
+        err = ollama.ensure_running()
+        if err:
+            print(f"  {err}  (numeric runs still work)")
     print(f"disensa app running at {url}  (Ctrl+C to stop)")
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
@@ -311,3 +368,4 @@ def serve(
         pass
     finally:
         server.server_close()
+        ollama.stop()

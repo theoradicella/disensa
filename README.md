@@ -14,13 +14,13 @@ tag `v0.1-full` and will come back one at a time.
 
 ```bash
 uv sync
-cp .env.example .env         # only if you use paid APIs
 ```
 
-For free local models, install [Ollama](https://ollama.com):
+LLM runs use free local models through [Ollama](https://ollama.com): install it, and disensa
+starts it when needed (and stops it on exit). Models can be downloaded from the lab, or with:
 
 ```bash
-ollama pull llama3.2:3b && ollama serve
+ollama pull llama3.2:3b
 uv run disensa ping ollama_chat/llama3.2:3b      # check it answers
 ```
 
@@ -84,7 +84,7 @@ src/disensa/
   runs.py            writing and reading run folders
   cli.py             `disensa run | app | ping`
   dynamics/          how an agent updates: numeric.py (DeGroot, bounded confidence), llm_agent.py
-  llm/               client.py (LiteLLM + cache), prompts.py
+  llm/               client.py (LiteLLM + cache), prompts.py, ollama.py (start, list, download)
   app/               server.py (HTTP + JSON API), payload.py (run -> viewer JSON)
     web/             shared/ (base.css, header.js), landing/, lab/, docs/, vendor/d3.min.js
 ```
@@ -103,4 +103,4 @@ See `runs.py`.
 uv run pytest && uv run ruff check . && uv run ruff format --check .
 ```
 
-Tests replace every model call with an offline stand-in (`tests/fake_llm.py`); they never call real APIs.
+Tests replace every model call with an offline stand-in (`tests/fake_llm.py`); they never call a real model.

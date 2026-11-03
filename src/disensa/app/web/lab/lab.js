@@ -384,9 +384,44 @@
   });
 
   // ============================================================ loading a run
+  // live progress of a running job: which step is being computed, replies so far, time
+  const clock = (sec) => { sec = Math.round(sec); return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m ${String(sec % 60).padStart(2, "0")}s`; };
+  function progressParts(s) {
+    const now = s.step + 1; // the step being computed (step 0 = first messages)
+    const what = now === 0 ? "Writing first messages" : `Step ${now} of ${s.steps}`;
+    const parts = [];
+    if (s.agents && (s.replies > 0 || s.step < 0)) parts.push(`${s.replies}/${s.agents} agents replied` + (s.failed ? ` (${s.failed} failed)` : ""));
+    if (s.elapsed != null) {
+      parts.push(`${clock(s.elapsed)} elapsed`);
+      const done = (s.step + 1) * s.agents + s.replies, total = (s.steps + 1) * s.agents;
+      if (s.step >= 0 && done > 0) parts.push(`~${clock((s.elapsed / done) * (total - done))} left`);
+    }
+    return { what, parts };
+  }
+  function showStarting(s) {
+    $("empty").hidden = false; $("view").hidden = true;
+    const { what, parts } = s ? progressParts(s) : { what: "Starting", parts: [] };
+    $("empty").querySelector("h1").textContent = `${what}…`;
+    $("empty").querySelector("p").textContent = [...parts, "the first replies are slow while Ollama loads the models"].join(" · ");
+  }
+  let LIVE = null; // status of the open run while it is running, else null
+  function stepOf() { // "/ 2" for a finished run, "/ 2 so far, of 5" while running
+    $("of").textContent = LIVE && DATA ? ` / ${D()} so far, of ${LIVE.steps}` : ` / ${DATA ? D() : 0}`;
+  }
   function statusPill(s) {
     const pill = $("status"); pill.className = "pill " + s.status;
-    pill.textContent = s.status === "running" ? `Running · step ${Math.max(0, s.step)} of ${s.steps}` : s.status[0].toUpperCase() + s.status.slice(1);
+    LIVE = s.status === "running" ? s : null;
+    $("live").hidden = !LIVE;
+    if (LIVE) {
+      const { what, parts } = progressParts(s);
+      pill.textContent = "Running";
+      $("live-what").textContent = `Run in progress: ${what.toLowerCase()}`;
+      $("live-parts").textContent = parts.length ? "· " + parts.join(" · ") : "";
+      const total = (s.steps + 1) * s.agents, done = (s.step + 1) * s.agents + s.replies;
+      $("live-fill").style.width = `${total ? Math.min(100, (100 * done) / total) : 0}%`;
+    }
+    else pill.textContent = s.status[0].toUpperCase() + s.status.slice(1);
+    stepOf();
     $("cancel").hidden = s.status !== "running";
     if (s.error) pill.title = s.error;
   }
@@ -395,10 +430,10 @@
     DATA = data;
     $("empty").hidden = true; $("view").hidden = false;
     $("title").textContent = data.name;
-    $("topic").textContent = data.topic ? `“${data.topic}”` : "Numeric model: opinions only, no text.";
+    $("topic").textContent = data.topic ? `“${data.topic}”` : "Numeric algorithm: opinions only, no text.";
     const chips = $("chips"); chips.replaceChildren();
     [`${data.agents.length} agents`, data.topology.replace("_", " "), `seed ${data.seed}`, ...data.models.map(short)].forEach((c) => chips.appendChild(el("span", "chip", c)));
-    $("of").textContent = ` / ${D()}`;
+    stepOf();
     if (first) { selected = null; nodes = []; t = 0; drawGuide(); }
     t = Math.min(t, D()); // never point past the data we have
     setupNetwork(); buildCharts(); lastPanel = ""; lastTable = "";
@@ -422,7 +457,7 @@
     const res = await api(`/api/runs/${encodeURIComponent(id)}`);
     statusPill(res.status);
     if (res.data) showData(res.data, false);
-    else { $("empty").hidden = false; $("view").hidden = true; $("empty").querySelector("h1").textContent = "Starting…"; }
+    else showStarting(res.status.status === "running" ? res.status : null);
     if (res.status.status === "running") { followLive = true; play(); poll(); }
     else if (res.data) play();
   }
@@ -432,7 +467,7 @@
     try {
       const s = await api(`/api/runs/${encodeURIComponent(id)}/status`);
       if (id !== runId) return;
-      if (s.status === "running" && !DATA) { $("empty").hidden = false; $("view").hidden = true; $("empty").querySelector("h1").textContent = `Starting… step ${Math.max(0, s.step)} of ${s.steps}`; }
+      if (s.status === "running" && !DATA) showStarting(s);
       else statusPill(s);
       if (s.step !== lastSeenStep || s.status !== "running") {
         lastSeenStep = s.step;
@@ -442,14 +477,26 @@
         if (res.data) showData(res.data, !!DATA && DATA.name === res.data.name);
       }
       if (s.status === "running") pollTimer = setTimeout(poll, 800);
-      else { followLive = false; loadRuns(); }
+      else {
+        followLive = false; loadRuns();
+        if (!DATA) { $("empty").querySelector("h1").textContent = `Run ${s.status}`; $("empty").querySelector("p").textContent = s.error || "No step was saved."; }
+      }
     } catch (e) { pollTimer = setTimeout(poll, 2000); }
   }
   $("cancel").addEventListener("click", () => api(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" }));
 
   // runs list
   let RUNS = [];
-  async function loadRuns() { try { RUNS = await api("/api/runs"); renderRunsList(); } catch (e) { /* server gone */ } }
+  async function loadRuns() { try { RUNS = await api("/api/runs"); renderRunsList(); suggestName(); } catch (e) { /* server gone */ } }
+
+  // default run name: "Run N", one past the highest "Run N" so far; left alone once the user types a name
+  let nameTouched = false;
+  $("name").addEventListener("input", () => { nameTouched = true; });
+  function suggestName() {
+    if (nameTouched) return;
+    const nums = (RUNS || []).map((r) => /^Run (\d+)$/i.exec(r.name || "")).filter(Boolean).map((m) => +m[1]);
+    $("name").value = `Run ${nums.length ? Math.max(...nums) + 1 : 1}`;
+  }
   function renderRunsList() {
     const box = $("runs"); box.replaceChildren();
     if (!RUNS.length) { box.appendChild(el("p", "hint", "No runs yet.")); return; }
@@ -464,7 +511,7 @@
     });
   }
 
-  // lab card: "New run" and "Runs" expand the card under the header; clicking the open one closes it
+  // lab card: "New run" and "Previous runs" expand the card under the header; clicking the open one closes it
   let drawerOpen = null;
   function setDrawer(which) {
     drawerOpen = which;
@@ -481,7 +528,7 @@
   document.addEventListener("pointerdown", (e) => { if (drawerOpen && !$("labcard").contains(e.target)) setDrawer(null); });
 
   // ---------------------------------------------------------------- form
-  let OPTIONS = { ollama_models: [], presets: [] };
+  let OPTIONS = { ollama_models: [] };
   let engine = "llm";
   function setEngine(e) {
     engine = e;
@@ -504,43 +551,134 @@
     document.querySelectorAll("[data-algo=fj]").forEach((n) => { n.hidden = algo !== "friedkin_johnsen"; });
   }
   ["topology", "dist", "algo"].forEach((id) => $(id).addEventListener("change", syncVisibility));
+  // choice cards write their value into the hidden control named by data-for (#topology, #dist)
+  document.querySelectorAll(".pick-cards").forEach((group) => group.querySelectorAll(".pick-card").forEach((card) => card.addEventListener("click", () => {
+    group.querySelectorAll(".pick-card").forEach((c) => c.setAttribute("aria-pressed", String(c === card)));
+    const target = $(group.dataset.for);
+    target.value = card.dataset.value;
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+  })));
 
   function modelOptions(select, value) {
-    select.replaceChildren();
-    const groups = [["Ollama (on this Mac)", OPTIONS.ollama_models]];
-    groups.forEach(([label, list]) => {
-      if (!list.length) return;
-      const g = document.createElement("optgroup"); g.label = label;
-      list.forEach((m) => g.appendChild(new Option(short(m), m)));
-      select.appendChild(g);
-    });
-    if (value && ![...select.options].some((o) => o.value === value)) {
-      select.appendChild(new Option(`${short(value)} (not installed here)`, value));
-    }
-    select.appendChild(new Option("Other (type a model name)…", "__custom__"));
-    select.value = value == null ? select.options[0].value : value;
-    return true;
+    select.replaceChildren(...OPTIONS.ollama_models.map((m) => new Option(short(m), m)));
+    if (value && !OPTIONS.ollama_models.includes(value)) select.appendChild(new Option(`${short(value)} (not installed here)`, value));
+    if (value || select.options.length) select.value = value || select.options[0].value;
   }
   function addModelRow(name, weight) {
     const row = el("div", "model-row");
     const sel = document.createElement("select"); sel.setAttribute("aria-label", "Model");
-    const w = document.createElement("input"); w.type = "number"; w.min = "0.1"; w.step = "any"; w.value = weight ?? 1; w.title = "Weight: share of agents"; w.setAttribute("aria-label", "Weight");
+    const w = document.createElement("input"); w.type = "number"; w.min = "0.1"; w.step = "any"; w.value = weight ?? 1; w.setAttribute("aria-label", "Weight");
+    const count = el("span", "agents");
     const rm = el("button", "icon-btn", "×"); rm.type = "button"; rm.setAttribute("aria-label", "Remove model");
-    const custom = document.createElement("input"); custom.type = "text"; custom.className = "custom"; custom.placeholder = "e.g. anthropic/claude-haiku-4-5 or ollama_chat/gemma2:9b";
     modelOptions(sel, name ?? OPTIONS.ollama_models[0]);
-    custom.hidden = sel.value !== "__custom__";
-    sel.addEventListener("change", () => { custom.hidden = sel.value !== "__custom__"; });
-    rm.addEventListener("click", () => { if ($("models").children.length > 1) row.remove(); });
-    row.append(sel, w, rm, custom);
+    w.addEventListener("input", updateCounts);
+    sel.addEventListener("change", syncModelChoices);
+    rm.addEventListener("click", () => { if ($("models").children.length > 1) { row.remove(); updateCounts(); syncModelChoices(); scheduleChecks(); } });
+    row.append(sel, w, count, rm);
     $("models").appendChild(row);
+    updateCounts();
+    syncModelChoices();
   }
-  $("add-model").addEventListener("click", () => addModelRow(null, 1));
+  $("add-model").addEventListener("click", () => {
+    const used = readModels().map((m) => m.name);
+    const free = OPTIONS.ollama_models.find((m) => !used.includes(m));
+    if (free) addModelRow(free, 1);
+  });
+  // a model can be picked once: options taken by another row are disabled, and
+  // "+ Add model" disappears once every installed model is in the list
+  function syncModelChoices() {
+    const sels = [...$("models").querySelectorAll("select")];
+    sels.forEach((sel) => [...sel.options].forEach((o) => { o.disabled = sels.some((other) => other !== sel && other.value === o.value); }));
+    $("add-model").hidden = OPTIONS.ollama_models.every((m) => sels.some((sel) => sel.value === m));
+  }
+  $("n").addEventListener("input", updateCounts);
+
+  // agents per model: exact shares by weight, largest-remainder rounding (as assign_models)
+  function updateCounts() {
+    const rows = [...$("models").children];
+    const n = Math.max(0, Math.floor(+$("n").value || 0));
+    const w = rows.map((r) => +r.querySelector("input[type=number]").value || 1);
+    const total = w.reduce((a, b) => a + b, 0);
+    const raw = w.map((x) => (x / total) * n);
+    const counts = raw.map(Math.floor);
+    raw.map((x, i) => [x - counts[i], i]).sort((a, b) => b[0] - a[0])
+      .slice(0, n - counts.reduce((a, b) => a + b, 0)).forEach(([, i]) => { counts[i] += 1; });
+    rows.forEach((r, i) => { r.querySelector(".agents").textContent = counts[i]; });
+  }
+
+  // installed models, the notice above them, and one-click downloads of the suggested ones
+  function renderModels() {
+    const note = $("ollama-note"), has = OPTIONS.ollama_models.length > 0;
+    note.replaceChildren();
+    if (OPTIONS.ollama_error) {
+      note.append(OPTIONS.ollama_error);
+      if (OPTIONS.ollama_missing) {
+        note.append(" ");
+        const a = el("a", null, "How to set it up"); a.href = "/docs#quick-start"; a.target = "_blank"; a.rel = "noopener";
+        note.appendChild(a);
+      }
+    } else if (!has) note.append("No models installed yet. Download one below to start.");
+    note.hidden = !note.childNodes.length;
+    $("models-table").hidden = !has;
+    if (has && !$("models").children.length) addModelRow(OPTIONS.ollama_models[0], 1);
+    [...$("models").children].forEach((row) => { const sel = row.querySelector("select"); modelOptions(sel, sel.value); });
+    syncModelChoices();
+    renderLibrary();
+  }
+  // rows are built once and updated in place: rebuilding them on every poll would swallow clicks
+  const libRows = new Map();
+  function renderLibrary() {
+    const dl = OPTIONS.downloads || {};
+    const todo = OPTIONS.ollama_error ? [] : (OPTIONS.suggested || []).filter((m) => !OPTIONS.ollama_models.includes(`ollama_chat/${m.name}`));
+    $("library-box").hidden = !todo.length;
+    for (const [name, r] of libRows) if (!todo.some((m) => m.name === name)) { r.root.remove(); libRows.delete(name); }
+    todo.forEach((m) => {
+      let r = libRows.get(m.name);
+      if (!r) {
+        r = { root: el("div", "lib-row"), meta: el("div", "lib-meta"), btn: el("button", "btn-ghost"), bar: el("div", "lib-bar"), fill: el("span"), err: el("p", "error"), busy: false };
+        const info = el("div"); info.append(el("div", "lib-name", m.label), r.meta);
+        r.btn.type = "button"; r.bar.appendChild(r.fill);
+        r.btn.addEventListener("click", () => (r.busy ? cancelPull(m.name) : pullModel(m.name)));
+        r.root.append(info, r.btn, r.bar, r.err);
+        $("library").appendChild(r.root); libRows.set(m.name, r);
+      }
+      const d = dl[m.name];
+      r.busy = !!d && d.status === "downloading";
+      r.meta.textContent = r.busy ? `Downloading… ${Math.round(d.progress * 100)}% of ${m.size}` : `${m.by} · ${m.size} · ${m.name}`;
+      r.btn.textContent = r.busy ? "Cancel" : d && d.status === "failed" ? "Retry" : "Download";
+      r.bar.hidden = !r.busy; r.fill.style.width = `${r.busy ? d.progress * 100 : 0}%`;
+      r.err.hidden = !(d && d.error); r.err.textContent = d && d.error ? d.error : "";
+    });
+  }
+  let pullTimer = null;
+  const pulled = new Set(); // downloads already reflected in the model list
+  async function pullModel(name) {
+    try { OPTIONS.downloads = await api("/api/models/pull", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }); }
+    catch (err) { OPTIONS.downloads = { ...(OPTIONS.downloads || {}), [name]: { status: "failed", progress: 0, error: err.message } }; }
+    renderLibrary();
+    if (!pullTimer) pullTimer = setInterval(pollDownloads, 800);
+  }
+  async function cancelPull(name) {
+    try { OPTIONS.downloads = await api("/api/models/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }); }
+    catch (err) { OPTIONS.downloads[name] = { ...OPTIONS.downloads[name], error: `Could not cancel: ${err.message}. Restart disensa app if it was started before this update.` }; }
+    renderLibrary();
+  }
+  async function pollDownloads() {
+    try { OPTIONS.downloads = await api("/api/models/pull"); } catch (e) { return; }
+    const states = Object.values(OPTIONS.downloads);
+    const finished = Object.keys(OPTIONS.downloads).filter((k) => OPTIONS.downloads[k].status === "done" && !pulled.has(k));
+    finished.forEach((k) => pulled.add(k));
+    if (finished.length) {
+      try { OPTIONS = await api("/api/options"); } catch (e) { /* keep the old list */ }
+      renderModels(); scheduleChecks();
+    } else renderLibrary();
+    if (!states.some((d) => d.status === "downloading")) { clearInterval(pullTimer); pullTimer = null; }
+  }
 
   function readModels() {
     return [...$("models").children].map((row) => {
-      const sel = row.querySelector("select"), custom = row.querySelector("input.custom"), w = row.querySelector("input[type=number]");
-      const name = sel.value === "__custom__" ? custom.value.trim() : sel.value;
-      return { name, weight: +w.value || 1 };
+      const sel = row.querySelector("select"), w = row.querySelector("input[type=number]");
+      return { name: sel.value, weight: +w.value || 1 };
     }).filter((m) => m.name);
   }
   const num = (id) => +$(id).value;
@@ -553,7 +691,7 @@
     if (topo === "barabasi_albert") network.m = num("m");
     if (topo === "erdos_renyi") network.p = num("p");
     const cfg = {
-      name: ($("name").value.trim() || "run").replace(/[^A-Za-z0-9_-]+/g, "_"),
+      name: $("name").value.trim() || "run",
       seed: num("seed"),
       network,
       opinions: { distribution: $("dist").value, mean: num("mean"), std: num("std") },
@@ -574,26 +712,6 @@
     };
     return cfg;
   }
-
-  // a preset config -> the form
-  function applyConfig(c) {
-    const d = c.dynamics || {};
-    setEngine(d.type === "numeric" ? "numeric" : "llm");
-    const set = (id, v) => { if (v != null) $(id).value = v; };
-    set("name", c.name); set("seed", c.seed);
-    const nw = c.network || {};
-    set("topology", nw.topology); set("n", nw.n); set("k", nw.k); set("beta", nw.beta); set("m", nw.m); set("p", nw.p);
-    const op = c.opinions || {};
-    set("dist", op.distribution || "uniform"); set("mean", op.mean ?? 0); set("std", op.std ?? 1);
-    if (d.type === "numeric") { set("algo", d.rule); set("steps", c.steps); set("eps", d.epsilon); set("mu", d.mu); set("lam", d.stubbornness ?? 1); }
-    else {
-      set("llm-steps", c.steps); set("statement", d.statement);
-      set("imin", d.interactions && d.interactions.min); set("imax", d.interactions && d.interactions.max);
-      if (d.models && d.models.length) { $("models").replaceChildren(); d.models.forEach((m) => addModelRow(m.name, m.weight)); }
-    }
-    syncVisibility();
-  }
-
 
   // ---------------------------------------------------------------- new-run wizard
   const STEP_TITLES = { start: "Start", network: "Network", opinions: "Initial opinions", algorithm: "Algorithm",
@@ -659,7 +777,7 @@
   function renderReview() {
     const c = buildConfig(), nw = c.network, op = c.opinions;
     const blocks = [
-      ["start", [["Run name", c.name], ["Seed", c.seed], ["Agents", engine === "numeric" ? "Numeric model" : "LLM agents"], ["Preset", $("preset").value ? $("preset").value.replace(/\.yaml$/, "") : "Custom"]]],
+      ["start", [["Run name", c.name], ["Seed", c.seed], ["Agents", engine === "numeric" ? "Numeric algorithms" : "LLM agents"]]],
       ["network", [["Topology", TOPO_LABEL[nw.topology]], ["Agents", nw.n],
         ...(nw.topology === "watts_strogatz" ? [["Neighbours k", nw.k], ["Rewire β", nw.beta]] : nw.topology === "barabasi_albert" ? [["Links per new node m", nw.m]] : [["Edge probability p", nw.p]])]],
       ["opinions", [["Distribution", optText("dist")], ...(op.distribution === "uniform" ? [] : [[op.distribution === "bimodal" ? "Camp position" : "Mean", `±${op.mean}`.replace("±", op.distribution === "bimodal" ? "±" : "")], ["Spread", op.std]])]],
@@ -722,12 +840,6 @@
   $("form").addEventListener("input", scheduleChecks);
   $("form").addEventListener("change", scheduleChecks);
 
-  $("preset").addEventListener("change", (e) => {
-    const p = OPTIONS.presets.find((x) => x.file === e.target.value);
-    if (p) applyConfig(p.config);
-    renderWizard();
-  });
-
   $("form").addEventListener("submit", async (e) => {
     e.preventDefault();
     $("form-error").textContent = "";
@@ -735,6 +847,7 @@
     try {
       const res = await api("/api/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ config: buildConfig() }) });
       DATA = null;
+      nameTouched = false;
       await loadRuns();
       openRun(res.id);
     } catch (err) {
@@ -745,12 +858,8 @@
   });
 
   async function init() {
-    try { OPTIONS = await api("/api/options"); } catch (e) { $("form-error").textContent = "Cannot reach the local server. Start it again from Terminal."; }
-    if (OPTIONS.ollama_error) { $("ollama-note").hidden = false; $("ollama-note").textContent = OPTIONS.ollama_error; }
-    OPTIONS.presets.forEach((p) => $("preset").appendChild(new Option(p.file.replace(/\.yaml$/, ""), p.file)));
-    const start = OPTIONS.presets.find((p) => p.file === "quick.yaml");
-    if (start) { applyConfig(start.config); $("preset").value = start.file; }
-    else addModelRow(OPTIONS.ollama_models[0], 1);
+    try { OPTIONS = await api("/api/options"); } catch (e) { OPTIONS = { ollama_models: [], suggested: [] }; $("form-error").textContent = "Cannot reach the local server. Start it again from Terminal."; }
+    renderModels();
     syncVisibility();
     renderWizard();
     runChecks();

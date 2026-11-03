@@ -1,8 +1,7 @@
-"""One async client for every LLM provider (via LiteLLM), with a disk cache.
+"""One async client for local LLMs (via LiteLLM), with a disk cache.
 
 Model strings follow LiteLLM conventions, e.g.
   "ollama_chat/llama3.2:3b"            local Ollama (default http://localhost:11434)
-  "anthropic/claude-sonnet-4-5", "openai/gpt-4o-mini", "xai/grok-3", "deepseek/deepseek-chat"
   "openai/<model>" + api_base=<url>    any OpenAI-compatible server, e.g. vLLM on INDACO
 """
 
@@ -145,7 +144,7 @@ class LLMClient:
         import litellm  # imported lazily: heavy
 
         litellm.suppress_debug_info = True
-        litellm.drop_params = True  # e.g. Anthropic rejects `seed`; drop instead of failing
+        litellm.drop_params = True  # a server that rejects a setting (e.g. `seed`) drops it instead of failing
         kwargs = {k: v for k, v in params.items() if v is not None}
         kwargs["num_retries"] = 4  # LiteLLM retries rate limits / transient errors with backoff
         if api_base:

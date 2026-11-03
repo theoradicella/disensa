@@ -92,7 +92,21 @@
     <p>Both kinds of agents share the same engine, networks and metrics, so a numeric run and an LLM run of the same setup can be compared directly.</p>
     <p><a href="#quick-start">Quick start</a> gets a first run going and <a href="#how-a-run-works">How a run works</a> describes the loop. The sections after that cover each part of a run in turn: the network, the numeric and LLM agents, the initial opinions, the metrics, and the files a run produces.</p>
     <h2 id="quick-start">Quick start</h2>
-    <p class="wip">Work in progress</p>
+    <p>disensa runs on your own computer. Numeric runs need nothing else. LLM runs also need <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>, a free program that runs open-weight language models locally, so no account, API key or payment is involved.</p>
+    <ol class="steps">
+      <li><strong>Install disensa</strong> (Python 3.11 or newer): <code>pip install disensa</code>, or <code>uv tool install disensa</code>.</li>
+      <li><strong>Install Ollama</strong> from <a href="https://ollama.com/download" target="_blank" rel="noopener">ollama.com/download</a>. Nothing else to set up: disensa starts Ollama when it needs it and stops it again when it closes.</li>
+      <li><strong>Open the lab</strong> with <code>disensa app</code>. It opens in the browser at <code>http://127.0.0.1:8765</code>.</li>
+      <li><strong>Get a model.</strong> In the <em>Topic and models</em> step of a new LLM run, download one of the suggested models with one click, or see <a href="#local-models">Local models</a> below to use the terminal.</li>
+      <li><strong>Run.</strong> Go through the remaining steps and start the run. It appears under <em>Previous runs</em> and can be followed step by step while it goes.</li>
+    </ol>
+
+    <h3 id="local-models">Local models</h3>
+    <p>Any model from the <a href="https://ollama.com/library" target="_blank" rel="noopener">Ollama library</a> can drive agents. Download it once from a terminal, then check that it answers:</p>
+<pre><code>ollama pull llama3.2:3b
+disensa ping ollama_chat/llama3.2:3b</code></pre>
+    <p>Installed models appear in the lab&rsquo;s model list. In a config file a model is written <code>ollama_chat/&lt;name&gt;</code>, e.g. <code>ollama_chat/qwen3:4b</code> (see <a href="#agent-models">Models</a>). A model has to fit in memory while it runs, and its download size is a rough guide to how much it needs: models of 3&ndash;4B parameters (2&ndash;3&nbsp;GB) run comfortably on a laptop with 16&nbsp;GB, larger ones need more memory or a GPU.</p>
+    <p>Without the lab, a run can be started from a config file: <code>disensa run configs/quick.yaml</code>. This is also how disensa runs on a server, such as a university computing cluster: install disensa and Ollama there, run the configs, and copy the run folders back into <code>runs/</code> to open them in the lab.</p>
     <h2 id="how-a-run-works">How a run works</h2>
     <p>A run is one simulation: a group of agents, linked by a network, each holding an opinion on the same statement. Time moves in rounds called <strong>steps</strong>. At every step each agent looks at what its neighbours think and updates its own opinion. Everything about a run is set in a config file: how many agents there are, how they are linked, how many steps to run, and what kind of agents to use.</p>
     <p>Every run goes through two phases. The <strong>setup</strong> builds the network and gives every agent a starting opinion. The <strong>loop</strong> then runs one step after another, as many as the config asks for (<code>steps</code>, default 10), and saves the opinions after each one.</p>
@@ -147,7 +161,7 @@
     <p>Each run gets its own folder, <code>runs/&lt;timestamp&gt;_&lt;name&gt;_s&lt;seed&gt;/</code>, filled step by step while the run goes: if a run is stopped, every finished step is kept. When the loop is done the run is marked as finished, with its duration and, for LLM runs, the number of model calls. What each file holds is in <a href="#outputs">Run files</a>; how to follow a run in the lab, agent by agent, is in <a href="#reading-a-run">Reading a run</a>.</p>
     <div class="note"><strong>Reproducibility.</strong> A numeric run is fully determined by its config. An LLM run is too, once its replies are cached: every reply is stored on disk under its exact request, so running the same config again replays the same replies instead of calling the models, and the run comes out identical.</div>
     <h2 id="topologies">Network topologies</h2>
-    <p>Each agent is a node in the network, with its own independent state. In an LLM run, different nodes can be driven by different models (e.g. Llama, Gemma, Grok); see <a href="#agents">LLM agents</a> for how models are assigned to nodes. A link between two nodes means those agents interact. Networks are undirected and unweighted: if \(i\) is linked to \(j\), then \(j\) is linked to \(i\), and every link counts the same. Three classic models are available to generate the network:</p>
+    <p>Each agent is a node in the network, with its own independent state. In an LLM run, different nodes can be driven by different models (e.g. Llama, Qwen, Gemma); see <a href="#agents">LLM agents</a> for how models are assigned to nodes. A link between two nodes means those agents interact. Networks are undirected and unweighted: if \(i\) is linked to \(j\), then \(j\) is linked to \(i\), and every link counts the same. Three classic models are available to generate the network:</p>
     <div class="cards">
       <div class="card">
         <svg width="84" height="56" viewBox="0 0 84 56" aria-hidden="true"><g stroke="#9ec5f4" stroke-width="1.2"><line x1="12" y1="12" x2="40" y2="44"/><line x1="12" y1="12" x2="70" y2="16"/><line x1="40" y1="44" x2="70" y2="16"/><line x1="26" y1="30" x2="58" y2="40"/><line x1="58" y1="40" x2="70" y2="16"/><line x1="12" y1="12" x2="26" y2="30"/></g><g fill="#2a78d6"><circle cx="12" cy="12" r="4"/><circle cx="40" cy="44" r="4"/><circle cx="70" cy="16" r="4"/><circle cx="26" cy="30" r="4"/><circle cx="58" cy="40" r="4"/></g></svg>
@@ -501,16 +515,7 @@ Respond ONLY with JSON:
 
     <h3 id="agent-models">Models</h3>
     <p>The models of a run are listed under <code>dynamics.models</code>. Each has a <code>weight</code>, and each model gets that share of the agents: three models with equal weight and 20 agents give \(7 + 7 + 6\). Shares are rounded so the counts always add up to \(N\) (<span class="term-wrap"><button type="button" class="term" aria-describedby="pop-largest-remainder">largest remainder</button><span class="term-pop" role="tooltip" id="pop-largest-remainder">Each model first gets the whole part of its exact share (\(20/3 = 6.67 \to 6\)). The agents left over go one each to the models with the largest fractional parts.</span></span>). The agents are then placed on the network at random: the list of model labels is shuffled and handed out to the agents. The shuffle has its own random generator, separate from the rest of the run, so two runs with the same seed but different models have the same network, initial opinions and interactions; only the models differ.</p>
-    <p>A model is written as <code>provider/model</code>, e.g. <code>ollama_chat/llama3.1:8b</code>: the part before the slash says which service runs the model, the part after is the model&rsquo;s name there. disensa sends every request through <a href="https://docs.litellm.ai/docs/providers" target="_blank" rel="noopener">LiteLLM</a>, a library that speaks to all these services the same way.</p>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Where it runs</th><th>Model name</th><th>Notes</th></tr></thead>
-      <tbody>
-        <tr><td>Your Mac (Ollama)</td><td><code>ollama_chat/llama3.1:8b</code></td><td>Free; pull the model first. See <code>configs/mixed_local.yaml</code></td></tr>
-        <tr><td>A model server (vLLM, Ollama&hellip;)</td><td><code>openai/&lt;model&gt;</code> + <code>api_base</code></td><td>Any OpenAI-compatible server, local or remote</td></tr>
-        <tr><td>Paid APIs</td><td><code>anthropic/&hellip;</code>, <code>openai/&hellip;</code>, <code>xai/&hellip;</code>, <code>deepseek/&hellip;</code></td><td>Need an API key; every call costs</td></tr>
-      </tbody>
-    </table></div>
-    <p><code>api_base</code> is the address of the server, e.g. <code>{name: openai/&lt;model&gt;, api_base: http://&lt;host&gt;:8000/v1}</code>. Without it, Ollama models go to the local server at <code>http://localhost:11434</code>.</p>
+    <p>A model is written as <code>ollama_chat/&lt;name&gt;</code>, e.g. <code>ollama_chat/llama3.2:3b</code>: <code>ollama_chat</code> says the model runs on Ollama, on the same computer as disensa, and the rest is the model&rsquo;s name there. Only local models are used, so runs are free and no data leaves the machine. How to install and download models is in <a href="#local-models">Local models</a>. disensa sends every request through <a href="https://docs.litellm.ai/docs/providers" target="_blank" rel="noopener">LiteLLM</a>, a library that talks to model servers in a uniform way.</p>
     <p>Each request also carries settings that are not part of the prompt. The <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-temperature"><strong>temperature</strong></button><span class="term-pop" role="tooltip" id="pop-temperature"><strong>Temperature</strong> \(T\): a model writes one token at a time, giving each candidate \(k\) a score \(z_k\) and drawing it with probability \(p_k \propto e^{z_k / T}\). As \(T \to 0\) the top token almost always wins; at \(T = 1\) the model&rsquo;s own probabilities are used; above \(1\) unlikely tokens get through more often.</span></span> (default \(0.7\)) sets how varied the replies are: low values give nearly the same reply to the same prompt, higher values more varied ones. <strong><code>max_tokens</code></strong> caps the length of the reply. Every model gets the same prompts and the same settings unless set otherwise, so that differences between agents come from the models. The same temperature does not make two models equally random, though: it reshapes each model&rsquo;s own word probabilities, so it treats them the same way, not makes them behave the same.</p>
 
     <h3 id="agent-reliability">Error handling and reproducibility</h3>
@@ -531,7 +536,7 @@ Respond ONLY with JSON:
       <thead><tr><th>Parameter</th><th>Values</th><th>Default</th></tr></thead>
       <tbody>
         <tr><td><code>statement</code></td><td>the statement agents take a position on</td><td>euthanasia statement</td></tr>
-        <tr><td><code>models</code></td><td>list of <code>name</code>, <code>weight</code>, <code>temperature</code>, <code>api_base</code></td><td>required</td></tr>
+        <tr><td><code>models</code></td><td>list of <code>name</code>, <code>weight</code>, <code>temperature</code></td><td>required</td></tr>
         <tr><td><code>interactions.min</code>, <code>.max</code></td><td>how many neighbours an agent hears per step</td><td>\(1\), \(5\)</td></tr>
         <tr><td><code>memory_words</code></td><td>word limit asked for the memory</td><td>\(60\)</td></tr>
         <tr><td><code>max_tokens</code></td><td>longest reply allowed</td><td>\(400\)</td></tr>
