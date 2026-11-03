@@ -332,7 +332,6 @@
 
   let lastTable = "";
   function drawTable() {
-    if ($("table-card").hidden) return;
     const step = Math.round(t), key = `${step}|${D()}`;
     if (key === lastTable) return; lastTable = key;
     const deg = new Array(DATA.agents.length).fill(0);
@@ -369,12 +368,18 @@
     lastFrame = now;
     requestAnimationFrame(frame);
   }
-  function play() { if (t >= D() && !followLive) setTime(0); playing = true; $("play").textContent = "❚❚"; $("play").setAttribute("aria-label", "Pause"); }
-  function stop() { playing = false; $("play").textContent = "▶"; $("play").setAttribute("aria-label", "Play"); }
+  const PLAY_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.2 3.2v9.6a.8.8 0 0 0 1.2.7l7.6-4.8a.8.8 0 0 0 0-1.4L5.4 2.5A.8.8 0 0 0 4.2 3.2z" fill="currentColor"/></svg>';
+  const PAUSE_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="2.5" width="3" height="11" rx="1.2" fill="currentColor"/><rect x="9.5" y="2.5" width="3" height="11" rx="1.2" fill="currentColor"/></svg>';
+  function play() { if (t >= D() && !followLive) setTime(0); playing = true; $("play").innerHTML = PAUSE_ICON; $("play").setAttribute("aria-label", "Pause"); }
+  function stop() { playing = false; $("play").innerHTML = PLAY_ICON; $("play").setAttribute("aria-label", "Play"); }
+  $("play").innerHTML = PLAY_ICON;
   $("play").addEventListener("click", () => (playing ? stop() : play()));
   scrub.addEventListener("input", () => { stop(); followLive = false; setTime(+scrub.value * D()); });
-  $("speed").addEventListener("change", (e) => { speed = +e.target.value; });
-  $("table-toggle").addEventListener("click", () => { $("table-card").hidden = !$("table-card").hidden; lastTable = ""; drawTable(); });
+  // speed: slow / normal / fast as a three-icon toggle
+  $("speed").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    speed = +b.dataset.speed;
+    $("speed").querySelectorAll("button").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+  }));
   document.addEventListener("keydown", (e) => {
     if (["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(e.target.tagName) || !DATA) return;
     if (e.key === "ArrowRight") { stop(); setTime(Math.floor(t) + 1); }
@@ -410,6 +415,7 @@
   }
   function statusPill(s) {
     const pill = $("status"); pill.className = "pill " + s.status;
+    pill.hidden = s.status === "done"; // only worth a chip while running, or when it went wrong
     LIVE = s.status === "running" ? s : null;
     $("live").hidden = !LIVE;
     if (LIVE) {
@@ -430,9 +436,10 @@
     DATA = data;
     $("empty").hidden = true; $("view").hidden = false;
     $("title").textContent = data.name;
-    $("topic").textContent = data.topic ? `“${data.topic}”` : "Numeric algorithm: opinions only, no text.";
-    const chips = $("chips"); chips.replaceChildren();
-    [`${data.agents.length} agents`, data.topology.replace("_", " "), `seed ${data.seed}`, ...data.models.map(short)].forEach((c) => chips.appendChild(el("span", "chip", c)));
+    const topic = $("topic"); topic.replaceChildren();
+    topic.classList.toggle("none", !data.topic);
+    topic.textContent = data.topic || "None: numeric algorithm, opinions only";
+    renderRunConfig(data);
     stepOf();
     if (first) { selected = null; nodes = []; t = 0; drawGuide(); }
     t = Math.min(t, D()); // never point past the data we have
@@ -449,12 +456,32 @@
     if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
     return body;
   }
+  // the URL keeps what is open, so a reload lands in the same place:
+  // /lab?tab=new, /lab?tab=runs, /lab?run=<id>. mode: "push" | "replace" | null (leave the URL alone)
+  function setUrl(params, mode) {
+    if (!mode) return;
+    const url = `${location.pathname}?${new URLSearchParams(params)}`;
+    if (url === location.pathname + location.search) return;
+    history[mode === "push" ? "pushState" : "replaceState"](null, "", url);
+  }
+  function route() {
+    const q = new URLSearchParams(location.search);
+    if (q.get("run")) openRun(q.get("run"), null);
+    else { if (runId) closeRun(null); setDrawer(q.get("tab") === "runs" ? "runs" : "new", "replace"); }
+  }
+  window.addEventListener("popstate", route);
+
   let pollTimer = null, lastSeenStep = -2;
-  async function openRun(id) {
+  async function openRun(id, mode = "push") {
     setDrawer(null);
+    setUrl({ run: id }, mode);
+    $("labcard").hidden = true; $("run-nav").hidden = false; document.body.classList.add("run-open");
     runId = id; lastSeenStep = -2; clearTimeout(pollTimer); stop();
     renderRunsList();
-    const res = await api(`/api/runs/${encodeURIComponent(id)}`);
+    let res;
+    try { res = await api(`/api/runs/${encodeURIComponent(id)}`); }
+    catch (e) { if (id === runId) { closeRun(null); setDrawer("runs", "replace"); } return; } // deleted or unknown run
+    if (id !== runId) return;
     statusPill(res.status);
     if (res.data) showData(res.data, false);
     else showStarting(res.status.status === "running" ? res.status : null);
@@ -483,6 +510,15 @@
       }
     } catch (e) { pollTimer = setTimeout(poll, 2000); }
   }
+  const EMPTY_TEXT = [$("empty").querySelector("h1").textContent, $("empty").querySelector("p").textContent];
+  function closeRun(mode = "push") {
+    runId = null; clearTimeout(pollTimer); stop(); if (sim) sim.stop(); followLive = false; LIVE = null; DATA = null;
+    $("view").hidden = true; $("empty").hidden = true; // nothing behind the lab card when no run is open
+    $("empty").querySelector("h1").textContent = EMPTY_TEXT[0]; $("empty").querySelector("p").textContent = EMPTY_TEXT[1];
+    $("run-nav").hidden = true; $("labcard").hidden = false; document.body.classList.remove("run-open");
+    if (mode) setDrawer("runs", mode);
+  }
+  $("back").addEventListener("click", () => closeRun("push"));
   $("cancel").addEventListener("click", () => api(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" }));
 
   // runs list
@@ -497,35 +533,85 @@
     const nums = (RUNS || []).map((r) => /^Run (\d+)$/i.exec(r.name || "")).filter(Boolean).map((m) => +m[1]);
     $("name").value = `Run ${nums.length ? Math.max(...nums) + 1 : 1}`;
   }
+  function startedAt(stamp) { // "20261103-142012" -> "3 Nov 2026, 14:20"
+    const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/.exec(stamp || "");
+    if (!m) return "";
+    const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    return `${d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}, ${m[4]}:${m[5]}`;
+  }
+  function duration(sec) { // 38 s · 4 min 12 s · 1 h 02 min; "—" when not saved
+    if (sec == null) return "—";
+    const s = Math.round(sec), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return h ? `${h} h ${String(m).padStart(2, "0")} min` : m ? `${m} min ${s % 60} s` : `${s} s`;
+  }
+  const COPY = '<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 3.5v-.4A1.1 1.1 0 0 0 9.4 2H3.1A1.1 1.1 0 0 0 2 3.1v6.3a1.1 1.1 0 0 0 1.1 1.1h.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+  const TRASH = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.8 6.5v4.5M9.2 6.5v4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  // compact table (name, type, started, status); a click expands the row with the details and actions
+  let expandedRun = null;
   function renderRunsList() {
     const box = $("runs"); box.replaceChildren();
     if (!RUNS.length) { box.appendChild(el("p", "hint", "No runs yet.")); return; }
+    const wrap = el("div", "runs-wrap"), table = el("table", "runs-table"), head = el("thead"), body = el("tbody"), hr = el("tr");
+    ["Name", "Type", "Started", "Status", ""].forEach((h) => hr.appendChild(el("th", null, h)));
+    head.appendChild(hr);
     RUNS.forEach((r) => {
-      const b = el("button", "run-item"); b.type = "button";
-      if (r.id === runId) b.setAttribute("aria-current", "true");
-      const top = el("div", "t"); top.append(el("span", null, r.name), el("span", "pill " + r.status, r.status));
-      const when = r.started ? `${r.started.slice(0, 4)}-${r.started.slice(4, 6)}-${r.started.slice(6, 8)} ${r.started.slice(9, 11)}:${r.started.slice(11, 13)}` : "";
-      b.append(top, el("div", "m", `${when} · ${r.n} agents · ${(r.topology || "").replace("_", " ")}`), el("div", "m", r.models.map(short).join(", ")));
-      b.addEventListener("click", () => openRun(r.id));
-      box.appendChild(b);
+      const llm = r.engine === "llm", open = expandedRun === r.id, tr = el("tr", open ? "run-row open" : "run-row");
+      if (r.id === runId) tr.setAttribute("aria-current", "true");
+      const tdName = el("td", "name"), tdType = el("td"), tdStatus = el("td");
+      tdName.textContent = r.name;
+      tdType.appendChild(el("span", "type-tag " + (llm ? "llm" : "num"), llm ? "LLM agents" : "Numeric"));
+      tdStatus.appendChild(el("span", "pill " + r.status, r.status[0].toUpperCase() + r.status.slice(1)));
+      const chev = el("button", "row-chev"); chev.type = "button";
+      chev.setAttribute("aria-expanded", String(open)); chev.setAttribute("aria-label", `${open ? "Hide" : "Show"} details of ${r.name}`);
+      const tdChev = el("td", "actions"); tdChev.appendChild(chev);
+      tr.append(tdName, tdType, el("td", "nowrap", startedAt(r.started)), tdStatus, tdChev);
+      tr.addEventListener("click", () => { expandedRun = open ? null : r.id; renderRunsList(); });
+      body.appendChild(tr);
+      if (open) body.appendChild(runDetails(r, llm));
     });
+    table.append(head, body); wrap.appendChild(table); box.appendChild(wrap);
+  }
+  function runDetails(r, llm) {
+    const tr = el("tr", "run-details"), td = el("td"); td.colSpan = 5;
+    const dl = el("dl");
+    [["Duration", duration(r.status === "running" ? r.elapsed : r.seconds)], ["Agents", r.n], ["Steps", r.steps ?? "—"], ["Seed", r.seed ?? "—"],
+      ["Network", (TOPO_LABEL[r.topology] || r.topology || "").split(" (")[0]],
+      [llm ? "Models" : "Rule", llm ? r.models.map(short).join(", ") : ALGO_LABEL[(r.models[0] || "").split("/")[1]] || ""]]
+      .forEach(([k, v]) => { const d = el("div"); d.append(el("dt", null, k), el("dd", null, String(v))); dl.appendChild(d); });
+    const bar = el("div", "run-actions");
+    const del = el("button", "danger-btn"); del.type = "button"; del.innerHTML = TRASH; del.append("Delete");
+    del.disabled = r.status === "running"; if (del.disabled) del.title = "Stop the run before deleting it";
+    del.addEventListener("click", () => deleteRun(r));
+    const go = el("button", "primary", "Open run"); go.type = "button";
+    go.addEventListener("click", () => openRun(r.id));
+    const dup = el("button", "btn-ghost"); dup.type = "button"; dup.innerHTML = COPY; dup.append("Duplicate");
+    dup.title = "Start a new run with this configuration, ready to change";
+    dup.disabled = !r.config; dup.addEventListener("click", () => duplicateRun(r));
+    bar.append(go, dup, del);
+    td.append(dl, bar); tr.appendChild(td);
+    return tr;
+  }
+  async function deleteRun(r) {
+    if (!confirm(`Delete "${r.name}"?\n\nIts run folder is removed from disk and cannot be restored.`)) return;
+    try { await api(`/api/runs/${encodeURIComponent(r.id)}`, { method: "DELETE" }); }
+    catch (err) { alert(`Could not delete "${r.name}": ${err.message}`); }
+    loadRuns();
   }
 
-  // lab card: "New run" and "Previous runs" expand the card under the header; clicking the open one closes it
+  // lab card: "New run" and "Previous runs" expand the card under the header
   let drawerOpen = null;
-  function setDrawer(which) {
+  function setDrawer(which, mode) {
     drawerOpen = which;
+    if (which) setUrl({ tab: which }, mode);
     $("labcard").classList.toggle("open", !!which);
     $("tab-new").setAttribute("aria-pressed", String(which === "new"));
     $("tab-runs").setAttribute("aria-pressed", String(which === "runs"));
     if (which) { $("pane-new").hidden = which !== "new"; $("pane-runs").hidden = which !== "runs"; }
     if (which === "runs") loadRuns();
   }
-  const showTab = (which) => setDrawer(drawerOpen === which ? null : which);
-  $("tab-new").addEventListener("click", () => showTab("new"));
-  $("tab-runs").addEventListener("click", () => showTab("runs"));
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && drawerOpen) setDrawer(null); });
-  document.addEventListener("pointerdown", (e) => { if (drawerOpen && !$("labcard").contains(e.target)) setDrawer(null); });
+  // one of the two is always selected: clicking the open one, Escape or clicking outside do not close it
+  $("tab-new").addEventListener("click", () => setDrawer("new", "replace"));
+  $("tab-runs").addEventListener("click", () => setDrawer("runs", "replace"));
 
   // ---------------------------------------------------------------- form
   let OPTIONS = { ollama_models: [] };
@@ -713,6 +799,38 @@
     return cfg;
   }
 
+  // a saved config -> the form, the inverse of buildConfig ("Duplicate" in Previous runs)
+  function pickCard(id, value) {
+    if (value == null) return;
+    $(id).value = value;
+    document.querySelectorAll(`.pick-cards[data-for="${id}"] .pick-card`).forEach((c) => c.setAttribute("aria-pressed", String(c.dataset.value === value)));
+  }
+  function fillForm(c) {
+    const set = (id, v) => { if (v != null) $(id).value = v; };
+    const nw = c.network || {}, op = c.opinions || {}, d = c.dynamics || {};
+    set("name", `${c.name} (copy)`); nameTouched = true;
+    set("seed", c.seed);
+    pickCard("topology", nw.topology); set("n", nw.n); set("k", nw.k); set("beta", nw.beta); set("m", nw.m); set("p", nw.p);
+    pickCard("dist", op.distribution); set("mean", op.mean); set("std", op.std);
+    if (d.type === "numeric") {
+      pickCard("algo", d.rule); set("steps", c.steps); set("eps", d.epsilon); set("mu", d.mu); set("lam", d.stubbornness);
+    } else {
+      set("statement", d.statement); set("llm-steps", c.steps);
+      if (d.interactions) { set("imin", d.interactions.min); set("imax", d.interactions.max); }
+      $("models").replaceChildren();
+      (d.models || []).forEach((m) => addModelRow(m.name, m.weight));
+      if (!$("models").children.length && OPTIONS.ollama_models.length) addModelRow(OPTIONS.ollama_models[0], 1);
+    }
+    setEngine(d.type === "numeric" ? "numeric" : "llm"); // also syncs the visible fields and re-runs the checks
+    updateCounts();
+  }
+  function duplicateRun(r) {
+    fillForm(r.config);
+    setDrawer("new", "replace");
+    furthest = stepsFor().length - 1; // every step is already filled in, so any step can be jumped to
+    goStep("review");
+  }
+
   // ---------------------------------------------------------------- new-run wizard
   const STEP_TITLES = { start: "Start", network: "Network", opinions: "Initial opinions", algorithm: "Algorithm",
     models: "Topic and models", interactions: "Interactions", review: "Review" };
@@ -774,23 +892,67 @@
   const TOPO_LABEL = { watts_strogatz: "Small-world (Watts–Strogatz)", barabasi_albert: "Scale-free (Barabási–Albert)", erdos_renyi: "Random (Erdős–Rényi)" };
   const ALGO_LABEL = { bounded_confidence: "Bounded confidence", degroot: "DeGroot", friedkin_johnsen: "Friedkin–Johnsen" };
   const optText = (id) => { const sel = $(id); return sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : sel.value; };
-  function renderReview() {
-    const c = buildConfig(), nw = c.network, op = c.opinions;
+  const DIST_LABEL = { uniform: "Uniform", normal: "Normal", bimodal: "Two camps" };
+  // [step key, [[label, value], ...]] for a config; `counts` (model -> agents) switches to the run view
+  function configBlocks(c, counts) {
+    const nw = c.network, op = c.opinions || {}, d = c.dynamics, numeric = d.type !== "llm";
     const blocks = [
-      ["start", [["Run name", c.name], ["Seed", c.seed], ["Agents", engine === "numeric" ? "Numeric algorithms" : "LLM agents"]]],
-      ["network", [["Topology", TOPO_LABEL[nw.topology]], ["Agents", nw.n],
+      ["start", [["Run name", c.name], ["Seed", c.seed], ["Agents", numeric ? "Numeric algorithms" : "LLM agents"]]],
+      ["network", [["Topology", TOPO_LABEL[nw.topology] || nw.topology], ["Agents", nw.n],
         ...(nw.topology === "watts_strogatz" ? [["Neighbours k", nw.k], ["Rewire β", nw.beta]] : nw.topology === "barabasi_albert" ? [["Links per new node m", nw.m]] : [["Edge probability p", nw.p]])]],
-      ["opinions", [["Distribution", optText("dist")], ...(op.distribution === "uniform" ? [] : [[op.distribution === "bimodal" ? "Camp position" : "Mean", `±${op.mean}`.replace("±", op.distribution === "bimodal" ? "±" : "")], ["Spread", op.std]])]],
+      ["opinions", [["Distribution", DIST_LABEL[op.distribution] || op.distribution], ...(op.distribution === "uniform" ? [] : [[op.distribution === "bimodal" ? "Camp position" : "Mean", op.distribution === "bimodal" ? `±${op.mean}` : op.mean], ["Spread", op.std]])]],
     ];
-    const d = c.dynamics;
-    if (engine === "numeric") {
-      blocks.push(["algorithm", [["Rule", ALGO_LABEL[d.rule]], ["Steps", c.steps],
+    if (numeric) {
+      blocks.push(["algorithm", [["Rule", ALGO_LABEL[d.rule] || d.rule], ["Steps", c.steps],
         ...(d.rule === "bounded_confidence" ? [["Confidence ε", d.epsilon], ["Rate μ", d.mu]]
           : d.rule === "friedkin_johnsen" ? [["Stubbornness λ", d.stubbornness]] : [])]]);
     } else {
-      blocks.push(["models", [["Statement", d.statement], ["Models", d.models.map((m) => `${short(m.name)} ×${m.weight}`).join(", ")]]]);
+      const models = counts
+        ? d.models.map((m) => [short(m.name), `${counts[m.name] || 0} agents`])
+        : [["Models", d.models.map((m) => `${short(m.name)} ×${m.weight}`).join(", ")]];
+      blocks.push(["models", counts ? models : [["Statement", d.statement], ...models]]);
       blocks.push(["interactions", [["Steps", c.steps], ["Interactions per step", `${d.interactions.min}–${d.interactions.max}`]]]);
     }
+    return blocks;
+  }
+  // the run's settings as four short sections: a main value, then the details in one muted line
+  function renderRunConfig(data) {
+    const c = data.config, grid = $("config-grid");
+    grid.replaceChildren(); grid.hidden = !c;
+    if (!c) return;
+    const nw = c.network, op = c.opinions || {}, d = c.dynamics, llm = d.type === "llm";
+    const join = (...xs) => xs.filter((x) => x != null && x !== "").join(" · ");
+    const section = (title, main, sub, cls) => {
+      const box = el("div", "spec" + (cls ? " " + cls : ""));
+      box.appendChild(el("span", "meta-label", title));
+      if (main != null) box.appendChild(el("div", "spec-main", main));
+      if (sub) box.appendChild(el("div", "spec-sub", sub));
+      grid.appendChild(box); return box;
+    };
+    section("Network", (TOPO_LABEL[nw.topology] || nw.topology).split(" (")[0], join(`${nw.n} agents`,
+      nw.topology === "watts_strogatz" ? `k = ${nw.k} · β = ${nw.beta}` : nw.topology === "barabasi_albert" ? `${nw.m} links per new node` : `p = ${nw.p}`));
+    section("Initial opinions", DIST_LABEL[op.distribution] || op.distribution,
+      op.distribution === "bimodal" ? `at ±${op.mean} · spread ${op.std}` : op.distribution === "normal" ? `mean ${op.mean} · spread ${op.std}` : "from −2 to +2");
+    if (llm) {
+      // one row per model, coloured as in "Mean opinion by model", with its share of the agents
+      const counts = {}; data.agents.forEach((a) => { counts[a.model] = (counts[a.model] || 0) + 1; });
+      const box = section("Models", null, null, "spec-models"), n = data.agents.length || 1;
+      data.models.forEach((m, i) => {
+        const color = data.models.length > 1 ? css(`--s${(i % 8) + 1}`) : css("--accent");
+        const row = el("div", "model-share"), bar = el("span", "share-bar"), fill = el("span");
+        fill.style.width = `${(100 * (counts[m] || 0)) / n}%`; fill.style.background = color; bar.appendChild(fill);
+        const name = el("span", "share-name", short(m)); name.title = m;
+        row.append(name, bar, el("span", "share-count", `${counts[m] || 0}`));
+        box.appendChild(row);
+      });
+    } else {
+      section("Update rule", ALGO_LABEL[d.rule] || d.rule,
+        d.rule === "bounded_confidence" ? `ε = ${d.epsilon} · μ = ${d.mu}` : d.rule === "friedkin_johnsen" ? `λ = ${d.stubbornness}` : "");
+    }
+    section("Simulation", `${c.steps} steps`, join(llm && d.interactions ? `${d.interactions.min}–${d.interactions.max} interactions per step` : "", `seed ${c.seed}`));
+  }
+  function renderReview() {
+    const blocks = configBlocks(buildConfig());
     const box = $("review"); box.replaceChildren();
     blocks.forEach(([key, rows]) => {
       const card = el("div", "review-block");
@@ -864,7 +1026,7 @@
     renderWizard();
     runChecks();
     await loadRuns();
-    setDrawer("new");
+    route();
     requestAnimationFrame(frame);
   }
   init();

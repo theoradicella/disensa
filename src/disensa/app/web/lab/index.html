@@ -209,7 +209,6 @@
       </form>
         </section>
         <section id="pane-runs" hidden>
-          <div class="drawer-head"><h2>Previous runs</h2><p class="hint">Open one to replay it.</p></div>
           <div id="runs"></div>
         </section>
       </div>
@@ -219,7 +218,10 @@
 
 <div class="shell">
   <main>
-    <div id="empty" class="empty">
+    <div class="run-nav" id="run-nav" hidden>
+      <button type="button" class="back-link" id="back">← Previous runs</button>
+    </div>
+    <div id="empty" class="empty" hidden>
       <div>
         <h1>Set up a run from New run above</h1>
         <p>Or open a past one from Previous runs. Ollama runs take a few minutes.</p>
@@ -227,15 +229,23 @@
     </div>
 
     <div id="view" hidden>
-      <div class="head">
-        <h1 id="title"></h1>
-        <div style="display:flex;gap:8px;align-items:center">
-          <span class="pill" id="status"></span>
-          <button type="button" class="icon-btn" id="cancel" hidden style="padding:0 10px">Stop</button>
+      <section class="run-card" aria-label="Run">
+        <div class="run-meta">
+          <div class="meta-field meta-name">
+            <span class="meta-label">Run name</span>
+            <h1 class="meta-value" id="title"></h1>
+          </div>
+          <div class="meta-field meta-topic">
+            <span class="meta-label">Topic</span>
+            <p class="meta-value" id="topic"></p>
+          </div>
+          <div class="meta-actions">
+            <span class="pill" id="status" hidden></span>
+            <button type="button" class="stop-btn" id="cancel" hidden title="Stop the run now (finished steps are kept)"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect width="10" height="10" rx="2" fill="currentColor"/></svg>Stop</button>
+          </div>
         </div>
-      </div>
-      <p class="topic" id="topic"></p>
-      <div class="chips" id="chips"></div>
+        <div class="config-grid" id="config-grid"></div>
+      </section>
       <div class="live" id="live" hidden role="status" aria-live="polite">
         <div class="live-text"><b id="live-what"></b> <span id="live-parts"></span></div>
         <div class="live-bar"><span id="live-fill"></span></div>
@@ -243,17 +253,14 @@
       </div>
 
       <div class="controls">
-        <button type="button" class="play" id="play" aria-label="Play">▶</button>
+        <button type="button" class="play" id="play" aria-label="Play"></button>
         <input type="range" id="scrub" min="0" max="1" step="0.001" value="0" aria-label="Time">
         <div class="stepbox"><span class="hint">Step</span> <b id="step">0</b><span class="hint" id="of"> / 0</span></div>
-        <label class="hint">Speed
-          <select id="speed">
-            <option value="0.5">slow</option>
-            <option value="1.2" selected>normal</option>
-            <option value="3">fast</option>
-          </select>
-        </label>
-        <button type="button" class="icon-btn" id="table-toggle" style="padding:0 10px">Table</button>
+        <div class="speed" id="speed" role="group" aria-label="Playback speed">
+          <button type="button" data-speed="0.5" data-tip="Slow" aria-label="Slow" aria-pressed="false"><svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M6 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button type="button" data-speed="1.2" data-tip="Normal" aria-label="Normal" aria-pressed="true"><svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M3.5 2l4 4-4 4M8.5 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button type="button" data-speed="3" data-tip="Fast" aria-label="Fast" aria-pressed="false"><svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><path d="M1.5 2l4 4-4 4M6.5 2l4 4-4 4M11.5 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
       </div>
 
       <div class="grid">
@@ -278,7 +285,7 @@
         <div class="card chart"><h2>Opinion distribution</h2><div id="c-hist"></div></div>
       </div>
 
-      <div class="card" id="table-card" hidden>
+      <div class="card" id="table-card">
         <h2>All agents</h2>
         <div class="table-scroll">
           <table><thead><tr><th class="num">Agent</th><th>Model</th><th class="num">Opinion</th><th class="num">Links</th><th>Message</th></tr></thead><tbody id="tbody"></tbody></table>
