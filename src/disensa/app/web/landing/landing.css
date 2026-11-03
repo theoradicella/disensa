@@ -3,7 +3,6 @@
   --page: #ffffff;
   --left: #f7f7f7;
   --right: #ddeaff;  /* cool sky blue, no violet cast */
-  --dot: #2a78d6;
   --accent: #1c5cab;
   --accent-hover: #184f95;
 }
@@ -12,8 +11,6 @@ html, body {
   background: var(--left);
   font: 16px/1.5 "Geist", "Helvetica Neue", Arial, sans-serif;
 }
-/* the dots are drawn above the two coloured halves; clicks pass through to the links */
-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; pointer-events: none; }
 .layout {
   position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 1fr;
   /* a soft blend between the halves instead of a hard edge */
@@ -23,16 +20,10 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z
   display: grid; align-content: center; justify-items: start; gap: 26px;
   padding: 150px clamp(20px, 6vw, 96px) 48px; position: relative;
 }
-.copy { display: grid; gap: 20px; max-width: 560px; }
-.copy h1 {
-  margin: 0; color: #0b0b0b; text-wrap: balance;
-  font: 700 clamp(40px, 4.6vw, 76px)/1.0 "Inter Tight", "Geist", "Helvetica Neue", Arial, sans-serif;
-  letter-spacing: -0.035em;
-}
-.copy h1 em { font-style: normal; color: #1c5cab; }
-.copy p {
-  margin: 0; max-width: 42ch; color: #4a5160;
-  font: 400 clamp(16px, 1.3vw, 19px)/1.5 "Geist", "Helvetica Neue", Arial, sans-serif;
+.wordmark {
+  margin: 0; color: #0b0b0b;
+  font: 500 clamp(44px, 5.5vw, 80px)/1 "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  letter-spacing: -0.02em;
 }
 .enter {
   pointer-events: auto; position: relative; z-index: 2; display: inline-flex; align-items: center; justify-content: center;
