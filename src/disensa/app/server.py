@@ -17,7 +17,7 @@ Standard library only (http.server), bound to 127.0.0.1.
   GET  /api/runs/<id>           the run's data for the viewer (works while it is running)
   GET  /api/runs/<id>/status    {"status", "step", "steps", "error", "agents", "replies",
                                  "failed", "elapsed"}  (live counters while running)
-  POST /api/runs/<id>/cancel    stop a running simulation after the current step
+  POST /api/runs/<id>/cancel    stop a running simulation now (finished steps are kept)
 
 Each run executes in its own thread with its own asyncio loop, writing the usual run folder.
 Ollama is started on launch if it is installed but not running (llm/ollama.py).
