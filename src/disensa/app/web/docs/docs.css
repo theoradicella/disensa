@@ -107,12 +107,7 @@ td code { white-space: nowrap; }
   display: grid; place-items: center; background: var(--blue-soft); color: var(--blue); font: 600 13px/1 var(--sans);
 }
 .refs li { font-size: 15px; color: var(--ink-2); }
-.wip {
-  display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 6px 12px;
-  border: 1px dashed #c9cfd8; border-radius: 999px; background: #fff;
-  font: 500 13px/1.2 var(--mono); color: var(--muted);
-}
-.wip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #e0a526; }
+kbd { font: 500 0.82em var(--mono); padding: 1px 6px; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 5px; background: #fff; color: var(--ink); white-space: nowrap; }
 
 /* hover/focus definitions: a link-styled term reveals a small popup right below it
    (docs.js nudges it sideways so it never leaves the viewport) */

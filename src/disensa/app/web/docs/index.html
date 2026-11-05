@@ -75,9 +75,34 @@
           <li><a href="#metrics-in-disensa">In disensa</a></li>
         </ol>
       </li>
-      <li><a href="#reading-a-run">Reading a run</a></li>
-      <li><a href="#outputs">Run files</a></li>
-      <li><a href="#parameters">All parameters</a></li>
+      <li><a href="#reading-a-run">Reading a run</a>
+        <ol>
+          <li><a href="#run-list">Previous runs</a></li>
+          <li><a href="#run-overview">The run at a glance</a></li>
+          <li><a href="#run-playback">Moving through time</a></li>
+          <li><a href="#run-network">The network</a></li>
+          <li><a href="#run-agent">Following one agent</a></li>
+          <li><a href="#run-charts">Charts and table</a></li>
+        </ol>
+      </li>
+      <li><a href="#outputs">Run files</a>
+        <ol>
+          <li><a href="#run-folder">The run folder</a></li>
+          <li><a href="#run-files-list">What each file holds</a></li>
+          <li><a href="#loading-a-run">Loading a run</a></li>
+        </ol>
+      </li>
+      <li><a href="#parameters">All parameters</a>
+        <ol>
+          <li><a href="#config-file">A complete config</a></li>
+          <li><a href="#parameters-run">Run</a></li>
+          <li><a href="#parameters-network">Network</a></li>
+          <li><a href="#parameters-opinions">Initial opinions</a></li>
+          <li><a href="#parameters-numeric">Numeric dynamics</a></li>
+          <li><a href="#parameters-llm">LLM dynamics</a></li>
+          <li><a href="#commands">Commands</a></li>
+        </ol>
+      </li>
       <li><a href="#references">References</a></li>
     </ol>
   </nav>
@@ -605,7 +630,7 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
     <p>It is \(0\) when every agent agrees with all its neighbours, even if the group as a whole is split. The factor \(\tfrac12\) follows Wang et al.: with it, if opinions are placed on the network at random, \(DG\) comes out at about \(P_z\).</p>
 
     <h3 id="metric-correlation">Neighbour correlation</h3>
-    <p>How closely an agent&rsquo;s opinion matches its neighbours&rsquo;: the Pearson correlation between each agent&rsquo;s opinion and the average opinion of its neighbours, across all agents (Cinus et al., 2021).</p>
+    <p>How closely an agent&rsquo;s opinion matches its neighbours&rsquo;: the Pearson correlation between each agent&rsquo;s opinion and the average opinion of its neighbours, across all agents (Cinus et al., 2022).</p>
     <div class="formula">\[ NC = \operatorname{corr}\!\left( x_i,\ \bar{x}_{N(i)} \right), \qquad \bar{x}_{N(i)} = \frac{1}{k_i} \sum_{j \in N(i)} x_j \]</div>
     <p>It runs from \(-1\) to \(+1\). Near \(0\), an agent&rsquo;s opinion says nothing about its neighbours&rsquo;, which is how every run starts (see <a href="#opinion-placement">Where opinions land on the network</a>). Close to \(+1\), agents are surrounded by people who think like them: the signature of an echo chamber. At full consensus there is nothing left to correlate, so it is undefined and left empty.</p>
     <div class="note"><strong>Name.</strong> Wang et al. call it the &ldquo;Normalized Clustering Index (NCI)&rdquo; in §4.2 and &ldquo;Neighbors Correlation&rdquo; in their results table. disensa uses the second name.</div>
@@ -634,19 +659,261 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
       </tbody>
     </table></div>
     <h2 id="reading-a-run">Reading a run</h2>
-    <p class="wip">Work in progress</p>
+    <p>Runs are read in the lab. <em>Previous runs</em> lists every run folder in <code>runs/</code>; opening one shows the whole run on a single page that plays back step by step. A run that is still going opens the same way and grows as its steps finish.</p>
+
+    <h3 id="run-list">Previous runs</h3>
+    <p>Runs are listed newest first, with their name, kind of agents, start time and status. Clicking a row shows its details (duration, agents, steps, seed, network, and the models or the rule) and three actions:</p>
+    <ul>
+      <li><strong>Open run</strong> opens the viewer described below. Its address, <code>/lab?run=&lt;folder&gt;</code>, can be bookmarked or reloaded.</li>
+      <li><strong>Duplicate</strong> fills <em>New run</em> with the same configuration, ready to change. Changing one setting and keeping the seed gives a controlled comparison: the same network, starting opinions and interactions, with only that setting different.</li>
+      <li><strong>Delete</strong> removes the run folder from disk. This cannot be undone, and a running run has to be stopped first.</li>
+    </ul>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Running</td><td>The run is in progress.</td></tr>
+        <tr><td>Done</td><td>Every step finished.</td></tr>
+        <tr><td>Cancelled</td><td>Stopped with <em>Stop</em>. The steps finished before that are kept.</td></tr>
+        <tr><td>Failed</td><td>An error stopped the run. Hovering the status shows the error.</td></tr>
+        <tr><td>Incomplete</td><td>The run neither finished nor was stopped, for example because the lab was closed while it ran. The finished steps can still be read.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 id="run-overview">The run at a glance</h3>
+    <p>The top of the page shows the run&rsquo;s name, its statement (numeric runs have none) and its settings in four groups: the network, the initial opinions, the models or the update rule, and the simulation (steps, interactions per step and seed). With several models, each is listed with the number of agents it drives, in the same colour as its line in <em>Mean opinion by model</em>.</p>
+    <p>While a run is going, a progress bar shows the step being computed, how many agents have replied so far (and how many replies failed), the time elapsed and an estimate of the time left. The first replies are slow, because Ollama has to load the models first. The viewer follows the newest step as it arrives. <strong>Stop</strong> ends the run at once and keeps every finished step.</p>
+
+    <h3 id="run-playback">Moving through time</h3>
+    <p>The play button runs through the steps; the slider and the step counter show where you are, and three speeds play about \(0.5\), \(1.2\) or \(3\) steps per second. Clicking any chart jumps to that step. With the focus on the page (not in a field), the keyboard also works:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Key</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td><kbd>Space</kbd></td><td>play or pause</td></tr>
+        <tr><td><kbd>&larr;</kbd> <kbd>&rarr;</kbd></td><td>one step back or forward</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>stop following the selected agent</td></tr>
+      </tbody>
+    </table></div>
+    <p>During playback the nodes and charts move smoothly from one step to the next. The values shown in between are only an animation: a run is saved at whole steps, and the step counter, the agent panel and the table always show the nearest whole step.</p>
+
+    <h3 id="run-network">The network</h3>
+    <p>Each node is an agent and each line a link. Every node carries four things:</p>
+    <ul>
+      <li><strong>Colour</strong>: its opinion at the current step, from pale (\(-2\), strongly oppose) to deep blue (\(+2\), strongly support).</li>
+      <li><strong>Horizontal position</strong>: also its opinion, against the guide lines from <em>strongly oppose</em> to <em>strongly support</em>. The vertical position means nothing: it only keeps nodes apart, while links pull neighbours closer. Groups of opinion therefore show up as columns, and an <a href="#metric-patterns">echo chamber</a> as a column of nodes that are linked mostly among themselves.</li>
+      <li><strong>Size</strong>: its number of links. Hubs are the largest nodes.</li>
+      <li><strong>Shape</strong>: its model (circle, square, triangle, &hellip;), listed in the legend. All agents of a numeric run share one shape.</li>
+    </ul>
+    <p>Hovering a node shows its opinion, its model and how many interactions it had at that step. Clicking a node (or pressing <kbd>Enter</kbd> on it) follows that agent. Nodes can be dragged to see past crowded areas; this changes nothing in the run.</p>
+
+    <h3 id="run-agent">Following one agent</h3>
+    <p>The <em>Agent</em> panel shows the selected agent&rsquo;s model, its opinion over the whole run with the current step marked, and its opinion at the current step with the change since the previous one. For an LLM agent at step \(t\) it also shows what happened in that step:</p>
+    <ul>
+      <li><strong>Interacted with</strong>: the authors whose messages it read, each with their opinion at \(t-1\). Hovering an author shows the message they shared at \(t-1\), which is exactly what the agent read. Clicking an author follows them instead. On the network, these authors are outlined and joined to the agent by dark lines.</li>
+      <li><strong>Reasoning</strong>: the model&rsquo;s explanation of its new opinion.</li>
+      <li><strong>Message</strong>: what the agent shared at this step, which its neighbours can read at \(t+1\).</li>
+      <li>An <strong>error</strong>, if the reply could not be used. The agent then kept its opinion, message and memory from \(t-1\) (see <a href="#agent-reliability">Error handling</a>).</li>
+    </ul>
+    <p>At step 0 there are no interactions: the message is the agent&rsquo;s <a href="#agent-initial">first message</a>. Numeric agents only have an opinion, so their panel stops after the chart. The agent&rsquo;s memory, the exact prompt and the raw reply are not shown in the lab; they are in <code>events.jsonl</code> (see <a href="#outputs">Run files</a>). Clicking the agent again, or <kbd>Esc</kbd>, clears the selection.</p>
+
+    <h3 id="run-charts">Charts and table</h3>
+    <ul>
+      <li><strong>Polarization</strong>, <strong>Disagreement with neighbours</strong> and <strong>Neighbour correlation</strong>: the three <a href="#metrics">metrics</a> over the whole run, with a line at the current step. Hovering shows the value at any step. How to read them together is in <a href="#metric-patterns">Reading them together</a>.</li>
+      <li><strong>Mean opinion</strong>: whether the group drifts towards one side. With several models it becomes <strong>Mean opinion by model</strong>, one line per model, which shows whether models lean in different directions.</li>
+      <li><strong>Opinion distribution</strong>: how many agents hold an opinion in each band of width \(0.5\) at the current step. Consensus shows as one tall bar, two camps as two separate humps.</li>
+      <li><strong>All agents</strong>: every agent with its model, opinion and number of links, and the message it shared at the current step. Clicking a row follows that agent.</li>
+    </ul>
+
     <h2 id="outputs">Run files</h2>
-    <p class="wip">Work in progress</p>
+    <p>Every run, from the lab or from <code>disensa run</code>, writes one folder. Everything in the lab is read from these files, so a run folder can be analysed outside disensa, archived, or copied to another computer.</p>
+
+    <h3 id="run-folder">The run folder</h3>
+    <p>Run folders go in <code>runs/</code> (set by <code>output_dir</code>), relative to the folder disensa was started from, and are named <code>&lt;timestamp&gt;_&lt;name&gt;_s&lt;seed&gt;</code>, e.g. <code>20261103-230240_Big_Run_s44</code>. Characters of the name other than letters, digits, <code>-</code> and <code>_</code> become <code>_</code> in the folder name; the name itself is kept as typed in <code>meta.json</code>. The lab lists every folder in <code>runs/</code>, so a run copied there, for example from a computing cluster, appears under <em>Previous runs</em>.</p>
+<pre><code>runs/20261103-230240_Big_Run_s44/
+  meta.json          the config, timing and status
+  agents.parquet     one row per agent
+  edges.json         the network
+  opinions.parquet   one row per (step, agent)
+  metrics.parquet    one row per step
+  events.jsonl       LLM runs only: one line per (step, agent)</code></pre>
+    <p>The files are written while the run goes and saved after every step, so a stopped or crashed run keeps every step it finished. Tables are <a href="https://parquet.apache.org" target="_blank" rel="noopener">Parquet</a> files, which keep column types and open directly in pandas, DuckDB or R; text is <a href="https://jsonlines.org" target="_blank" rel="noopener">JSON Lines</a>, one JSON object per line.</p>
+
+    <h3 id="run-files-list">What each file holds</h3>
+    <p><strong><code>meta.json</code></strong> describes the run.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>config</code></td><td>the full config, with every default filled in (see <a href="#parameters">All parameters</a>). <em>Duplicate</em> in the lab starts from it.</td></tr>
+        <tr><td><code>git_commit</code></td><td>the commit of the disensa code, when it runs from a git checkout; otherwise <code>null</code></td></tr>
+        <tr><td><code>started</code></td><td>start time, <code>YYYYMMDD-HHMMSS</code></td></tr>
+        <tr><td><code>finished</code></td><td><code>true</code> once every step is done</td></tr>
+        <tr><td><code>cancelled</code></td><td><code>true</code> if the run was stopped</td></tr>
+        <tr><td><code>seconds</code></td><td>how long the run took, in seconds</td></tr>
+        <tr><td><code>llm_calls</code>, <code>cache_hits</code></td><td>LLM runs: requests made to models, including those answered from the cache, and how many of them were answered from the cache</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong><code>agents.parquet</code></strong> has one row per agent: <code>agent</code> (its number, \(0\) to \(N-1\)), <code>model</code> (the model string, or <code>numeric/&lt;rule&gt;</code> for numeric runs), <code>degree</code> (its number of links) and <code>initial_opinion</code> (\(x_i(0)\)).</p>
+    <p><strong><code>edges.json</code></strong> is the network as a list of links <code>[u, v]</code>, with \(u &lt; v\). The network does not change during a run.</p>
+    <p><strong><code>opinions.parquet</code></strong> has one row per agent and step, with columns <code>step</code>, <code>agent</code> and <code>opinion</code>: \(N \times (\text{steps} + 1)\) rows, step 0 included.</p>
+    <p><strong><code>metrics.parquet</code></strong> has one row per step, with the columns listed in <a href="#metrics-in-disensa">Metrics › In disensa</a>.</p>
+    <p><strong><code>events.jsonl</code></strong> (LLM runs only) has one line per agent and step, with everything the agent saw and said:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>step</code>, <code>agent</code>, <code>model</code></td><td>which agent, at which step, on which model</td></tr>
+        <tr><td><code>interactions</code></td><td>the messages it read: a list of <code>{author, message}</code>, each message as its author shared it at the previous step</td></tr>
+        <tr><td><code>reasoning</code></td><td>the model&rsquo;s explanation of its new opinion</td></tr>
+        <tr><td><code>message</code></td><td>the message it shared at this step</td></tr>
+        <tr><td><code>memory</code></td><td>its memory after this step</td></tr>
+        <tr><td><code>prompt</code></td><td>the exact prompt it was sent; the system prompt, the same for every agent, is not repeated (see <a href="#agents">LLM agents</a>)</td></tr>
+        <tr><td><code>raw</code></td><td>the model&rsquo;s reply, unparsed</td></tr>
+        <tr><td><code>error</code></td><td><code>null</code>, or why the reply could not be used</td></tr>
+      </tbody>
+    </table></div>
+    <p>Lines for step 0 are the first messages: no interactions, no reasoning and an empty memory. The opinion is not repeated in <code>events.jsonl</code>; it is in <code>opinions.parquet</code>.</p>
+
+    <h3 id="loading-a-run">Loading a run in Python</h3>
+    <p><code>load_run</code> reads a run folder, also while the run is still going:</p>
+<pre><code>from disensa.runs import load_run
+
+run = load_run("runs/20261103-230240_Big_Run_s44")
+run.metrics                  # pandas DataFrame, one row per step
+run.agents                   # one row per agent
+x = run.opinion_matrix()     # array of shape (steps + 1, agents)
+run.events[0]["message"]     # LLM runs: the events, as a list of dicts</code></pre>
+    <p>Without disensa, the tables open with <code>pandas.read_parquet</code> and the events with any JSON Lines reader.</p>
+
     <h2 id="parameters">All parameters</h2>
-    <p class="wip">Work in progress</p>
+    <p>A run is described by a YAML config, the file passed to <code>disensa run</code>. The lab builds the same config from its form, and every run folder keeps it in <code>meta.json</code>. This section lists every parameter; the sections linked in the tables explain what they do.</p>
+
+    <h3 id="config-file">A complete config</h3>
+    <p>Only <code>name</code>, <code>network.topology</code> with its parameters, <code>dynamics.type</code> and, for LLM runs, <code>dynamics.models</code> are required. Everything else has a default. This config sets every parameter of an LLM run, each at its default where it has one:</p>
+<pre><code>name: Euthanasia, small-world
+seed: 0
+steps: 10
+output_dir: runs
+
+network:
+  topology: watts_strogatz   # erdos_renyi | watts_strogatz | barabasi_albert
+  n: 50
+  k: 6                       # watts_strogatz
+  beta: 0.1                  # watts_strogatz
+  # p: 0.12                  # erdos_renyi
+  # m: 3                     # barabasi_albert
+
+opinions:
+  distribution: uniform      # uniform | normal | bimodal
+  mean: 0
+  std: 1
+
+dynamics:
+  type: llm
+  statement: Euthanasia should be legal for terminally ill adults who clearly request it.
+  models:
+    - name: ollama_chat/llama3.2:3b
+      weight: 1
+      temperature: 0.7
+      api_base: null
+  interactions: {min: 1, max: 5}
+  memory_words: 60
+  max_tokens: 400
+  max_concurrency: 4
+  cache_dir: .cache/llm</code></pre>
+    <p>For a numeric run, <code>dynamics</code> is instead:</p>
+<pre><code>dynamics:
+  type: numeric
+  rule: bounded_confidence   # degroot | bounded_confidence | friedkin_johnsen
+  epsilon: 1.0               # bounded_confidence
+  mu: 0.5                    # bounded_confidence
+  stubbornness: 1.0          # friedkin_johnsen</code></pre>
+    <div class="note" id="config-checks"><strong>Checks.</strong> A config is checked before the run starts. A missing parameter or a value out of range stops it with an error that names the parameter. Settings that are allowed but probably not intended, such as an Erdős–Rényi \(p\) too low for the network to be connected or \(\beta = 0\), give a warning instead, with a link to the section that explains it: in the lab next to the setting, and in the terminal before the run starts. Keys that disensa does not know are ignored, so a misspelled key silently leaves the default in place.</div>
+
+    <h3 id="parameters-run">Run</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Parameter</th><th>Values</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>name</code></td><td>any text; shown in the lab and used in the folder name</td><td>required</td></tr>
+        <tr><td><code>seed</code></td><td>integer; fixes the network, the initial opinions, the interactions and the model placement (<a href="#run-setup">Setup</a>)</td><td>\(0\)</td></tr>
+        <tr><td><code>steps</code></td><td>number of update steps, \(&gt; 0\); step 0 is saved as well (<a href="#run-step">One step</a>)</td><td>\(10\)</td></tr>
+        <tr><td><code>output_dir</code></td><td>where run folders go (<a href="#run-folder">The run folder</a>)</td><td><code>runs</code></td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 id="parameters-network">Network</h3>
+    <p>Under <code>network</code>. See <a href="#topologies">Network topologies</a>.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Parameter</th><th>Values</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>topology</code></td><td><code>erdos_renyi</code>, <code>watts_strogatz</code> or <code>barabasi_albert</code></td><td>required</td></tr>
+        <tr><td><code>n</code></td><td>number of agents, \(N &gt; 1\)</td><td>\(50\)</td></tr>
+        <tr><td><code>p</code></td><td><code>erdos_renyi</code>: link probability, \(0 \le p \le 1\)</td><td>required</td></tr>
+        <tr><td><code>k</code></td><td><code>watts_strogatz</code>: neighbours on the ring, even, \(2 \le k &lt; N\)</td><td>required</td></tr>
+        <tr><td><code>beta</code></td><td><code>watts_strogatz</code>: rewiring probability, \(0 \le \beta \le 1\)</td><td>required</td></tr>
+        <tr><td><code>m</code></td><td><code>barabasi_albert</code>: links per new agent, \(1 \le m &lt; N\)</td><td>required</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 id="parameters-opinions">Initial opinions</h3>
+    <p>Under <code>opinions</code>. See <a href="#initial-opinions">Initial opinions</a>.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Parameter</th><th>Values</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>distribution</code></td><td><code>uniform</code>, <code>normal</code> or <code>bimodal</code></td><td><code>uniform</code></td></tr>
+        <tr><td><code>mean</code></td><td>\(m\): centre (<code>normal</code>) or camp position \(\pm m\) (<code>bimodal</code>)</td><td>\(0\)</td></tr>
+        <tr><td><code>std</code></td><td>\(\sigma\): spread around \(m\)</td><td>\(1\)</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 id="parameters-numeric">Numeric dynamics</h3>
+    <p>Under <code>dynamics</code>, with <code>type: numeric</code>. See <a href="#algorithms">Numeric algorithms</a>.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Parameter</th><th>Values</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>rule</code></td><td><code>degroot</code>, <code>bounded_confidence</code> or <code>friedkin_johnsen</code></td><td><code>bounded_confidence</code></td></tr>
+        <tr><td><code>epsilon</code></td><td>bounded confidence: confidence bound, \(\varepsilon &gt; 0\)</td><td>\(1.0\)</td></tr>
+        <tr><td><code>mu</code></td><td>bounded confidence: step size, \(0 &lt; \mu \le 1\)</td><td>\(0.5\)</td></tr>
+        <tr><td><code>stubbornness</code></td><td>Friedkin–Johnsen: weight of the innate opinion, \(\lambda &gt; 0\)</td><td>\(1.0\)</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 id="parameters-llm">LLM dynamics</h3>
+    <p>Under <code>dynamics</code>, with <code>type: llm</code>. See <a href="#agents">LLM agents</a>.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Parameter</th><th>Values</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>statement</code></td><td>the statement agents take a position on</td><td>euthanasia statement</td></tr>
+        <tr><td><code>models</code></td><td>list of at least one model, each with the keys below</td><td>required</td></tr>
+        <tr><td><code>models[].name</code></td><td>model string, e.g. <code>ollama_chat/llama3.2:3b</code> (<a href="#agent-models">Models</a>)</td><td>required</td></tr>
+        <tr><td><code>models[].weight</code></td><td>share of the agents, \(&gt; 0\), relative to the other models</td><td>\(1\)</td></tr>
+        <tr><td><code>models[].temperature</code></td><td>how varied the replies are</td><td>\(0.7\)</td></tr>
+        <tr><td><code>models[].api_base</code></td><td>address of the server that runs the model; empty for Ollama on the same computer</td><td>empty</td></tr>
+        <tr><td><code>interactions.min</code>, <code>.max</code></td><td>how many neighbours&rsquo; messages an agent reads per step, \(0 \le \min \le \max\), \(\max \ge 1\) (<a href="#agent-interactions">Interactions</a>)</td><td>\(1\), \(5\)</td></tr>
+        <tr><td><code>memory_words</code></td><td>word limit asked for the memory, \(&gt; 0\)</td><td>\(60\)</td></tr>
+        <tr><td><code>max_tokens</code></td><td>longest reply allowed, \(&gt; 0\)</td><td>\(400\)</td></tr>
+        <tr><td><code>max_concurrency</code></td><td>requests sent at the same time to one provider, \(&gt; 0\)</td><td>\(4\)</td></tr>
+        <tr><td><code>cache_dir</code></td><td>where replies are cached (<a href="#agent-reliability">Error handling and reproducibility</a>)</td><td><code>.cache/llm</code></td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 id="commands">Commands</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>disensa run &lt;config&gt;</code></td><td>runs a config and prints the metrics after every step. <code>--steps N</code> overrides <code>steps</code>.</td></tr>
+        <tr><td><code>disensa app</code></td><td>opens the lab at <code>http://127.0.0.1:8765</code>. <code>--port</code> changes the port, <code>--no-open</code> does not open the browser.</td></tr>
+        <tr><td><code>disensa ping &lt;model&gt;</code></td><td>sends one prompt to a model, to check that it answers (<a href="#local-models">Local models</a>). <code>--prompt</code> changes the prompt.</td></tr>
+      </tbody>
+    </table></div>
+    <p>If Ollama is installed but not running, <code>disensa app</code> starts it on launch, and <code>disensa run</code> starts it when the config uses an Ollama model.</p>
+
     <h2 id="references">References</h2>
-    <p class="wip">Work in progress</p>
     <ul class="refs">
       <li>Barabási, A.-L. (2016). <em>Network Science</em>. Cambridge University Press. Ch. 2–5. <a href="https://networksciencebook.com" target="_blank" rel="noopener">networksciencebook.com</a></li>
       <li>Barabási, A.-L. &amp; Albert, R. (1999). Emergence of scaling in random networks. <em>Science</em>, 286, 509–512. <a href="https://doi.org/10.1126/science.286.5439.509" target="_blank" rel="noopener">doi:10.1126/science.286.5439.509</a></li>
       <li>Barrat, A. &amp; Weigt, M. (2000). On the properties of small-world network models. <em>The European Physical Journal B</em>, 13, 547–560. <a href="https://doi.org/10.1007/s100510050067" target="_blank" rel="noopener">doi:10.1007/s100510050067</a></li>
       <li>Chazelle, B. &amp; Wang, C. (2017). Inertial Hegselmann–Krause systems. <em>IEEE Transactions on Automatic Control</em>, 62(8), 3905–3913. <a href="https://doi.org/10.1109/TAC.2016.2644266" target="_blank" rel="noopener">doi:10.1109/TAC.2016.2644266</a></li>
       <li>Chitra, U. &amp; Musco, C. (2020). Analyzing the impact of filter bubbles on social network polarization. In <em>Proceedings of the 13th ACM International Conference on Web Search and Data Mining (WSDM 2020)</em>, 115–123. <a href="https://doi.org/10.1145/3336191.3371825" target="_blank" rel="noopener">doi:10.1145/3336191.3371825</a></li>
+      <li>Chuang, Y.-S., Goyal, A., Harlalka, N., Suresh, S., Hawkins, R., Yang, S., Shah, D., Hu, J. &amp; Rogers, T. T. (2024). Simulating opinion dynamics with networks of LLM-based agents. In <em>Findings of the Association for Computational Linguistics: NAACL 2024</em>, 3326–3346. <a href="https://aclanthology.org/2024.findings-naacl.211/" target="_blank" rel="noopener">aclanthology.org/2024.findings-naacl.211</a></li>
+      <li>Cinus, F., Minici, M., Monti, C. &amp; Bonchi, F. (2022). The effect of people recommenders on echo chambers and polarization. In <em>Proceedings of the International AAAI Conference on Web and Social Media (ICWSM 2022)</em>, 16(1). <a href="https://doi.org/10.1609/icwsm.v16i1.19275" target="_blank" rel="noopener">doi:10.1609/icwsm.v16i1.19275</a></li>
       <li>Deffuant, G., Neau, D., Amblard, F. &amp; Weisbuch, G. (2000). Mixing beliefs among interacting agents. <em>Advances in Complex Systems</em>, 3, 87–98. <a href="https://doi.org/10.1142/S0219525900000078" target="_blank" rel="noopener">doi:10.1142/S0219525900000078</a></li>
       <li>DeGroot, M. H. (1974). Reaching a consensus. <em>Journal of the American Statistical Association</em>, 69(345), 118–121. <a href="https://doi.org/10.1080/01621459.1974.10480137" target="_blank" rel="noopener">doi:10.1080/01621459.1974.10480137</a></li>
       <li>Erdős, P. &amp; Rényi, A. (1959). On random graphs I. <em>Publicationes Mathematicae Debrecen</em>, 6, 290–297. <a href="https://publi.math.unideb.hu/paper/2769" target="_blank" rel="noopener">publi.math.unideb.hu</a></li>
