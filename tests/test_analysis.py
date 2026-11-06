@@ -186,7 +186,7 @@ def test_analyze_end_to_end(make_cfg, tmp_path):
         "response_T1",
     ):
         assert (out / f"{f}.pdf").stat().st_size > 1000 and (out / f"{f}.csv").exists(), f
-    assert list(out.glob("run_T1_s3_r0.pdf"))
+    assert len(list(out.glob("run_T1_*.pdf"))) == 1, sorted(p.name for p in out.iterdir())
     fits = pd.read_csv(out / "fits.csv")
     assert set(fits["rule"]) == {
         "nobody_moves",
@@ -196,3 +196,28 @@ def test_analyze_end_to_end(make_cfg, tmp_path):
     }
     bc = pd.read_csv(out / "bc_clusters_vs_epsilon.csv")
     assert list(bc["epsilon"]) == [0.4, 1.0] and (bc["seeds"] == 2).all()
+
+
+def test_the_whole_analysis_can_read_a_scorer(make_cfg, tmp_path):
+    from typer.testing import CliRunner
+
+    from disensa import scorer
+    from disensa.analysis.summary import opinion_matrix
+    from disensa.cli import app
+    from disensa.llm import LLMClient
+
+    scored = make_run(make_cfg)
+    make_run(make_cfg, seed=4)  # an LLM run nobody scored
+    asyncio.run(scorer.score_run(scored, "fake/scorer", client=LLMClient(tmp_path / "c")))
+    X = opinion_matrix(load_run(scored), "fake/scorer")
+    assert X.shape == (5, 20) and np.all(X == np.round(X))  # the scorer's whole levels
+    assert not np.allclose(X, load_run(scored).opinion_matrix())
+    out = tmp_path / "figs"
+    res = CliRunner().invoke(
+        app, ["analyze", str(tmp_path / "runs"), "--out", str(out), "--measure", "fake/scorer"]
+    )
+    assert res.exit_code == 0, res.output
+    assert "skipped" in res.output and "has no scores.parquet" in res.output
+    assert pd.read_csv(out / "fits.csv")["path"].nunique() == 1
+    summary = pd.read_csv(out / "summary.csv")
+    assert len(summary) == 1 and summary["final_mean"].iloc[0] == pytest.approx(X[-1].mean())

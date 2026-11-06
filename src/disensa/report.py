@@ -134,6 +134,16 @@ def _fmt(v, unit: str = "") -> str:
     return f"{v:,}{unit}" if isinstance(v, int) else f"{v:g}{unit}"
 
 
+def _per_call(r: dict) -> str:
+    if r.get("seconds_per_call") is not None:
+        return f"{r['seconds_per_call']:g} s per model call"
+    if r.get("cache_hits") is not None and r["cache_hits"] == r.get("calls"):
+        return "no model calls this time (all from the cache)"
+    if r.get("cache_hits") is None:
+        return "per model call not recorded"
+    return "no model call answered"
+
+
 def format_report(r: dict | None) -> str:
     """A few lines for the terminal (`disensa run`, `disensa sweep`)."""
     if not r:
@@ -161,12 +171,13 @@ def format_report(r: dict | None) -> str:
             if r.get("prompt_tokens_mean") is not None
             else ""
         ),
-        f"time      {_fmt(r.get('seconds'), ' s')}, "
-        f"{_fmt(r.get('seconds_per_call'), ' s')} per model call",
+        f"time      {_fmt(r.get('seconds'), ' s')}, " + _per_call(r),
         f"range     {_fmt(r.get('out_of_range'))} beliefs outside [-2, 2] (clipped)",
     ]
     g = r.get("granularity")
-    if g:
+    if g is not None and not sum(g.values()):
+        lines.append("beliefs   no valid self-ratings")
+    elif g:
         n = sum(g.values()) or 1
         lines.append(
             "beliefs   "

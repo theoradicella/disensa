@@ -1,5 +1,9 @@
 """`disensa analyze`: the tables and figures of a set of runs, in one folder.
 
+With `measure` set to a scorer model, every LLM-run result (summaries, fits, figures,
+response curves) reads that scorer's ratings instead of the self-ratings (see
+summary.opinion_matrix); LLM runs it has not scored are skipped, with a note.
+
   runs.csv          every run found, config fields flattened (load.load_runs)
   summary.csv       per-run summary (summary.summarize_run)
   fits.csv          LLM runs: per rule and distance, the best numeric parameters (fit.py)
@@ -48,8 +52,13 @@ def analyze(paths, out: Path, measure: str = "self", delta: float = DELTA, echo=
     made: list[str] = []
 
     summaries = []
-    for p in runs["path"]:
-        s = summarize_run(load_run(p), delta)
+    for p, engine in zip(runs["path"], runs["engine"], strict=True):
+        m = measure if engine == "llm" else "self"  # numeric runs have no scorer
+        try:
+            s = summarize_run(load_run(p), delta, measure=m)
+        except ValueError as e:  # this LLM run was not scored by `measure`
+            echo(f"skipped {p}: {e}")
+            continue
         s["moved_by_step"] = json.dumps(s["moved_by_step"])
         s["granularity"] = json.dumps(s["granularity"])
         summaries.append({"path": p, **s})
@@ -74,18 +83,26 @@ def analyze(paths, out: Path, measure: str = "self", delta: float = DELTA, echo=
         all_fits, curves = [], []
         for _, r in llm.iterrows():
             run = load_run(r["path"])
-            best, _ = fitting.fit_run(run, delta=delta)
+            try:
+                best, _ = fitting.fit_run(run, delta=delta, measure=measure)
+            except ValueError:
+                continue  # not scored by `measure`: reported above
             best.insert(0, "topic", topics[r["statement"]])
             best.insert(0, "path", r["path"])
             all_fits.append(best)
-            name = f"run_{topics[r['statement']]}_s{r['seed']}_r{r['replicate']}"
-            made.append(figures.topic_runs(run, best, out, name).name)
+            # the folder name keeps it unique: several runs can share topic, seed and replicate
+            name = f"run_{topics[r['statement']]}_{Path(r['path']).name}"
+            made.append(figures.topic_runs(run, best, out, name, measure).name)
+        if not all_fits:
+            raise ValueError(f"no LLM run could be read with --measure {measure}")
         fits = pd.concat(all_fits, ignore_index=True)
         fits.to_csv(out / "fits.csv", index=False)
         if path := figures.fit_distances(fits, out):
             made.append(path.name)
         for statement, label in topics.items():
-            group = llm[llm["statement"] == statement]
+            group = llm[(llm["statement"] == statement) & llm["path"].isin(fits["path"])]
+            if group.empty:
+                continue
             rules = [
                 _median_dynamics(fits[fits["topic"] == label], rule)
                 for rule in ("degroot", "bounded_confidence", "friedkin_johnsen")

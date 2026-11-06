@@ -148,16 +148,19 @@ class LLMClient:
 
     def __init__(self, cache_dir: str | Path = ".cache/llm", max_concurrency: int = 16):
         self.cache = diskcache.Cache(str(cache_dir))
-        self._sem: dict[str, asyncio.Semaphore] = {}
+        # per provider, and per event loop: a semaphore belongs to the loop that first used it,
+        # and one client can serve several asyncio.run() calls (e.g. scoring a whole sweep)
+        self._sem: dict[tuple[int, str], asyncio.Semaphore] = {}
         self.max_concurrency = max_concurrency
         self.calls = 0
         self.cache_hits = 0
 
     def _semaphore(self, model: str) -> asyncio.Semaphore:
         provider = model.split("/", 1)[0]
-        if provider not in self._sem:
-            self._sem[provider] = asyncio.Semaphore(self.max_concurrency)
-        return self._sem[provider]
+        key = (id(asyncio.get_running_loop()), provider)
+        if key not in self._sem:
+            self._sem[key] = asyncio.Semaphore(self.max_concurrency)
+        return self._sem[key]
 
     async def complete(
         self,

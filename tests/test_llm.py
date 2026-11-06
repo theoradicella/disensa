@@ -105,3 +105,23 @@ def test_think_is_part_of_the_cache_key(tmp_path, litellm_kwargs):
     asyncio.run(client.complete("ollama_chat/x", msgs, think=False))
     b = asyncio.run(client.complete("ollama_chat/x", msgs, think=True))
     assert not b.cached and len(litellm_kwargs) == 2
+
+
+def test_one_client_serves_several_event_loops(tmp_path, monkeypatch):
+    """`disensa score` on a sweep reuses one client across asyncio.run() calls: its
+    concurrency limit must not stay bound to the first loop (found in a live test)."""
+    from disensa.llm import client as llm_client
+
+    async def slow(self, model, messages, params, api_base, json_mode):
+        await asyncio.sleep(0.01)  # so requests really wait on the limit
+        return llm_client.LLMResponse(text='{"a": 1}', model=model)
+
+    monkeypatch.setattr(llm_client.LLMClient, "_call_litellm", slow)
+    client = LLMClient(tmp_path / "cache", max_concurrency=1)
+
+    async def many(tag):
+        msgs = [[{"role": "user", "content": f"{tag} {i}"}] for i in range(4)]
+        return await asyncio.gather(*(client.complete("fake/x", m) for m in msgs))
+
+    for tag in ("first loop", "second loop"):
+        assert len(asyncio.run(many(tag))) == 4

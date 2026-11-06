@@ -247,12 +247,13 @@ def degroot_convergence_vs_topology(
 # ---------------------------------------------------------------- LLM runs against the rules
 
 
-def topic_runs(run, fits: pd.DataFrame, out: Path, name: str) -> Path:
+def topic_runs(run, fits: pd.DataFrame, out: Path, name: str, measure: str = "self") -> Path:
     """One LLM run: its agents' trajectories, and its final distribution against the
     best-fit (Wasserstein) simulation of each rule on the same world."""
     from disensa.analysis.fit import best_dynamics, simulate_numeric, world
+    from disensa.analysis.summary import opinion_matrix
 
-    X = run.opinion_matrix()
+    X = opinion_matrix(run, measure)
     graph, x0 = world(run)
     steps = len(X) - 1
     pyplot = plt()
@@ -264,7 +265,10 @@ def topic_runs(run, fits: pd.DataFrame, out: Path, name: str) -> Path:
     a.set_ylim(-2.1, 2.1)
     a.set_xlabel("step")
     a.set_ylabel("opinion")
-    a.set_title("LLM agents, one line each", loc="left")
+    a.set_title(
+        "LLM agents, one line each" + ("" if measure == "self" else f" (scorer: {measure})"),
+        loc="left",
+    )
     a.legend(loc="lower right")
     edges = np.arange(-2.25, 2.26, 0.5)  # bins centred on the whole and half numbers
     rows = [

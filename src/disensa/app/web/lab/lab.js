@@ -1037,7 +1037,9 @@
     section("Tokens", r.prompt_tokens == null ? NR : `${rnum(r.prompt_tokens)} in · ${rnum(r.completion_tokens)} out`,
       [r.prompt_tokens_mean == null ? "" : `${rnum(r.prompt_tokens_mean)} in · ${rnum(r.completion_tokens_mean)} out per reply`]);
     section("Time", duration(r.seconds), [
-      r.seconds_per_call == null ? `per model call: ${NR}` : `${rnum(r.seconds_per_call, 2)} s per model call`,
+      r.seconds_per_call != null ? `${rnum(r.seconds_per_call, 2)} s per model call`
+        : r.cache_hits == null ? `per model call: ${NR}`
+        : r.cache_hits === r.calls ? "no model calls: all from the cache" : "no model call answered",
       r.cache_hits == null ? `cache: ${NR}` : `${rnum(r.cache_hits)} of ${rnum(r.calls)} replies from the cache`,
     ]);
     section("Out of range", r.out_of_range == null ? NR : `${rnum(r.out_of_range)}`, [r.out_of_range == null ? "" : "beliefs outside −2…+2, clipped"]);

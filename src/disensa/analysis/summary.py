@@ -60,6 +60,33 @@ def wasserstein(a, b) -> float:
     return float(np.sum(np.abs(fa - fb) * np.diff(grid)))
 
 
+def opinion_matrix(run, measure: str = "self") -> np.ndarray:
+    """The run's opinions, shape (steps + 1, agents), as measured by `measure`.
+
+    "self" is the self-rating (the simulation state). A scorer model's name uses its ratings
+    of the agents' messages (scores.parquet, field "message"). A text the scorer found unclear
+    or failed on keeps that agent's previous rating; one missing from the start takes the
+    first rating it gets (a scorer reads what agents wrote, so this only fills gaps).
+    Numeric runs and LLM runs that were not scored only have "self".
+    """
+    if measure == "self":
+        return run.opinion_matrix()
+    s = run.scores
+    if s is None:
+        raise ValueError(f"{run.path} has no scores.parquet: run `disensa score` first")
+    s = s[(s["scorer_model"] == measure) & (s["field"] == "message")]
+    if s.empty:
+        raise ValueError(f"{run.path} has no message scores by {measure}")
+    X = (
+        s.pivot(index="step", columns="agent", values="score")
+        .reindex(index=range(run.steps + 1), columns=range(len(run.agents)))
+        .astype(float)
+        .ffill()
+        .bfill()
+    )
+    return X.to_numpy()
+
+
 def granularity(values) -> dict:
     """Counts of whole / half / other numbers (see report.py)."""
     from disensa.report import granularity as kind
@@ -91,10 +118,11 @@ def summarize_x(X, delta: float = DELTA, tol: float = TOL) -> dict:
     }
 
 
-def summarize_run(run, delta: float = DELTA, tol: float = TOL) -> dict:
-    """`summarize_x` of a loaded run (disensa.runs.load_run), plus its belief granularity:
-    for LLM runs over the valid self-ratings from step 1 on, as in the run report."""
-    out = summarize_x(run.opinion_matrix(), delta, tol)
+def summarize_run(run, delta: float = DELTA, tol: float = TOL, measure: str = "self") -> dict:
+    """`summarize_x` of a loaded run (disensa.runs.load_run), with its opinions measured by
+    `measure` (see opinion_matrix), plus the granularity of its self-ratings: for LLM runs
+    over the valid self-ratings from step 1 on, as in the run report."""
+    out = summarize_x(opinion_matrix(run, measure), delta, tol)
     beliefs = [
         e["belief_raw"]
         for e in run.events

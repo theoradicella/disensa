@@ -198,3 +198,13 @@ def test_disensa_run_prints_the_report_and_fails_with_the_guard(make_cfg, tmp_pa
         res = CliRunner().invoke(app, ["run", str(path)])
         assert res.exit_code == code, res.output
         assert "run report" in res.output and "failed" in res.output
+
+
+def test_report_wording_for_cached_and_empty_runs():
+    cached = summarize([{"step": 1, "cached": True, "latency_s": 2.0, "belief_raw": 1.0}], 0.0)
+    assert "all from the cache" in format_report(cached)
+    stopped = summarize(
+        [{"step": 0, "error": "x", "error_kind": "provider", "cached": False, "belief_raw": None}],
+        1.0,
+    )
+    assert "no valid self-ratings" in format_report(stopped)

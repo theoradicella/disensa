@@ -27,7 +27,13 @@ import numpy as np
 import pandas as pd
 
 from disensa import OPINION_MAX, OPINION_MIN
-from disensa.analysis.summary import DELTA, clusters, polarization_curve, wasserstein
+from disensa.analysis.summary import (
+    DELTA,
+    clusters,
+    opinion_matrix,
+    polarization_curve,
+    wasserstein,
+)
 from disensa.config import NumericDynamics
 from disensa.dynamics.numeric import NumericAgents
 
@@ -100,11 +106,18 @@ def label(dyn: NumericDynamics) -> dict:
 
 
 def scan(
-    run, candidates: list[NumericDynamics] | None = None, delta: float = DELTA
+    run,
+    candidates: list[NumericDynamics] | None = None,
+    delta: float = DELTA,
+    measure: str = "self",
 ) -> pd.DataFrame:
-    """Every candidate (and the "nobody moves" baseline) with its four distances to the run."""
+    """Every candidate (and the "nobody moves" baseline) with its four distances to the run.
+
+    The simulations always start from the run's true x(0); the run itself is read through
+    `measure` (the self-ratings, or a scorer's ratings: see summary.opinion_matrix).
+    """
     graph, x0 = world(run)
-    target = run.opinion_matrix()
+    target = opinion_matrix(run, measure)
     steps = len(target) - 1
     rows = [{"rule": "nobody_moves", **distances(target, np.repeat(x0[None], steps + 1, 0), delta)}]
     for dyn in candidates or grid():
@@ -132,9 +145,14 @@ def best(scanned: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def fit_run(run, candidates: list[NumericDynamics] | None = None, delta: float = DELTA):
+def fit_run(
+    run,
+    candidates: list[NumericDynamics] | None = None,
+    delta: float = DELTA,
+    measure: str = "self",
+):
     """(best table, full scan) for one run. See the module docstring."""
-    scanned = scan(run, candidates, delta)
+    scanned = scan(run, candidates, delta, measure)
     return best(scanned), scanned
 
 

@@ -204,7 +204,9 @@ def validation_report(folder: Path):
 def analyze(
     paths: list[Path],
     out: str = typer.Option(..., help="folder for the tables and PDF figures"),
-    measure: str = typer.Option("self", help="opinions for the response curve: self or a scorer"),
+    measure: str = typer.Option(
+        "self", help="LLM opinions: self (the self-rating) or a scorer model's name"
+    ),
     delta: float = typer.Option(0.5, help="gap that separates two opinion clusters"),
 ):
     """Tables and thesis figures for a set of runs or sweep folders (needs matplotlib)."""
