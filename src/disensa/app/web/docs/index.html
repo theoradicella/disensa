@@ -102,6 +102,14 @@
         </ol>
       </li>
       <li><a href="#sweeps">Sweeps</a></li>
+      <li><a href="#analysis">Analysis</a>
+        <ol>
+          <li><a href="#analysis-summary">Per-run summary</a></li>
+          <li><a href="#analysis-fit">Fitting numeric rules</a></li>
+          <li><a href="#analysis-response">Response curves</a></li>
+          <li><a href="#analysis-figures">Figures</a></li>
+        </ol>
+      </li>
       <li><a href="#parameters">All parameters</a>
         <ol>
           <li><a href="#config-file">A complete config</a></li>
@@ -924,6 +932,45 @@ grids:
     <p><strong>Sequential on purpose.</strong> On a Mac, Ollama answers one request at a time per loaded model anyway, so running several runs at once would not be faster; speed comes from <code>max_concurrency</code> within a run. On a cluster, a job array runs one share per GPU, each against its own vLLM server: see <code>scripts/indaco/</code> in the repository, and <a href="#vllm">Running on a vLLM server</a>.</p>
     <p>Example sweep files are in <code>configs/sweeps/</code>: bounded confidence over \(\varepsilon\) (<code>numeric_bc_epsilon.yaml</code>, 200 runs), Friedkin&ndash;Johnsen over the stubbornness (<code>numeric_fj_stubbornness.yaml</code>), and the topic runs with their numeric baselines (<code>topics_core.yaml</code>).</p>
 
+    <h2 id="analysis">Analysis</h2>
+    <p>The lab looks at one run at a time; the analysis reads many runs together and turns them into tables and figures. It runs from the terminal (the figures need <code>pip install 'disensa[analysis]'</code>, which adds matplotlib):</p>
+<pre><code>disensa analyze runs/topics_core runs/numeric_bc_epsilon --out figures/</code></pre>
+    <p>It takes run folders, sweep folders or a whole <code>runs/</code> folder, keeps the finished runs, and writes into <code>--out</code>: <code>runs.csv</code> (one row per run, with its config fields), <code>summary.csv</code> (one row per run, below), and the figures the runs allow, each as a PDF with a CSV of the numbers it plots. Every function is also importable from <code>disensa.analysis</code>, e.g. in a notebook.</p>
+    <p><strong>LLM beliefs are coarse</strong>: mostly whole or half numbers (see <a href="#run-report">Run report</a>), while numeric opinions move continuously. So LLM runs are compared with numeric ones through distributions, cluster counts, and the direction and frequency of moves, never step-by-step trajectories.</p>
+
+    <h3 id="analysis-summary">Per-run summary</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>final_mean</code>, <code>final_std</code>, <code>final_polarization</code></td><td>of the final opinions</td></tr>
+        <tr><td><code>clusters</code></td><td>the final opinions sorted and split wherever two neighbours are more than \(\delta\) apart. \(\delta = 0.5\) by default (<code>--delta</code>): LLM beliefs move in steps of \(0.5\), so two groups must be more than one half-step apart to count as two. The bounded-confidence figure uses \(\delta = 0.05\), since numeric clusters are points</td></tr>
+        <tr><td><code>convergence_step</code></td><td>the first step after which no opinion changes by \(10^{-3}\) or more; empty if the run was still moving at the end</td></tr>
+        <tr><td><code>drift</code></td><td>final mean \(-\) initial mean: whether the whole group moved to one side</td></tr>
+        <tr><td><code>moved_mean</code>, <code>moved_by_step</code></td><td>the share of agents whose opinion changed, on average and at each step</td></tr>
+        <tr><td><code>granularity</code></td><td>LLM runs: whole / half / other among the valid self-ratings</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 id="analysis-fit">Which numeric rule does an LLM run resemble?</h3>
+    <p>For each LLM run, every numeric rule is simulated on the run&rsquo;s own world (its network and starting opinions, read from the run folder) for as many steps as the run had, over a grid of parameters: DeGroot once, bounded confidence over \(\varepsilon\) from \(0.1\) to \(4\) and \(\mu \in \{0.1, 0.25, 0.5, 0.75, 1\}\), Friedkin&ndash;Johnsen over \(\lambda\) from \(0.01\) to \(100\). Each simulation is compared with the run by four distances: the <strong>Wasserstein distance</strong> between the final opinion distributions (how much opinion mass has to move to turn one into the other), the difference in the <strong>number of clusters</strong>, the difference in <strong>drift</strong>, and the root mean square difference of the <strong>polarization curves</strong>. <code>fits.csv</code> has, per run, rule and distance, the best parameters and the distance there (when a range of parameters ties, the median of the range). A <strong>&ldquo;nobody moves&rdquo;</strong> baseline, \(x(t) = x(0)\), is scored the same way: a rule only explains a run if it beats it. The simulations use the engine&rsquo;s own numeric code and take no time, so nothing is written to disk.</p>
+
+    <h3 id="analysis-response">How agents respond to what they hear</h3>
+    <p>Different local rules can give the same final picture (DeGroot and bounded confidence with a large \(\varepsilon\) both reach consensus), so the fit is checked at the level of single updates. For every LLM agent \(i\) at every step \(t \ge 1\) with at least one interaction and a reply that was used: \(d = \overline{x_j}(t-1) - x_i(t-1)\), how far the opinions of the authors it heard were from its own, and \(\Delta = x_i(t) - x_i(t-1)\), how much it moved. Binned by \(d\), the <strong>response curve</strong> shows the mean \(\Delta\) and the share of agents that moved. Each rule predicts a shape for the same inputs (the same agent, the same authors): DeGroot a straight line, \(\Delta = \tfrac{k}{k+1} d\); bounded confidence a line that drops to zero beyond \(\varepsilon\); Friedkin&ndash;Johnsen a line pulled back towards the starting opinion. The predictions use each topic&rsquo;s best-fit parameters. <code>--measure</code> chooses the opinions: <code>self</code> (the self-rating) or a scorer&rsquo;s name, once runs are scored (<a href="#measuring-opinions">Measuring opinions</a>).</p>
+
+    <h3 id="analysis-figures">Figures</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>File</th><th>Made from</th><th>Shows</th></tr></thead>
+      <tbody>
+        <tr><td><code>bc_clusters_vs_epsilon</code></td><td>bounded-confidence runs</td><td>final clusters against \(\varepsilon\), mean \(\pm\) sd over seeds</td></tr>
+        <tr><td><code>fj_polarization_vs_stubbornness</code></td><td>Friedkin&ndash;Johnsen runs</td><td>final polarization against \(\lambda\)</td></tr>
+        <tr><td><code>degroot_convergence_vs_topology</code></td><td>DeGroot runs</td><td>convergence step per topology</td></tr>
+        <tr><td><code>run_T&lt;k&gt;_s&lt;seed&gt;_r&lt;replicate&gt;</code></td><td>each LLM run</td><td>agents&rsquo; trajectories, and the final distribution against each rule&rsquo;s best fit</td></tr>
+        <tr><td><code>fit_distances_wasserstein</code></td><td>LLM runs</td><td>per topic, each rule&rsquo;s best distance and the baseline</td></tr>
+        <tr><td><code>response_T&lt;k&gt;</code></td><td>LLM runs of a topic</td><td>the response curve with each rule&rsquo;s prediction</td></tr>
+      </tbody>
+    </table></div>
+    <p>Topics are labelled T1, T2, &hellip; in the figures; <code>topics.csv</code> has the full statements.</p>
+
     <h2 id="parameters">All parameters</h2>
     <p>A run is described by a YAML config, the file passed to <code>disensa run</code>. The lab builds the same config from its form, and every run folder keeps it in <code>meta.json</code>. This section lists every parameter; the sections linked in the tables explain what they do.</p>
 
@@ -1055,6 +1102,7 @@ dynamics:
         <tr><td><code>disensa score &lt;run or sweep&gt; --model &lt;m&gt;</code></td><td>rates every agent text with a separate scorer model (<a href="#measuring-opinions">Measuring opinions</a>). <code>--field message|reasoning</code>, <code>--api-base</code>, <code>--max-concurrency</code>.</td></tr>
         <tr><td><code>disensa validation export &lt;runs&gt; --out &lt;dir&gt;</code></td><td>samples messages for blind human rating (<a href="#validation">Human validation</a>). <code>--n</code>, <code>--seed</code>.</td></tr>
         <tr><td><code>disensa validation report &lt;dir&gt;</code></td><td>compares the raters with each other, and the self-rating and each scorer with the raters.</td></tr>
+        <tr><td><code>disensa analyze &lt;runs&gt; --out &lt;dir&gt;</code></td><td>tables and thesis figures for many runs (<a href="#analysis">Analysis</a>). <code>--measure</code>, <code>--delta</code>.</td></tr>
         <tr><td><code>disensa app</code></td><td>opens the lab at <code>http://127.0.0.1:8765</code>. <code>--port</code> changes the port, <code>--no-open</code> does not open the browser.</td></tr>
         <tr><td><code>disensa ping &lt;model&gt;</code></td><td>sends one prompt to a model, to check that it answers (<a href="#local-models">Local models</a>). <code>--prompt</code> changes the prompt, <code>--api-base</code> sends it to another server (<a href="#vllm">vLLM</a>), <code>--think/--no-think</code> switches a model&rsquo;s thinking on or off. It prints the reply, its length in tokens, the time it took and whether the model thought.</td></tr>
       </tbody>

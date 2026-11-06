@@ -200,6 +200,28 @@ def validation_report(folder: Path):
     typer.echo(f"written to {folder}/report.json and {folder}/report.md")
 
 
+@app.command()
+def analyze(
+    paths: list[Path],
+    out: str = typer.Option(..., help="folder for the tables and PDF figures"),
+    measure: str = typer.Option("self", help="opinions for the response curve: self or a scorer"),
+    delta: float = typer.Option(0.5, help="gap that separates two opinion clusters"),
+):
+    """Tables and thesis figures for a set of runs or sweep folders (needs matplotlib)."""
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        raise typer.BadParameter(
+            "the figures need matplotlib: pip install 'disensa[analysis]'"
+        ) from None
+    from disensa.analysis.analyze import analyze as run_analysis
+
+    try:
+        run_analysis(paths, Path(out), measure, delta, echo=typer.echo)
+    except (ValueError, FileNotFoundError) as e:
+        raise typer.BadParameter(str(e)) from None
+
+
 @app.command(name="app")
 def app_cmd(
     port: int = typer.Option(8765, help="port on 127.0.0.1"),
