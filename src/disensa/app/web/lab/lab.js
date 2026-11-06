@@ -945,6 +945,17 @@
         row.append(name, bar, el("span", "share-count", `${counts[m] || 0}`));
         box.appendChild(row);
       });
+      // sampling settings, read-only (config file only); older runs did not record all of them
+      const sampling = (m) => [
+        `temperature ${m.temperature ?? "not recorded"}`,
+        `top_p ${m.top_p ?? "not recorded"}`,
+        `top_k ${m.top_k ?? "not recorded"}`,
+      ].join(" · ");
+      const lines = [...new Set(d.models.map(sampling))];
+      lines.forEach((line) => {
+        const who = lines.length > 1 ? d.models.filter((m) => sampling(m) === line).map((m) => short(m.name)).join(", ") + ": " : "";
+        box.appendChild(el("div", "spec-sub", who + line));
+      });
     } else {
       section("Update rule", ALGO_LABEL[d.rule] || d.rule,
         d.rule === "bounded_confidence" ? `ε = ${d.epsilon} · μ = ${d.mu}` : d.rule === "friedkin_johnsen" ? `λ = ${d.stubbornness}` : "");

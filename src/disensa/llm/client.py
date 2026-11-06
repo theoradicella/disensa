@@ -93,14 +93,23 @@ class LLMClient:
         messages: list[Message],
         *,
         temperature: float = 0.7,
+        top_p: float | None = None,
+        top_k: int | None = None,
         max_tokens: int = 512,
         api_base: str | None = None,
         seed: int | None = None,
         json_mode: bool = False,
         use_cache: bool = True,
     ) -> LLMResponse:
-        # `seed` is part of the key so repeated stochastic samples can be cached separately.
-        params = {"temperature": temperature, "max_tokens": max_tokens, "seed": seed}
+        # Every sampling setting is part of the key; `seed` too, so repeated stochastic
+        # samples can be cached separately.
+        params = {
+            "temperature": temperature,
+            "top_p": top_p,
+            "top_k": top_k,
+            "max_tokens": max_tokens,
+            "seed": seed,
+        }
         key = _cache_key(model, messages, params)
         self.calls += 1
         if use_cache and key in self.cache:

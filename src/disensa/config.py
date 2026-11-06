@@ -71,12 +71,19 @@ class NumericDynamics(BaseModel):
 
 
 class ModelSpec(BaseModel):
-    """One LLM. `name` is a LiteLLM model string, e.g. "ollama_chat/llama3.2:3b"."""
+    """One LLM. `name` is a LiteLLM model string, e.g. "ollama_chat/llama3.2:3b".
+
+    The sampling settings (temperature, top_p, top_k) are always sent explicitly, so a run
+    does not depend on the server's defaults: Ollama and vLLM have different ones. top_p and
+    top_k default to Ollama's defaults, so runs match the ones made locally before.
+    """
 
     name: str
     weight: float = Field(1.0, gt=0, description="share of agents using this model")
     api_base: str | None = None  # e.g. a vLLM endpoint
-    temperature: float = 0.7
+    temperature: float = Field(0.7, ge=0)
+    top_p: float = Field(0.9, gt=0, le=1)
+    top_k: int = Field(40, gt=0)
 
 
 class InteractionsConfig(BaseModel):

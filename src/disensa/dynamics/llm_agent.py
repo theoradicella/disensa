@@ -80,6 +80,8 @@ class LLMAgents:
                 m.name,
                 messages,
                 temperature=m.temperature,
+                top_p=m.top_p,
+                top_k=m.top_k,
                 max_tokens=self.cfg.max_tokens,
                 api_base=m.api_base,
                 seed=self.seed,
