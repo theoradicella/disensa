@@ -15,8 +15,10 @@ runs/<timestamp>_<name>_s<seed>[_r<replicate>]/
                      reply, any error and its kind, the belief before clipping, and what
                      the call cost (latency, tokens, cached)
 
-Parquet for tables (fast, typed, opens in pandas/DuckDB), JSONL for text. Every step is
-flushed, so a crash or a cancelled run keeps all finished steps.
+Parquet for tables (fast, typed, opens in pandas/DuckDB), JSONL for text. Every LLM step is
+flushed, so a crash or a cancelled run keeps all finished steps. Numeric steps take
+microseconds, so they are flushed at most once a second (rewriting the tables after each of
+hundreds of steps would make a numeric sweep slow), and always when the run ends or stops.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ import hashlib
 import json
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -111,6 +114,7 @@ class RunWriter:
         self._events = None  # opened on the first event: numeric runs have none
         self._opinions: list[dict] = []
         self._metrics: list[dict] = []
+        self._flushed = 0.0  # time of the last flush
 
     def start(self, graph: nx.Graph, labels: list[str], x0: np.ndarray) -> None:
         agents = pd.DataFrame(
@@ -132,15 +136,18 @@ class RunWriter:
             self._events = open(self.run_dir / "events.jsonl", "a", encoding="utf-8")
         for e in events:
             self._events.write(json.dumps(e, ensure_ascii=False) + "\n")
-        self.flush()
+        if events or time.monotonic() - self._flushed >= 1.0:
+            self.flush()
 
     def flush(self) -> None:
+        self._flushed = time.monotonic()
         if self._events:
             self._events.flush()
         pd.DataFrame(self._opinions).to_parquet(self.run_dir / "opinions.parquet", index=False)
         pd.DataFrame(self._metrics).to_parquet(self.run_dir / "metrics.parquet", index=False)
 
     def close(self) -> None:
+        self.flush()
         if self._events:
             self._events.close()
 
