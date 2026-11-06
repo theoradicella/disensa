@@ -549,14 +549,41 @@
   const TRASH = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.8 6.5v4.5M9.2 6.5v4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   // compact table (name, type, started, status); a click expands the row with the details and actions
   let expandedRun = null;
+  const openSweeps = new Set(); // sweeps (runs/<sweep>/) whose runs are shown
   function renderRunsList() {
     const box = $("runs"); box.replaceChildren();
     if (!RUNS.length) { box.appendChild(el("p", "hint", "No runs yet.")); return; }
     const wrap = el("div", "runs-wrap"), table = el("table", "runs-table"), head = el("thead"), body = el("tbody"), hr = el("tr");
     ["Name", "Type", "Started", "Status", ""].forEach((h) => hr.appendChild(el("th", null, h)));
     head.appendChild(hr);
-    RUNS.forEach((r) => {
-      const llm = r.engine === "llm", open = expandedRun === r.id, tr = el("tr", open ? "run-row open" : "run-row");
+    // runs of a sweep are grouped under one row per sweep, closed until clicked
+    const sweeps = new Map();
+    RUNS.filter((r) => r.sweep).forEach((r) => { if (!sweeps.has(r.sweep)) sweeps.set(r.sweep, []); sweeps.get(r.sweep).push(r); });
+    if (runId && runId.includes("/")) openSweeps.add(runId.split("/")[0]);
+    sweeps.forEach((runs, name) => {
+      const open = openSweeps.has(name), tr = el("tr", "sweep-row" + (open ? " open" : ""));
+      const td = el("td"); td.colSpan = 5;
+      const count = (st) => runs.filter((r) => r.status === st).length;
+      const parts = [`${runs.length} runs`, `${count("done")} done`];
+      if (count("running")) parts.push(`${count("running")} running`);
+      if (count("failed")) parts.push(`${count("failed")} failed`);
+      const rest = runs.length - count("done") - count("running") - count("failed");
+      if (rest) parts.push(`${rest} cancelled or incomplete`);
+      const chev = el("span", "row-chev"); chev.setAttribute("aria-hidden", "true");
+      td.append(el("span", "sweep-tag", "Sweep"), el("span", "sweep-name", name), el("span", "hint", parts.join(" · ")), chev);
+      tr.appendChild(td); tr.tabIndex = 0; tr.setAttribute("aria-expanded", String(open));
+      const toggle = () => { open ? openSweeps.delete(name) : openSweeps.add(name); renderRunsList(); };
+      tr.addEventListener("click", toggle);
+      tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+      body.appendChild(tr);
+      if (open) runs.forEach((r) => runRow(r, body, true));
+    });
+    RUNS.filter((r) => !r.sweep).forEach((r) => runRow(r, body, false));
+    table.append(head, body); wrap.appendChild(table); box.appendChild(wrap);
+  }
+  function runRow(r, body, inSweep) {
+    {
+      const llm = r.engine === "llm", open = expandedRun === r.id, tr = el("tr", (open ? "run-row open" : "run-row") + (inSweep ? " in-sweep" : ""));
       if (r.id === runId) tr.setAttribute("aria-current", "true");
       const tdName = el("td", "name"), tdType = el("td"), tdStatus = el("td");
       tdName.textContent = r.name;
@@ -574,13 +601,13 @@
       tr.addEventListener("click", () => { expandedRun = open ? null : r.id; renderRunsList(); });
       body.appendChild(tr);
       if (open) body.appendChild(runDetails(r, llm));
-    });
-    table.append(head, body); wrap.appendChild(table); box.appendChild(wrap);
+    }
   }
   function runDetails(r, llm) {
     const tr = el("tr", "run-details"), td = el("td"); td.colSpan = 5;
     const dl = el("dl");
     [["Duration", duration(r.status === "running" ? r.elapsed : r.seconds)], ["Agents", r.n], ["Steps", r.steps ?? "—"], ["Seed", r.seed ?? "—"],
+      ...(r.replicate ? [["Replicate", r.replicate]] : []),
       ...(llm ? [["Failed replies", r.failed_pct == null ? NR : `${rnum(r.failed_pct, 1)}%`]] : []),
       ["Network", (TOPO_LABEL[r.topology] || r.topology || "").split(" (")[0]],
       [llm ? "Models" : "Rule", llm ? r.models.map(short).join(", ") : ALGO_LABEL[(r.models[0] || "").split("/")[1]] || ""]]

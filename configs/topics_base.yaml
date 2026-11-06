@@ -1,0 +1,13 @@
+# The base of configs/sweeps/topics_core.yaml: everything the topic runs share.
+# Change the model (and, on INDACO, the api_base) here; the sweep varies the rest.
+name: topics_base
+seed: 1
+network: {topology: watts_strogatz, n: 50, k: 6, beta: 0.1}
+opinions: {distribution: uniform}
+steps: 10
+dynamics:
+  type: llm
+  statement: Euthanasia should be legal for terminally ill adults who clearly request it.
+  models:
+    - name: ollama_chat/llama3.1:8b
+  interactions: {min: 1, max: 5}

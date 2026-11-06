@@ -19,6 +19,7 @@ flushed, so a crash or a cancelled run keeps all finished steps.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -30,6 +31,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 
+from disensa import __version__
 from disensa.config import ExperimentConfig
 from disensa.seeding import SEEDING
 
@@ -41,6 +43,29 @@ def _git_commit() -> str | None:
         ).strip()
     except Exception:
         return None
+
+
+# settings that do not change what a run computes: left out of the config hash
+_NOT_HASHED = [
+    ("name",),
+    ("output_dir",),
+    ("dynamics", "cache_dir"),
+    ("dynamics", "max_concurrency"),
+]
+
+
+def config_hash(cfg: ExperimentConfig) -> str:
+    """Hash of what a run computes: its config without the name, folders and concurrency.
+
+    `disensa sweep` uses it to recognise a run that has already been done.
+    """
+    raw = cfg.model_dump(mode="json")
+    for path in _NOT_HASHED:
+        obj = raw
+        for k in path[:-1]:
+            obj = obj.get(k, {})
+        obj.pop(path[-1], None)
+    return hashlib.sha256(json.dumps(raw, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def new_run_dir(cfg: ExperimentConfig) -> Path:
@@ -60,6 +85,8 @@ def new_run_dir(cfg: ExperimentConfig) -> Path:
         "started": stamp,
         "status": "running",  # running | finished | cancelled | failed (engine.py)
         "seeding": SEEDING,  # which random-stream scheme made this run (seeding.py)
+        "config_hash": config_hash(cfg),
+        "disensa_version": __version__,
     }
     (run_dir / "meta.json").write_text(json.dumps(meta, indent=2))
     return run_dir

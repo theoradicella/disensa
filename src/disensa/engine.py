@@ -110,6 +110,11 @@ async def run(
     try:
         if writer:
             writer.start(graph, labels, x)
+            if cfg.dynamics.type == "llm":
+                from disensa.llm.serving import serving_info
+
+                info = await asyncio.to_thread(serving_info, cfg.dynamics.models)
+                update_meta(run_dir, serving=info)
         started = time.time()
         record(0, x, await dynamics.start(x), started)
         for t in range(1, cfg.steps + 1):

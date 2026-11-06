@@ -329,3 +329,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 #table-card { margin-top: 14px; }
 #table-card[hidden] { display: none; }
 .table-scroll { max-height: 420px; overflow: auto; }
+
+/* sweeps in the run list (runs/<sweep>/): one row per sweep, its runs indented under it */
+.sweep-row { cursor: pointer; }
+.sweep-row td { display: table-cell; padding: 9px 10px; }
+.sweep-row td > * { vertical-align: middle; }
+.sweep-row .sweep-tag { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); border: 1px solid #b7d3f6; background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; margin-right: 8px; }
+.sweep-row .sweep-name { font-weight: 600; margin-right: 10px; }
+.sweep-row .row-chev { float: right; width: 20px; height: 20px; }
+.sweep-row[aria-expanded="true"] .row-chev::before { transform: rotate(-135deg) translate(-1px, -1px); }
+.sweep-row:hover, .sweep-row:focus-visible { background: #f7f9fc; outline: none; }
+.run-row.in-sweep td.name { padding-left: 26px; }

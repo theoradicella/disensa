@@ -99,6 +99,7 @@
           <li><a href="#loading-a-run">Loading a run</a></li>
         </ol>
       </li>
+      <li><a href="#sweeps">Sweeps</a></li>
       <li><a href="#parameters">All parameters</a>
         <ol>
           <li><a href="#config-file">A complete config</a></li>
@@ -763,7 +764,7 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
     <p>Every run, from the lab or from <code>disensa run</code>, writes one folder. Everything in the lab is read from these files, so a run folder can be analysed outside disensa, archived, or copied to another computer.</p>
 
     <h3 id="run-folder">The run folder</h3>
-    <p>Run folders go in <code>runs/</code> (set by <code>output_dir</code>), relative to the folder disensa was started from, and are named <code>&lt;timestamp&gt;_&lt;name&gt;_s&lt;seed&gt;</code>, plus <code>_r&lt;replicate&gt;</code> for a replicate other than \(0\), e.g. <code>20261103-230240_Big_Run_s44</code>. Characters of the name other than letters, digits, <code>-</code> and <code>_</code> become <code>_</code> in the folder name; the name itself is kept as typed in <code>meta.json</code>. The lab lists every folder in <code>runs/</code>, so a run copied there, for example from a computing cluster, appears under <em>Previous runs</em>.</p>
+    <p>Run folders go in <code>runs/</code> (set by <code>output_dir</code>), relative to the folder disensa was started from, and are named <code>&lt;timestamp&gt;_&lt;name&gt;_s&lt;seed&gt;</code>, plus <code>_r&lt;replicate&gt;</code> for a replicate other than \(0\), e.g. <code>20261103-230240_Big_Run_s44</code>. Characters of the name other than letters, digits, <code>-</code> and <code>_</code> become <code>_</code> in the folder name; the name itself is kept as typed in <code>meta.json</code>. The lab lists every folder in <code>runs/</code>, so a run copied there, for example from a computing cluster, appears under <em>Previous runs</em>. Runs of a <a href="#sweeps">sweep</a> are one level down, in <code>runs/&lt;sweep name&gt;/</code>, and appear grouped under the sweep.</p>
 <pre><code>runs/20261103-230240_Big_Run_s44/
   meta.json          the config, timing and status
   agents.parquet     one row per agent
@@ -780,6 +781,10 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
       <tbody>
         <tr><td><code>config</code></td><td>the full config, with every default filled in (see <a href="#parameters">All parameters</a>). <em>Duplicate</em> in the lab starts from it.</td></tr>
         <tr><td><code>seeding</code></td><td>the random-stream scheme, \(2\) since disensa 0.3; missing for older runs (<a href="#seeds">Seeds and replicates</a>)</td></tr>
+        <tr><td><code>config_hash</code></td><td>a hash of what the run computes (the config without name, folders and concurrency); <a href="#sweeps">sweeps</a> use it to skip finished runs</td></tr>
+        <tr><td><code>disensa_version</code></td><td>the disensa version that made the run</td></tr>
+        <tr><td><code>serving</code></td><td>LLM runs: what served each model, asked once at the start: for Ollama the model&rsquo;s digest, quantization and size, for vLLM the model ids the server reported. Never compare runs served differently (<a href="#vllm">vLLM</a>)</td></tr>
+        <tr><td><code>sweep</code></td><td>runs of a sweep: the sweep&rsquo;s name</td></tr>
         <tr><td><code>git_commit</code></td><td>the commit of the disensa code, when it runs from a git checkout; otherwise <code>null</code></td></tr>
         <tr><td><code>started</code></td><td>start time, <code>YYYYMMDD-HHMMSS</code></td></tr>
         <tr><td><code>status</code></td><td><code>running</code>, <code>finished</code>, <code>cancelled</code> or <code>failed</code>. A run left at <code>running</code> that is not going any more was stopped by a crash; the lab shows it as <em>incomplete</em>. Runs made before disensa 0.3 have no status, only the two flags below.</td></tr>
@@ -844,6 +849,35 @@ run.agents                   # one row per agent
 x = run.opinion_matrix()     # array of shape (steps + 1, agents)
 run.events[0]["message"]     # LLM runs: the events, as a list of dicts</code></pre>
     <p>Without disensa, the tables open with <code>pandas.read_parquet</code> and the events with any JSON Lines reader.</p>
+
+    <h2 id="sweeps">Sweeps</h2>
+    <p>An experiment is rarely one run: it is the same setup over several seeds, topics or parameter values. A <strong>sweep file</strong> describes all of them at once, and <code>disensa sweep</code> runs them one after the other.</p>
+<pre><code>name: topics_core
+base: configs/topics_base.yaml       # a normal config file, or the config itself
+grids:
+  - seed: [1, 2, 3]
+    dynamics.statement:
+      - "Euthanasia should be legal for terminally ill adults who clearly request it."
+      - "..."
+  - seed: [1, 2, 3]                  # numeric baselines on the same worlds
+    dynamics:
+      - {type: numeric, rule: degroot}
+      - {type: numeric, rule: bounded_confidence}
+    dynamics.epsilon: [0.5, 1.0]</code></pre>
+    <p>Each <strong>grid</strong> maps settings to lists of values and stands for every combination of them (its cartesian product); the sweep is all the grids together. Settings are dotted paths into the config: <code>seed</code>, <code>network.n</code>, <code>dynamics.statement</code>. A value can be a whole block, such as a <code>dynamics</code> mapping, which replaces that block of the base; deeper settings like <code>dynamics.epsilon</code> are applied after it. Every combination is checked as a complete config before anything runs, so a typo stops the sweep at once instead of after hours. The same config twice is run once.</p>
+    <p>Each run is named after the sweep and the values that vary in its grid, e.g. <code>topics_core__seed=2__statement=1</code>; a long value appears as its position in the list (1 for the first). Runs go into <code>runs/&lt;sweep name>/</code>, next to <code>sweep.json</code>: the list of runs with their config hash, status, folder and a summary of their <a href="#run-report">run report</a>. The lab groups them under the sweep&rsquo;s name in <em>Previous runs</em>.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>disensa sweep &lt;file&gt;</code></td><td>runs every run of the sweep, one after the other, and prints a table at the end: run, status, failure %, seconds</td></tr>
+        <tr><td><code>--dry-run</code></td><td>lists the runs and estimates the LLM calls they will make, \(N \times (\text{steps} + 1)\) per LLM run, without running anything</td></tr>
+        <tr><td><code>--shard i/N</code></td><td>runs only share \(i\) of \(N\) (1-based): runs \(i, i+N, i+2N, \dots\) of the list. The \(N\) shares are disjoint and together cover the sweep; this is how a SLURM job array splits it</td></tr>
+        <tr><td><code>--cache-dir</code></td><td>uses another LLM cache folder for every run (one per job on a cluster)</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Resuming.</strong> A run whose config already has a finished folder in the sweep folder is skipped, so running the same sweep again continues where it stopped. The comparison is by a hash of the config without its name, folders, cache folder and concurrency, which do not change what a run computes. A run that crashed, was cancelled or failed is run again from scratch; the LLM cache replays the replies it already got, so that part is instant. One failed run never stops the sweep: it is marked failed in <code>sweep.json</code> and the sweep goes on.</p>
+    <p><strong>Sequential on purpose.</strong> On a Mac, Ollama answers one request at a time per loaded model anyway, so running several runs at once would not be faster; speed comes from <code>max_concurrency</code> within a run. On a cluster, a job array runs one share per GPU, each against its own vLLM server: see <code>scripts/indaco/</code> in the repository, and <a href="#vllm">Running on a vLLM server</a>.</p>
+    <p>Example sweep files are in <code>configs/sweeps/</code>: bounded confidence over \(\varepsilon\) (<code>numeric_bc_epsilon.yaml</code>, 200 runs), Friedkin&ndash;Johnsen over the stubbornness (<code>numeric_fj_stubbornness.yaml</code>), and the topic runs with their numeric baselines (<code>topics_core.yaml</code>).</p>
 
     <h2 id="parameters">All parameters</h2>
     <p>A run is described by a YAML config, the file passed to <code>disensa run</code>. The lab builds the same config from its form, and every run folder keeps it in <code>meta.json</code>. This section lists every parameter; the sections linked in the tables explain what they do.</p>
@@ -972,6 +1006,7 @@ dynamics:
       <thead><tr><th>Command</th><th>What it does</th></tr></thead>
       <tbody>
         <tr><td><code>disensa run &lt;config&gt;</code></td><td>runs a config and prints the metrics after every step. <code>--steps N</code> overrides <code>steps</code>.</td></tr>
+        <tr><td><code>disensa sweep &lt;file&gt;</code></td><td>runs every combination of a sweep file (<a href="#sweeps">Sweeps</a>). <code>--dry-run</code>, <code>--shard i/N</code>, <code>--cache-dir</code>.</td></tr>
         <tr><td><code>disensa app</code></td><td>opens the lab at <code>http://127.0.0.1:8765</code>. <code>--port</code> changes the port, <code>--no-open</code> does not open the browser.</td></tr>
         <tr><td><code>disensa ping &lt;model&gt;</code></td><td>sends one prompt to a model, to check that it answers (<a href="#local-models">Local models</a>). <code>--prompt</code> changes the prompt, <code>--api-base</code> sends it to another server (<a href="#vllm">vLLM</a>), <code>--think/--no-think</code> switches a model&rsquo;s thinking on or off. It prints the reply, its length in tokens, the time it took and whether the model thought.</td></tr>
       </tbody>

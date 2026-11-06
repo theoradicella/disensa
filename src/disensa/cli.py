@@ -1,4 +1,4 @@
-"""Command line: `disensa run <config>`, `disensa app`, `disensa ping <model>`."""
+"""Command line: `disensa run | sweep | app | ping`."""
 
 from __future__ import annotations
 
@@ -64,6 +64,55 @@ def run(config: Path, steps: int = typer.Option(None, help="override `steps`")):
     if d.type == "llm":
         typer.echo(format_report(load_meta(run_dir).get("report")))
     typer.echo(f"saved to {run_dir}")
+
+
+@app.command()
+def sweep(
+    file: Path,
+    dry_run: bool = typer.Option(False, "--dry-run", help="list the runs, run nothing"),
+    shard: str = typer.Option(None, help="run share i of N (1-based), e.g. 2/4"),
+    cache_dir: str = typer.Option(None, help="override dynamics.cache_dir for every run"),
+):
+    """Run every combination of a sweep file, one after the other (see /docs#sweeps)."""
+    from disensa import sweep as sw
+
+    try:
+        spec, base = sw.load_sweep(file)
+        runs = sw.expand(spec, base, Path(cache_dir) if cache_dir else None)
+        part = sw.parse_shard(shard)
+    except sw.SweepError as e:
+        typer.secho(f"error: {e}", fg="red", err=True)
+        raise typer.Exit(2) from None
+    todo = sw.shard(runs, part)
+    sw.refresh(runs, spec.output_dir / spec.name)
+    left = [r for r in todo if r.status != "finished"]
+    llm = sum(r.config.dynamics.type == "llm" for r in todo)
+    where = f", shard {part[0]}/{part[1]}" if part else ""
+    typer.echo(
+        f"{spec.name}: {len(runs)} runs{where}: {len(todo)} here ({llm} LLM), "
+        f"{len(todo) - len(left)} already finished, {len(left)} to run"
+    )
+    typer.echo(
+        f"estimated LLM calls: {sum(r.llm_calls for r in left):,} to make "
+        f"({sum(r.llm_calls for r in todo):,} in all), n_agents × (steps + 1) per LLM run"
+    )
+    if dry_run:
+        typer.echo(sw.table(todo))
+        return
+    d = [r.config.dynamics for r in left if r.config.dynamics.type == "llm"]
+    if any(m.name.startswith("ollama") and not m.api_base for dyn in d for m in dyn.models):
+        from disensa.llm import ollama
+
+        if err := ollama.ensure_running():
+            raise typer.BadParameter(err)
+    try:
+        done = asyncio.run(sw.run_sweep(spec, runs, todo, Path(file), echo=typer.echo))
+    except KeyboardInterrupt:
+        typer.secho("sweep stopped; finished runs are kept and skipped next time", fg="yellow")
+        raise typer.Exit(130) from None
+    typer.echo(sw.table(done))
+    if any(r.status == "failed" for r in done):
+        raise typer.Exit(1)
 
 
 @app.command(name="app")

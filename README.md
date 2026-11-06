@@ -27,7 +27,12 @@ git clone https://github.com/theoradicella/disensa.git && cd disensa
 uv sync
 uv run disensa app                         # the web app
 uv run disensa run configs/numeric_bc.yaml # a run from the command line
+uv run disensa sweep configs/sweeps/numeric_bc_epsilon.yaml   # 200 runs from one file
 uv run pytest                              # tests (no model calls)
 ```
+
+A sweep runs every combination of a few settings, e.g. 20 values of ε × 10 seeds, into
+`runs/<sweep name>/`; `--dry-run` lists the runs first. On a GPU cluster the same file runs
+as a SLURM job array against vLLM: see `scripts/indaco/README.md`.
 
 The app's **docs** page explains how a run works; run outputs are described in `src/disensa/runs.py`.

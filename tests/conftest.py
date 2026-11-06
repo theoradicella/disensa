@@ -5,8 +5,10 @@ from fake_llm import fake_reply
 
 from disensa.config import ExperimentConfig
 from disensa.llm import client as llm_client
+from disensa.llm import serving
 
 _REAL_CALL = llm_client.LLMClient._call_litellm  # before the autouse fixture replaces it
+REAL_DESCRIBE = serving.describe
 
 
 @pytest.fixture(autouse=True)
@@ -24,6 +26,8 @@ def offline_models(monkeypatch):
         return llm_client.LLMResponse(text=text, model=model, usage=usage)
 
     monkeypatch.setattr(llm_client.LLMClient, "_call_litellm", fake_call)
+    # and the start-of-run question "what is serving this model?" never leaves the machine
+    monkeypatch.setattr(serving, "describe", lambda m: {"provider": m.name.split("/")[0]})
 
 
 @pytest.fixture

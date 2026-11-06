@@ -11,7 +11,9 @@ Standard library only (http.server), bound to 127.0.0.1.
   GET  /api/models/pull         {"<model>": {"status", "progress", "error"}}  download progress
   POST /api/models/pull         {"name": "<model>"}  start downloading a suggested model
   POST /api/models/cancel       {"name": "<model>"}  stop that download
-  GET  /api/runs                past and running runs, newest first
+  GET  /api/runs                past and running runs, newest first; runs of a sweep
+                                (runs/<sweep>/<run>/) have the id "<sweep>/<run>"
+                                (URL-encoded in the paths below) and a "sweep" field
   POST /api/runs                {"config": {...}} -> {"id": ...}   starts a run
   POST /api/check               {"config": {...}} -> {"checks": [...]}  warnings (checks.py)
   GET  /api/runs/<id>           the run's data for the viewer (works while it is running)
@@ -33,6 +35,7 @@ import shutil
 import threading
 import time
 import traceback
+import urllib.parse
 import webbrowser
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -150,9 +153,13 @@ class RunManager:
     # ---------------------------------------------------------------- reading runs
 
     def run_dir(self, run_id: str) -> Path | None:
-        if not run_id or "/" in run_id or "\\" in run_id or run_id.startswith("."):
+        """The folder of a run id: "<run>" or, inside a sweep folder, "<sweep>/<run>"."""
+        parts = (run_id or "").split("/")
+        if not 1 <= len(parts) <= 2 or "\\" in run_id:
             return None
-        d = self.runs_root / run_id
+        if any(not p or p.startswith(".") for p in parts):
+            return None
+        d = self.runs_root.joinpath(*parts)
         return d if (d / "meta.json").exists() else None
 
     def status(self, run_id: str) -> dict:
@@ -190,41 +197,51 @@ class RunManager:
         return True
 
     def list(self) -> list[dict]:
+        """Runs newest first: the last 100 runs at the top level, and every run of a sweep."""
         if not self.runs_root.exists():
             return []
-        out = []
+        top, swept = [], []
         for d in sorted(self.runs_root.iterdir(), reverse=True):
-            try:
-                meta = json.loads((d / "meta.json").read_text())
-                cfg = meta["config"]
-                dyn = cfg["dynamics"]
-            except (OSError, json.JSONDecodeError, KeyError):
-                continue  # not a run folder, or one from an older version
-            models = (
-                [f"numeric/{dyn['rule']}"]
-                if dyn["type"] == "numeric"
-                else [m["name"] for m in dyn["models"]]
-            )
-            out.append(
-                {
-                    **self.status(d.name),  # first, so its "steps": None does not hide the config's
-                    "id": d.name,
-                    "name": cfg["name"],
-                    "started": d.name.split("_", 1)[0],
-                    "engine": dyn["type"],
-                    "topology": cfg["network"]["topology"],
-                    "n": cfg["network"]["n"],
-                    "steps": cfg.get("steps"),
-                    "seed": cfg.get("seed"),
-                    "seconds": meta.get("seconds"),  # how long it ran; not saved by older versions
-                    "failed_pct": (meta.get("report") or {}).get(
-                        "failed_pct"
-                    ),  # None: not recorded
-                    "models": models,
-                    "config": cfg,  # for "Duplicate" in the lab
-                }
-            )
-        return out[:100]
+            if not d.is_dir() or d.name.startswith("."):
+                continue
+            if (d / "meta.json").exists():
+                if len(top) < 100 and (e := self._entry(d, d.name)):
+                    top.append(e)
+            elif (d / "sweep.json").exists() or any(d.glob("*/meta.json")):
+                for r in sorted(d.iterdir(), reverse=True):
+                    if (r / "meta.json").exists() and (e := self._entry(r, f"{d.name}/{r.name}")):
+                        swept.append({**e, "sweep": d.name})
+        return top + swept
+
+    def _entry(self, d: Path, run_id: str) -> dict | None:
+        """The list entry of one run folder, or None if it is not one."""
+        try:
+            meta = json.loads((d / "meta.json").read_text())
+            cfg = meta["config"]
+            dyn = cfg["dynamics"]
+        except (OSError, json.JSONDecodeError, KeyError):
+            return None  # not a run folder, or one from an older version
+        models = (
+            [f"numeric/{dyn['rule']}"]
+            if dyn["type"] == "numeric"
+            else [m["name"] for m in dyn["models"]]
+        )
+        return {
+            **self.status(run_id),  # first, so its "steps": None does not hide the config's
+            "id": run_id,
+            "name": cfg["name"],
+            "started": d.name.split("_", 1)[0],
+            "engine": dyn["type"],
+            "topology": cfg["network"]["topology"],
+            "n": cfg["network"]["n"],
+            "steps": cfg.get("steps"),
+            "seed": cfg.get("seed"),
+            "replicate": cfg.get("replicate", 0),
+            "seconds": meta.get("seconds"),  # how long it ran; not saved by older versions
+            "failed_pct": (meta.get("report") or {}).get("failed_pct"),  # None: not recorded
+            "models": models,
+            "config": cfg,  # for "Duplicate" in the lab
+        }
 
     def payload(self, run_id: str) -> dict | None:
         from disensa.app.payload import build_payload
@@ -316,7 +333,7 @@ def make_handler(manager: RunManager):
                 return self._json(DOWNLOADS.status())
             if path == "/api/runs":
                 return self._json(manager.list())
-            parts = path.strip("/").split("/")
+            parts = [urllib.parse.unquote(p) for p in path.strip("/").split("/")]
             if len(parts) in (3, 4) and parts[:2] == ["api", "runs"]:
                 run_id = parts[2]
                 if manager.run_dir(run_id) is None:
@@ -372,13 +389,15 @@ def make_handler(manager: RunManager):
                 from disensa.checks import raw_checks
 
                 return self._json({"checks": raw_checks(body.get("config") or {})})
-            parts = path.strip("/").split("/")
+            parts = [urllib.parse.unquote(p) for p in path.strip("/").split("/")]
             if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "cancel":
                 return self._json({"cancelled": manager.cancel(parts[2])})
             self._error(404, "not found")
 
         def do_DELETE(self):  # noqa: N802
-            parts = self.path.split("?", 1)[0].strip("/").split("/")
+            parts = [
+                urllib.parse.unquote(p) for p in self.path.split("?", 1)[0].strip("/").split("/")
+            ]
             if len(parts) == 3 and parts[:2] == ["api", "runs"]:
                 if manager.delete(parts[2]):
                     return self._json({"deleted": parts[2]})
