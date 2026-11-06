@@ -8,6 +8,8 @@ runs/<timestamp>_<name>_s<seed>[_r<replicate>]/
   edges.json         the network as a list of [u, v] pairs
   opinions.parquet   one row per (step, agent): the opinion
   metrics.parquet    one row per step: polarization, disagreement, neighbour correlation, ...
+  scores.parquet     only after `disensa score`: a separate scorer's rating of each agent
+                     text (scorer.py); a measurement, never fed back into the run
   events.jsonl       LLM runs only, one line per (step, agent): its interactions (author +
                      message), its reasoning, new message, memory, the exact prompt and raw
                      reply, any error and its kind, the belief before clipping, and what
@@ -152,6 +154,7 @@ class Run:
     metrics: pd.DataFrame
     events: list[dict]
     edges: list[list[int]]
+    scores: pd.DataFrame | None = None  # scores.parquet, if the run was scored (scorer.py)
 
     @property
     def status(self) -> str:
@@ -190,4 +193,7 @@ def load_run(path: str | Path) -> Run:
         metrics=pd.read_parquet(path / "metrics.parquet"),
         events=events,
         edges=json.loads((path / "edges.json").read_text()),
+        scores=pd.read_parquet(path / "scores.parquet")
+        if (path / "scores.parquet").exists()
+        else None,
     )

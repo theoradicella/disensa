@@ -21,6 +21,9 @@ belief ones, so the run gets to step 1):
   outofrange   "belief": 5 (clipped to 2)
   halves       a bounded-confidence agent that reports whole or half numbers only
   down         the server cannot be reached (raised in conftest.py)
+
+As a scorer (scorer.py), a fake model reads the position out of the text and rounds it;
+fake/unclear always answers "unclear", fake/offscale answers 7.
 """
 
 from __future__ import annotations
@@ -61,6 +64,13 @@ def fake_reply(model: str, messages: list[dict]) -> str:
 
     if behaviour == "badjson":
         return "I would rather not answer in that format."
+    if "What is the author's position on this statement" in prompt:  # the scorer
+        if behaviour == "unclear":
+            return json.dumps({"score": "unclear"})
+        if behaviour == "offscale":
+            return json.dumps({"score": 7})
+        m = _POSITION_IN_MESSAGE.search(prompt)
+        return json.dumps({"score": round(float(m.group(1))) if m else "unclear"})
     if '{"message": "<your message>"}' in prompt:  # initial message
         m = _INITIAL_POSITION.search(prompt)
         v = float(m.group(1)) if m else 0.0

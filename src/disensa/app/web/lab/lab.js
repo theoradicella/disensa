@@ -312,6 +312,18 @@
     box.appendChild(kv);
     const p = DATA.agent_steps[step][a.id];
     if (!p) return;
+    // a separate scorer's rating of this step's text, next to the agent's own (scorer.py)
+    if (p.scores) {
+      const sc = el("div", "scores");
+      sc.appendChild(el("div", "label", "Self-rating and scorer"));
+      const row = (name, value, title) => { const r = el("div", "kv"); r.append(el("span", "hint", name), el("b", null, value)); if (title) r.title = title; sc.appendChild(r); };
+      row("Self-rating", step === 0 ? "— (given)" : fmt(DATA.opinions[step][a.id]));
+      Object.entries(p.scores).forEach(([label, v]) => {
+        const [model, field] = label.split(" · ");
+        row(`Scorer ${short(model)} (${field})`, typeof v === "number" ? (v > 0 ? "+" : "") + v : v, label);
+      });
+      box.appendChild(sc);
+    }
     if (p.interactions.length) {
       box.appendChild(el("div", "label", "Interacted with"));
       const f = el("div", "interactions");

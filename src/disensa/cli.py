@@ -115,6 +115,46 @@ def sweep(
         raise typer.Exit(1)
 
 
+@app.command()
+def score(
+    path: Path,
+    model: str = typer.Option(..., help="the scorer, a LiteLLM model name"),
+    api_base: str = typer.Option(None, help="server address, e.g. http://localhost:8000/v1"),
+    field: str = typer.Option("message", help="which text to rate: message or reasoning"),
+    max_concurrency: int = typer.Option(8, help="parallel requests to the scorer"),
+):
+    """Rate every logged agent text of a run (or of every run of a sweep) with a scorer model.
+
+    A measurement only: the scores are written to scores.parquet and never change the run.
+    """
+    from disensa import scorer
+    from disensa.llm import LLMClient, ollama
+
+    if field not in scorer.FIELDS:
+        raise typer.BadParameter(f"--field must be one of {', '.join(scorer.FIELDS)}")
+    dirs = [d for d in scorer.run_dirs(path) if scorer.agent_models(load_meta(d))]
+    if not dirs:
+        raise typer.BadParameter(f"no LLM run folder at {path}")
+    if model.startswith("ollama") and not api_base and (err := ollama.ensure_running()):
+        raise typer.BadParameter(err)
+    client = LLMClient(max_concurrency=max_concurrency)
+    for d in dirs:
+        if model in scorer.agent_models(load_meta(d)):
+            typer.secho(
+                f"warning: {model} is also one of the agents' models in {d.name}: it would "
+                "be rating its own texts (self-rating bias). Prefer a scorer that is not.",
+                fg="yellow",
+                err=True,
+            )
+        rows = asyncio.run(scorer.score_run(d, model, field, api_base, client))
+        ok = rows["score"].notna().sum()
+        unclear = (rows["score"].isna() & rows["error"].isna()).sum()
+        typer.echo(
+            f"{d.name}: {len(rows)} texts, {ok} scored, {unclear} unclear, "
+            f"{rows['error'].notna().sum()} failed -> scores.parquet"
+        )
+
+
 @app.command(name="app")
 def app_cmd(
     port: int = typer.Option(8765, help="port on 127.0.0.1"),

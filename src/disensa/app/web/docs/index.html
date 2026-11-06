@@ -61,6 +61,7 @@
           <li><a href="#agent-update">Updating the opinion</a></li>
           <li><a href="#agent-models">Models</a></li>
           <li><a href="#agent-reliability">Error handling</a></li>
+          <li><a href="#measuring-opinions">Measuring opinions</a></li>
           <li><a href="#agents-in-disensa">In disensa</a></li>
         </ol>
       </li>
@@ -542,7 +543,7 @@ Respond ONLY with JSON: {"message": "&lt;your message&gt;"}</code></pre>
       </tbody>
     </table></div>
     <p><strong>There is no update rule.</strong> Unlike the <a href="#algorithms">numeric algorithms</a>, there are no parameters that shape the update: no confidence bound \(\varepsilon\), no step size \(\mu\), no stubbornness. The new opinion is whatever number the model reports. If LLM agents end up listening only to similar views (as in <a href="#bounded-confidence">bounded confidence</a>) or clinging to where they started (as in <a href="#friedkin-johnsen">Friedkin&ndash;Johnsen</a>), that behaviour comes from the model, not from the code.</p>
-    <div class="note"><strong>Self-reported opinions.</strong> The opinion is what the agent says it is. Chuang et al. found that scoring the agent&rsquo;s message with a separate classifier model is more reliable than asking for a number. disensa uses the self-report for now; the <code>reasoning</code> and <code>message</code> are saved, so a classifier could be run on them afterwards.</div>
+    <div class="note"><strong>Self-reported opinions.</strong> The opinion is what the agent says it is. A separate scorer can rate the agents&rsquo; texts after the run, as a second measurement: see <a href="#measuring-opinions">Measuring opinions</a>.</div>
     <details class="example">
       <summary>Prompt: one step</summary>
       <div class="example-body">
@@ -578,6 +579,33 @@ Respond ONLY with JSON:
     <p>Models do not always follow the format. disensa asks for JSON mode when the provider supports it, and repairs common mistakes (text around the JSON, trailing commas). If that fails, it asks the model once more to fix its reply. If the reply is still unusable, or the provider returns an error, the run does not stop: the agent keeps its previous opinion, message and memory for that step, and the error is saved with the step so it can be counted and inspected. The <code>belief</code> must be a finite number: <code>NaN</code>, <code>true</code> or <code>"a lot"</code> count as failed replies. A number outside \([-2, 2]\) is clipped to the nearest end, and both the clipping and the number the model gave are saved. A missing <code>message</code> or <code>memory</code> also keeps the previous one. The one case with nothing to keep is step 0: an agent whose first message fails has no message yet, so its neighbours cannot hear it until it says something.</p>
     <p>A few failures are normal. Many are not, and they are easy to miss, because a failed reply keeps the opinion: a run where most calls fail looks like a run of very stubborn agents. So a run <strong>stops</strong> when more than <code>max_error_rate</code> of the replies of one step fail (default \(20\%\), step 0 included). It is marked <em>failed</em> with the reason, e.g. &ldquo;step 3: 47/50 replies failed (provider: connection refused)&rdquo;, every finished step is kept, and <code>disensa run</code> exits with an error. How many replies failed, and why, is in the <a href="#run-report">run report</a>.</p>
     <p>Every reply is <strong>cached</strong> on disk under its exact request: the model, the full prompt, the sampling settings (temperature, <code>top_p</code>, <code>top_k</code>), <code>max_tokens</code> and the sampling seed. Running the same config again replays the same replies without calling any model, so an LLM run is reproducible once it has been run once. Changing anything in the prompt (the statement, a neighbour&rsquo;s message, the memory) makes it a new request.</p>
+
+    <h3 id="measuring-opinions">Measuring opinions: self-rating and scorer</h3>
+    <p>There are two ways to read an LLM agent&rsquo;s opinion. The <strong>self-rating</strong> is the <code>belief</code> the agent reports in its own reply. It is what the simulation runs on: it becomes \(x_i(t)\), the agent sees it again in its next prompt, and the metrics are computed from it. The <strong>scorer</strong> is a separate model that reads what the agent wrote and rates it on the same 5-point scale, the way a human reader would. Chuang et al. (2024) used a scorer of this kind (Flan-T5-XXL) and validated it against blind human ratings: three raters agreed with each other at Krippendorff&rsquo;s \(\alpha = 0.81\), and the scorer matched the raters&rsquo; majority 84% of the time. Self-rating was never measured against humans.</p>
+    <p>In disensa the scorer is <strong>a measurement only</strong>. It runs after a run, on the texts in <code>events.jsonl</code>, and never feeds back into the simulation, so the same run can be scored by several models, or again later, without changing anything that happened. Which of the two measures the analysis relies on is decided with data: a sample of messages is rated blind by several people (<a href="#validation">Human validation</a>), and the measure that agrees better with them is used.</p>
+<pre><code>disensa score runs/20261103-230240_Big_Run_s44 --model ollama_chat/qwen2.5:7b
+disensa score runs/topics_core --model ollama_chat/qwen2.5:7b --field reasoning</code></pre>
+    <p><code>disensa score</code> rates every text of a run, or of every LLM run in a sweep folder: by default the <code>message</code> each agent shared at each step (step 0 included), or its <code>reasoning</code> with <code>--field reasoning</code>. Calls go through the same client and cache as the agents, at temperature 0, with JSON replies; <code>--api-base</code> points it at another server. Use a scorer that is not one of the run&rsquo;s agent models: a model rating its own texts may share their blind spots, and disensa warns when it is. The ratings go to <code>scores.parquet</code> in the run folder (<a href="#run-files-list">Run files</a>), and the lab shows them in the agent panel next to the self-rating. The prompt, adapted from Chuang et al.&rsquo;s App. I to a community instead of a social network:</p>
+    <details class="example">
+      <summary>Prompt: scorer</summary>
+      <div class="example-body">
+<pre><code>[system]
+You rate the opinions people express. Answer only with the JSON asked for.
+
+[user]
+Here is a text written by a member of a community.
+---
+{text}
+---
+What is the author's position on this statement: "{statement}"
+
+Rate it on a 5-point scale:
+-2: strongly oppose, -1: somewhat oppose, 0: neutral, 1: somewhat support, 2: strongly support.
+If the text does not show the author's position on the statement, answer "unclear".
+Respond ONLY with JSON: {"score": &lt;one of -2, -1, 0, 1, 2, or "unclear"&gt;}</code></pre>
+        <p>&ldquo;unclear&rdquo; is allowed so that a text taking no position is not forced to count as neutral. It is stored as an empty score with no error; a reply that is not on the scale is stored as an error.</p>
+      </div>
+    </details>
 
     <h3 id="agents-in-disensa">In disensa</h3>
     <p>Set <code>dynamics.type: llm</code>, a statement and at least one model. <code>configs/quick.yaml</code> is the smallest run, one small Ollama model; <code>configs/mixed_local.yaml</code> mixes three Ollama models on a Mac.</p>
@@ -771,7 +799,8 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
   edges.json         the network
   opinions.parquet   one row per (step, agent)
   metrics.parquet    one row per step
-  events.jsonl       LLM runs only: one line per (step, agent)</code></pre>
+  events.jsonl       LLM runs only: one line per (step, agent)
+  scores.parquet     only after disensa score: a scorer's ratings</code></pre>
     <p>The files are written while the run goes and saved after every step, so a stopped or crashed run keeps every step it finished. Tables are <a href="https://parquet.apache.org" target="_blank" rel="noopener">Parquet</a> files, which keep column types and open directly in pandas, DuckDB or R; text is <a href="https://jsonlines.org" target="_blank" rel="noopener">JSON Lines</a>, one JSON object per line.</p>
 
     <h3 id="run-files-list">What each file holds</h3>
@@ -820,6 +849,7 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
         <tr><td><code>cached</code></td><td><code>true</code> if the reply came from the cache: it cost nothing this time, and the tokens and seconds are what the original call cost</td></tr>
       </tbody>
     </table></div>
+    <p><strong><code>scores.parquet</code></strong> exists only once a run has been scored (<a href="#measuring-opinions">Measuring opinions</a>). It has one row per text and scorer: <code>step</code>, <code>agent</code>, <code>field</code> (<code>message</code> or <code>reasoning</code>), <code>scorer_model</code>, <code>score</code> (\(-2\) to \(2\); empty when the scorer answered &ldquo;unclear&rdquo; or failed), <code>raw</code> (the scorer&rsquo;s reply) and <code>error</code>. Several scorers and fields can share the file; scoring again with the same scorer and field replaces its rows.</p>
     <p>Lines for step 0 are the first messages: no interactions, no reasoning and an empty memory. The opinion is not repeated in <code>events.jsonl</code>; it is in <code>opinions.parquet</code>. Runs made before disensa 0.3 have no <code>error_kind</code>, <code>belief_raw</code>, <code>clipped</code>, tokens, latency or <code>cached</code>; the lab shows those numbers as &ldquo;not recorded&rdquo;.</p>
 
     <h3 id="run-report">Run report</h3>
@@ -1007,6 +1037,7 @@ dynamics:
       <tbody>
         <tr><td><code>disensa run &lt;config&gt;</code></td><td>runs a config and prints the metrics after every step. <code>--steps N</code> overrides <code>steps</code>.</td></tr>
         <tr><td><code>disensa sweep &lt;file&gt;</code></td><td>runs every combination of a sweep file (<a href="#sweeps">Sweeps</a>). <code>--dry-run</code>, <code>--shard i/N</code>, <code>--cache-dir</code>.</td></tr>
+        <tr><td><code>disensa score &lt;run or sweep&gt; --model &lt;m&gt;</code></td><td>rates every agent text with a separate scorer model (<a href="#measuring-opinions">Measuring opinions</a>). <code>--field message|reasoning</code>, <code>--api-base</code>, <code>--max-concurrency</code>.</td></tr>
         <tr><td><code>disensa app</code></td><td>opens the lab at <code>http://127.0.0.1:8765</code>. <code>--port</code> changes the port, <code>--no-open</code> does not open the browser.</td></tr>
         <tr><td><code>disensa ping &lt;model&gt;</code></td><td>sends one prompt to a model, to check that it answers (<a href="#local-models">Local models</a>). <code>--prompt</code> changes the prompt, <code>--api-base</code> sends it to another server (<a href="#vllm">vLLM</a>), <code>--think/--no-think</code> switches a model&rsquo;s thinking on or off. It prints the reply, its length in tokens, the time it took and whether the model thought.</td></tr>
       </tbody>

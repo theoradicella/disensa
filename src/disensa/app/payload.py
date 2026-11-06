@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import networkx as nx
 import numpy as np
+import pandas as pd
 
 from disensa.report import summarize
 from disensa.runs import Run
@@ -46,6 +47,18 @@ def build_payload(run: Run) -> dict:
                 "interactions": [int(it["author"]) for it in e.get("interactions") or []],
                 "error": e.get("error") or None,
             }
+
+    # scorer ratings (scorer.py), if the run was scored: per step and agent, "<scorer> · <field>"
+    scores = run.scores
+    if scores is not None and len(scores):
+        for r in scores.itertuples(index=False):
+            entry = agent_steps[r.step][r.agent] if r.step <= steps else None
+            if entry is not None:
+                label = f"{r.scorer_model} · {r.field}"
+                value = None if pd.isna(r.score) else int(r.score)
+                entry.setdefault("scores", {})[label] = (
+                    value if value is not None else ("failed" if r.error else "unclear")
+                )
 
     dyn = cfg["dynamics"]
     # runs from before 0.3 have no report: rebuild what their events allow (the rest is None)
