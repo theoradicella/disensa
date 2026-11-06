@@ -11,6 +11,16 @@ Behaviour is chosen by the model name: fake/<behaviour>
   contrarian   moves away from what it hears
   tribal       only listens to messages within 0.7, so the population splits into camps
   anything else  bounded confidence (only listens to messages within 1.5)
+
+Broken models, for the run report and the failure guard (step 0 still works for the
+belief ones, so the run gets to step 1):
+  badjson      never replies with JSON, not even when asked to fix it
+  nobelief     valid JSON without a belief
+  nanbelief    "belief": NaN
+  textbelief   "belief": "quite a lot"
+  outofrange   "belief": 5 (clipped to 2)
+  halves       a bounded-confidence agent that reports whole or half numbers only
+  down         the server cannot be reached (raised in conftest.py)
 """
 
 from __future__ import annotations
@@ -49,6 +59,8 @@ def fake_reply(model: str, messages: list[dict]) -> str:
     prompt = messages[-1]["content"]
     behaviour = model.split("/", 1)[1] if "/" in model else model
 
+    if behaviour == "badjson":
+        return "I would rather not answer in that format."
     if '{"message": "<your message>"}' in prompt:  # initial message
         m = _INITIAL_POSITION.search(prompt)
         v = float(m.group(1)) if m else 0.0
@@ -72,6 +84,16 @@ def fake_reply(model: str, messages: list[dict]) -> str:
         new = own + _noise(prompt, 0.03)
         reasoning = f"I interacted with {len(seen)} people but none changed my mind."
     new = _clip(new)
+    broken = {"nobelief": None, "nanbelief": float("nan"), "textbelief": "quite a lot"}
+    if behaviour in broken:
+        reply = {"reasoning": reasoning, "message": f"[{behaviour}] My position is {own:+.2f}."}
+        if broken[behaviour] is not None:
+            reply["belief"] = broken[behaviour]
+        return json.dumps(reply)  # NaN is written as the bare literal NaN
+    if behaviour == "outofrange":
+        new = 5
+    if behaviour == "halves":
+        new = round(new * 2) / 2
     return json.dumps(
         {
             "reasoning": reasoning,

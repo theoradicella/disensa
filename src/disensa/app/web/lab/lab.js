@@ -440,6 +440,7 @@
     topic.classList.toggle("none", !data.topic);
     topic.textContent = data.topic || "None: numeric algorithm, opinions only";
     renderRunConfig(data);
+    renderReport(data);
     stepOf();
     if (first) { selected = null; nodes = []; t = 0; drawGuide(); }
     t = Math.min(t, D()); // never point past the data we have
@@ -561,6 +562,11 @@
       tdName.textContent = r.name;
       tdType.appendChild(el("span", "type-tag " + (llm ? "llm" : "num"), llm ? "LLM agents" : "Numeric"));
       tdStatus.appendChild(el("span", "pill " + r.status, r.status[0].toUpperCase() + r.status.slice(1)));
+      if (llm && r.failed_pct != null && (r.failed_pct > 0 || r.status === "failed")) {
+        const fp = el("span", "fail-pct" + (r.failed_pct > 5 ? " bad" : ""), `${rnum(r.failed_pct, 1)}% failed`);
+        fp.title = "Share of replies that could not be used (see the run report)";
+        tdStatus.appendChild(fp);
+      }
       const chev = el("button", "row-chev"); chev.type = "button";
       chev.setAttribute("aria-expanded", String(open)); chev.setAttribute("aria-label", `${open ? "Hide" : "Show"} details of ${r.name}`);
       const tdChev = el("td", "actions"); tdChev.appendChild(chev);
@@ -575,6 +581,7 @@
     const tr = el("tr", "run-details"), td = el("td"); td.colSpan = 5;
     const dl = el("dl");
     [["Duration", duration(r.status === "running" ? r.elapsed : r.seconds)], ["Agents", r.n], ["Steps", r.steps ?? "—"], ["Seed", r.seed ?? "—"],
+      ...(llm ? [["Failed replies", r.failed_pct == null ? NR : `${rnum(r.failed_pct, 1)}%`]] : []),
       ["Network", (TOPO_LABEL[r.topology] || r.topology || "").split(" (")[0]],
       [llm ? "Models" : "Rule", llm ? r.models.map(short).join(", ") : ALGO_LABEL[(r.models[0] || "").split("/")[1]] || ""]]
       .forEach(([k, v]) => { const d = el("div"); d.append(el("dt", null, k), el("dd", null, String(v))); dl.appendChild(d); });
@@ -962,6 +969,45 @@
         d.rule === "bounded_confidence" ? `ε = ${d.epsilon} · μ = ${d.mu}` : d.rule === "friedkin_johnsen" ? `λ = ${d.stubbornness}` : "");
     }
     section("Simulation", `${c.steps} steps`, join(llm && d.interactions ? `${d.interactions.min}–${d.interactions.max} interactions per step` : "", `seed ${c.seed}`));
+  }
+  // the run report (report.py): how far the run can be trusted, and what it cost.
+  // Older runs did not record every number: those show "not recorded".
+  const NR = "not recorded";
+  const rnum = (v, digits = 0) => v == null ? NR : Number(v).toLocaleString(undefined, { maximumFractionDigits: digits });
+  const KIND_LABEL = { provider: "server error", invalid_json: "not JSON", missing_belief: "no belief", invalid_belief: "belief not a number" };
+  function renderReport(data) {
+    const r = data.report, card = $("report-card"), grid = $("report-grid");
+    grid.replaceChildren();
+    const reason = $("report-reason");
+    reason.hidden = !data.reason; reason.textContent = data.reason ? `Stopped: ${data.reason}` : "";
+    card.hidden = !r || data.config.dynamics.type !== "llm";
+    if (card.hidden) return;
+    const section = (title, main, subs, bad) => {
+      const box = el("div", "spec");
+      box.appendChild(el("span", "meta-label", title));
+      box.appendChild(el("div", "spec-main" + (bad ? " bad" : ""), main));
+      (subs || []).filter(Boolean).forEach((sub) => box.appendChild(el("div", "spec-sub", sub)));
+      grid.appendChild(box);
+    };
+    const kinds = Object.entries(r.failed_by_kind || {}).map(([k, v]) => `${KIND_LABEL[k] || k} ${v}`).join(" · ");
+    const models = Object.entries(r.failed_by_model || {});
+    section("Failed replies", `${rnum(r.failed_pct, 1)}%`, [
+      `${rnum(r.failed)} of ${rnum(r.calls)} replies`, r.failed ? kinds : "",
+      ...(r.failed && models.length > 1 ? models.map(([m, x]) => `${short(m)}: ${x.failed}/${x.calls} (${rnum(x.pct, 1)}%)`) : []),
+    ], r.failed_pct > 5);
+    section("Tokens", r.prompt_tokens == null ? NR : `${rnum(r.prompt_tokens)} in · ${rnum(r.completion_tokens)} out`,
+      [r.prompt_tokens_mean == null ? "" : `${rnum(r.prompt_tokens_mean)} in · ${rnum(r.completion_tokens_mean)} out per reply`]);
+    section("Time", duration(r.seconds), [
+      r.seconds_per_call == null ? `per model call: ${NR}` : `${rnum(r.seconds_per_call, 2)} s per model call`,
+      r.cache_hits == null ? `cache: ${NR}` : `${rnum(r.cache_hits)} of ${rnum(r.calls)} replies from the cache`,
+    ]);
+    section("Out of range", r.out_of_range == null ? NR : `${rnum(r.out_of_range)}`, [r.out_of_range == null ? "" : "beliefs outside −2…+2, clipped"]);
+    const g = r.granularity;
+    if (!g) section("Belief granularity", NR);
+    else {
+      const n = (g.whole + g.half + g.other) || 1, pct = (v) => `${Math.round((100 * v) / n)}%`;
+      section("Belief granularity", `${pct(g.whole)} whole · ${pct(g.half)} half · ${pct(g.other)} other`, [`${rnum(n)} valid self-ratings, steps ≥ 1`]);
+    }
   }
   function renderReview() {
     const blocks = configBlocks(buildConfig());

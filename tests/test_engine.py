@@ -26,10 +26,14 @@ def test_numeric_run_writes_a_run_folder(make_cfg):
     assert json.loads((run_dir / "meta.json").read_text())["finished"]
 
 
+def _without_time(history):
+    return [{k: v for k, v in h.items() if k != "seconds"} for h in history]
+
+
 def test_same_seed_same_run(make_cfg):
     a = asyncio.run(run(make_cfg()))
     b = asyncio.run(run(make_cfg()))
-    assert a == b
+    assert _without_time(a) == _without_time(b)
 
 
 def test_llm_run_logs_every_agent_every_day(make_cfg):
@@ -61,13 +65,14 @@ def test_update_is_synchronous(make_cfg):
 
 
 def test_bad_model_reply_never_crashes_a_run(make_cfg, monkeypatch):
-    from disensa.llm.client import LLMClient
+    from disensa.llm.client import CallInfo, LLMClient
 
     async def broken(self, model, messages, **kw):
-        return {"reasoning": "hm"}, '{"reasoning": "hm"}'  # no belief, no message
+        return {"reasoning": "hm"}, '{"reasoning": "hm"}', CallInfo()  # no belief, no message
 
     monkeypatch.setattr(LLMClient, "complete_json", broken)
-    cfg = make_cfg()
+    dyn = make_cfg().dynamics.model_dump(mode="json")
+    cfg = make_cfg(dynamics={**dyn, "max_error_rate": 1.0})  # guard off
     history = asyncio.run(run(cfg))
     assert history[-1]["errors"] == 20
     assert history[0]["mean_opinion"] == history[-1]["mean_opinion"]  # nobody moved

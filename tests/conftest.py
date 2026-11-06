@@ -14,7 +14,14 @@ def offline_models(monkeypatch):
     """Every model call in the tests goes to the offline stand-in in fake_llm.py."""
 
     async def fake_call(self, model, messages, params, api_base, json_mode):
-        return llm_client.LLMResponse(text=fake_reply(model, messages), model=model)
+        if model.endswith("/down"):
+            raise ConnectionError("connection refused")
+        text = fake_reply(model, messages)
+        usage = {
+            "prompt_tokens": sum(len(m["content"].split()) for m in messages),
+            "completion_tokens": len(text.split()),
+        }
+        return llm_client.LLMResponse(text=text, model=model, usage=usage)
 
     monkeypatch.setattr(llm_client.LLMClient, "_call_litellm", fake_call)
 

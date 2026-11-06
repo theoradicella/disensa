@@ -5,6 +5,7 @@ from __future__ import annotations
 import networkx as nx
 import numpy as np
 
+from disensa.report import summarize
 from disensa.runs import Run
 
 
@@ -47,6 +48,10 @@ def build_payload(run: Run) -> dict:
             }
 
     dyn = cfg["dynamics"]
+    # runs from before 0.3 have no report: rebuild what their events allow (the rest is None)
+    report = run.meta.get("report")
+    if report is None and dyn["type"] == "llm":
+        report = summarize(run.events, run.meta.get("seconds"))
     return {
         "name": cfg["name"],
         "config": cfg,
@@ -63,4 +68,15 @@ def build_payload(run: Run) -> dict:
         "agent_steps": agent_steps,
         "edges": run.edges,
         "metrics": [{k: _num(v) for k, v in row.items()} for row in run.metrics.to_dict("records")],
+        "report": _clean(report),
+        "reason": run.meta.get("reason"),
     }
+
+
+def _clean(obj):
+    """Make a report JSON-safe (no NaN)."""
+    if isinstance(obj, dict):
+        return {k: _clean(v) for k, v in obj.items()}
+    if isinstance(obj, float):
+        return _num(obj)
+    return obj

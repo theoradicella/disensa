@@ -15,6 +15,7 @@ import asyncio
 import hashlib
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,48 @@ class LLMResponse:
     cached: bool = False
     usage: dict = field(default_factory=dict)
     thinking: str = ""  # hidden reasoning the server returned separately, if any
+    # seconds the model took; a cached reply keeps what the original call took
+    latency_s: float | None = None
+
+
+@dataclass
+class CallInfo:
+    """What one agent reply cost, over every request it took (a JSON repair is a second one).
+
+    `cached` is true only if every request was answered from the cache, i.e. the reply cost
+    nothing this time; tokens and latency are what the requests originally cost.
+    """
+
+    requests: int = 0
+    latency_s: float = 0.0
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    cached: bool = True
+
+    def add(self, resp: LLMResponse) -> None:
+        self.requests += 1
+        self.latency_s += resp.latency_s or 0.0
+        self.cached = self.cached and resp.cached
+        for key in ("prompt_tokens", "completion_tokens"):
+            v = resp.usage.get(key)
+            if v is not None:
+                setattr(self, key, (getattr(self, key) or 0) + int(v))
+
+    def to_dict(self) -> dict:
+        return {
+            "latency_s": round(self.latency_s, 3),
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "cached": self.cached if self.requests else False,
+        }
+
+
+class LLMCallError(Exception):
+    """A reply that could not be used. `kind` is "provider" or "invalid_json"."""
+
+    def __init__(self, kind: str, message: str, raw: str = "", info: CallInfo | None = None):
+        super().__init__(message)
+        self.kind, self.raw, self.info = kind, raw, info or CallInfo()
 
 
 _THINK_BLOCK = re.compile(r"^\s*<think>.*?</think>", re.DOTALL)
@@ -152,36 +195,53 @@ class LLMClient:
                 cached=True,
                 usage=hit["usage"],
                 thinking=hit.get("thinking", ""),
+                latency_s=hit.get("latency_s"),  # entries written before 0.3 have none
             )
 
         async with self._semaphore(model):
+            t0 = time.perf_counter()
             resp = await self._call_litellm(model, messages, params, api_base, json_mode)
+            resp.latency_s = round(time.perf_counter() - t0, 3)
 
         if use_cache:
-            self.cache[key] = {"text": resp.text, "usage": resp.usage, "thinking": resp.thinking}
+            self.cache[key] = {
+                "text": resp.text,
+                "usage": resp.usage,
+                "thinking": resp.thinking,
+                "latency_s": resp.latency_s,
+            }
         return resp
 
     async def complete_json(
         self, model: str, messages: list[Message], *, retries: int = 1, **kwargs
-    ) -> tuple[dict[str, Any], str]:
-        """Complete and parse JSON. On a parse failure, ask the model once to fix its reply.
+    ) -> tuple[dict[str, Any], str, CallInfo]:
+        """Complete and parse JSON. On a parse failure, ask the model `retries` times to fix it.
 
-        Returns (parsed_object, raw_text). Raises ValueError if it never parses.
+        Returns (parsed object, raw text, what it cost over all requests). Raises
+        LLMCallError ("invalid_json" if it never parses, "provider" if a request fails),
+        carrying the raw text and the cost so far.
         """
-        resp = await self.complete(model, messages, json_mode=True, **kwargs)
-        try:
-            return parse_json(resp.text), resp.text
-        except ValueError:
-            if retries <= 0:
-                raise
-        repair = messages + [
-            {"role": "assistant", "content": resp.text},
-            {
-                "role": "user",
-                "content": "That was not valid JSON. Reply again with ONLY the JSON object.",
-            },
-        ]
-        return await self.complete_json(model, repair, retries=retries - 1, **kwargs)
+        info, raw = CallInfo(), ""
+        for attempt in range(retries + 1):
+            try:
+                resp = await self.complete(model, messages, json_mode=True, **kwargs)
+            except Exception as e:
+                raise LLMCallError("provider", f"{type(e).__name__}: {e}", raw, info) from e
+            info.add(resp)
+            raw = resp.text
+            try:
+                return parse_json(raw), raw, info
+            except ValueError as e:
+                if attempt == retries:
+                    raise LLMCallError("invalid_json", str(e), raw, info) from e
+            messages = messages + [
+                {"role": "assistant", "content": raw},
+                {
+                    "role": "user",
+                    "content": "That was not valid JSON. Reply again with ONLY the JSON object.",
+                },
+            ]
+        raise AssertionError("unreachable")
 
     async def _call_litellm(
         self,

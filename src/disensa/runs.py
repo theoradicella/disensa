@@ -1,14 +1,17 @@
 """Storing runs on disk: one folder per run, written while it runs, read back by the lab.
 
 runs/<timestamp>_<name>_s<seed>/
-  meta.json          the full config, git commit, start time, status, timings
+  meta.json          the full config, git commit, start time, status (running | finished |
+                     cancelled | failed, with a `reason` when failed), timings, and the
+                     run `report` (report.py), updated after every step
   agents.parquet     one row per agent: id, model (or numeric rule), degree, initial opinion
   edges.json         the network as a list of [u, v] pairs
   opinions.parquet   one row per (step, agent): the opinion
   metrics.parquet    one row per step: polarization, disagreement, neighbour correlation, ...
   events.jsonl       LLM runs only, one line per (step, agent): its interactions (author +
                      message), its reasoning, new message, memory, the exact prompt and raw
-                     reply, and any error
+                     reply, any error and its kind, the belief before clipping, and what
+                     the call cost (latency, tokens, cached)
 
 Parquet for tables (fast, typed, opens in pandas/DuckDB), JSONL for text. Every step is
 flushed, so a crash or a cancelled run keeps all finished steps.
@@ -49,9 +52,18 @@ def new_run_dir(cfg: ExperimentConfig) -> Path:
         run_dir = base.with_name(f"{base.name}-{i}")
         i += 1
     run_dir.mkdir(parents=True)
-    meta = {"config": cfg.model_dump(mode="json"), "git_commit": _git_commit(), "started": stamp}
+    meta = {
+        "config": cfg.model_dump(mode="json"),
+        "git_commit": _git_commit(),
+        "started": stamp,
+        "status": "running",  # running | finished | cancelled | failed (engine.py)
+    }
     (run_dir / "meta.json").write_text(json.dumps(meta, indent=2))
     return run_dir
+
+
+def load_meta(run_dir: Path) -> dict:
+    return json.loads((Path(run_dir) / "meta.json").read_text())
 
 
 def update_meta(run_dir: Path, **fields) -> None:
@@ -110,6 +122,15 @@ class Run:
     metrics: pd.DataFrame
     events: list[dict]
     edges: list[list[int]]
+
+    @property
+    def status(self) -> str:
+        """running | finished | cancelled | failed; older runs only had flags."""
+        if self.meta.get("status"):
+            return self.meta["status"]
+        if self.meta.get("cancelled"):
+            return "cancelled"
+        return "finished" if self.meta.get("finished") else "incomplete"
 
     @property
     def steps(self) -> int:

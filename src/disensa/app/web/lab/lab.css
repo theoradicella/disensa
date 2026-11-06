@@ -243,6 +243,15 @@ textarea { resize: vertical; min-height: 54px; }
 /* models: name, share bar, agent count; columns line up across rows */
 .spec-models { flex: 1.4 1 220px; grid-template-columns: minmax(0, max-content) minmax(40px, 1fr) auto; align-items: center; gap: 5px 10px; }
 .spec-models .meta-label { grid-column: 1 / -1; }
+.spec-models .spec-sub { grid-column: 1 / -1; }
+.report-card { margin-top: 12px; }
+.report-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 16px 0; }
+.report-head a { font-size: 12px; }
+.report-reason { margin: 10px 16px 0; }
+.report-grid { border-top: none; }
+.spec-main.bad { color: var(--bad); }
+.fail-pct { margin-left: 6px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fail-pct.bad { color: var(--bad); }
 .model-share { display: contents; }
 .share-name { font-size: 13.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .share-bar { height: 4px; border-radius: 999px; background: #eef1f5; overflow: hidden; }

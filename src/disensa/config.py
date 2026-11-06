@@ -116,6 +116,9 @@ class LLMDynamics(BaseModel):
     max_tokens: int = Field(400, gt=0)
     max_concurrency: int = Field(4, gt=0, description="parallel requests per provider")
     cache_dir: Path = Path(".cache/llm")
+    max_error_rate: float = Field(
+        0.2, ge=0, le=1, description="stop the run when more replies of one step fail"
+    )
 
 
 Dynamics = Annotated[NumericDynamics | LLMDynamics, Field(discriminator="type")]

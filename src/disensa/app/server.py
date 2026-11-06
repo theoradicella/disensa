@@ -93,8 +93,7 @@ class RunManager:
         return job
 
     def _run(self, job: Job, cfg: ExperimentConfig) -> None:
-        from disensa.engine import run
-        from disensa.runs import update_meta
+        from disensa.engine import RunFailed, run
 
         llm = cfg.dynamics.type == "llm"
 
@@ -129,9 +128,11 @@ class RunManager:
             job.status = "done"
             log("finished")
         except asyncio.CancelledError:
-            job.status = "cancelled"
-            update_meta(job.run_dir, cancelled=True, seconds=round(time.time() - job.started, 1))
+            job.status = "cancelled"  # the engine has marked meta.json already
             log("cancelled")
+        except RunFailed as e:
+            job.status, job.error = "failed", e.reason
+            log(f"stopped: {e.reason}")
         except Exception as e:
             job.status, job.error = "failed", f"{type(e).__name__}: {e}"
             log(f"failed: {job.error}")
@@ -169,14 +170,12 @@ class RunManager:
             }
         d = self.run_dir(run_id)
         meta = json.loads((d / "meta.json").read_text()) if d else {}
-        status = (
-            "cancelled"
-            if meta.get("cancelled")
-            else "done"
-            if meta.get("finished")
-            else "incomplete"
-        )
-        return {"status": status, "step": None, "steps": None, "error": None}
+        return {
+            "status": meta_status(meta),
+            "step": None,
+            "steps": None,
+            "error": meta.get("reason"),
+        }
 
     def delete(self, run_id: str) -> bool:
         """Remove a run folder from disk. Refused while the run is going."""
@@ -218,6 +217,9 @@ class RunManager:
                     "steps": cfg.get("steps"),
                     "seed": cfg.get("seed"),
                     "seconds": meta.get("seconds"),  # how long it ran; not saved by older versions
+                    "failed_pct": (meta.get("report") or {}).get(
+                        "failed_pct"
+                    ),  # None: not recorded
                     "models": models,
                     "config": cfg,  # for "Duplicate" in the lab
                 }
@@ -235,6 +237,19 @@ class RunManager:
             return build_payload(load_run(d))
         except (FileNotFoundError, ValueError, KeyError, IndexError):
             return None  # nothing written yet
+
+
+def meta_status(meta: dict) -> str:
+    """The lab's status of a run that is not going in this server: done | cancelled | failed |
+    incomplete. A run still marked "running" was stopped by a crash or a closed terminal."""
+    status = meta.get("status")
+    if status == "finished" or (status is None and meta.get("finished")):
+        return "done"
+    if status in ("cancelled", "failed"):
+        return status
+    if status is None and meta.get("cancelled"):  # runs from before 0.3
+        return "cancelled"
+    return "incomplete"
 
 
 DOWNLOADS = ollama.Downloads()

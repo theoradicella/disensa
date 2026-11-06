@@ -10,7 +10,7 @@ import typer
 
 from disensa.checks import config_checks
 from disensa.config import ExperimentConfig
-from disensa.runs import new_run_dir
+from disensa.runs import load_meta, new_run_dir
 
 app = typer.Typer(no_args_is_help=True, help="disensa: opinion dynamics with numeric or LLM agents")
 
@@ -18,7 +18,9 @@ app = typer.Typer(no_args_is_help=True, help="disensa: opinion dynamics with num
 @app.command()
 def run(config: Path, steps: int = typer.Option(None, help="override `steps`")):
     """Run an experiment from a YAML config (numeric or LLM, set by `dynamics.type`)."""
+    from disensa.engine import RunFailed
     from disensa.engine import run as run_experiment
+    from disensa.report import format_report
 
     cfg = ExperimentConfig.from_yaml(config)
     if steps:
@@ -49,7 +51,18 @@ def run(config: Path, steps: int = typer.Option(None, help="override `steps`")):
             f"nci {m['neighbor_correlation']:+.3f}  errors {m['errors']}  [{time.time() - t0:.0f}s]"
         )
 
-    asyncio.run(run_experiment(cfg, run_dir, progress))
+    try:
+        asyncio.run(run_experiment(cfg, run_dir, progress))
+    except RunFailed as e:
+        typer.echo(format_report(e.report))
+        typer.secho(f"run failed: {e.reason}", fg="red", err=True)
+        typer.echo(f"finished steps saved to {run_dir}")
+        raise typer.Exit(1) from None
+    except KeyboardInterrupt:
+        typer.secho(f"cancelled; finished steps saved to {run_dir}", fg="yellow", err=True)
+        raise typer.Exit(130) from None
+    if d.type == "llm":
+        typer.echo(format_report(load_meta(run_dir).get("report")))
     typer.echo(f"saved to {run_dir}")
 
 

@@ -10,20 +10,24 @@ domain-neutral (agents in a community exchanging messages), the mechanism is the
 
 All agents of a step call their models concurrently; results are applied together, so the
 order in which agents are processed never matters. A malformed reply never crashes a run:
-it is logged in `error` and the agent keeps its previous state.
+it is logged in `error` (with its `error_kind`, see report.py) and the agent keeps its
+previous state. A belief outside [-2, 2] is clipped; the number the model gave is kept in
+`belief_raw` and the event is marked `clipped`.
 """
 
 from __future__ import annotations
 
 import asyncio
+import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import networkx as nx
 import numpy as np
 
+from disensa import OPINION_MAX, OPINION_MIN
 from disensa.config import LLMDynamics, ModelSpec
-from disensa.llm import LLMClient
+from disensa.llm import CallInfo, LLMCallError, LLMClient
 from disensa.llm.prompts import initial_message_prompt, system_prompt, update_prompt
 
 
@@ -33,6 +37,32 @@ class TextState:
 
     message: str = ""  # the latest message it shared
     memory: str = ""
+
+
+@dataclass
+class Reply:
+    """One agent's model call: the parsed JSON, the raw text, and what went wrong if anything."""
+
+    obj: dict = field(default_factory=dict)
+    raw: str = ""
+    error: str | None = None
+    error_kind: str | None = None
+    info: CallInfo = field(default_factory=CallInfo)
+
+
+def parse_belief(value) -> float | None:
+    """The belief as a finite number, or None (NaN, inf, true/false, non-numeric text)."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = float(value.strip())
+        except ValueError:
+            return None
+    if not isinstance(value, int | float):
+        return None
+    v = float(value)
+    return v if math.isfinite(v) else None
 
 
 def assign_models(models: list[ModelSpec], n: int, seed: int) -> list[ModelSpec]:
@@ -68,15 +98,15 @@ class LLMAgents:
 
     # ---------------------------------------------------------------- one model call
 
-    async def ask(self, i: int, user: str) -> tuple[dict, str, str | None]:
-        """Returns (parsed JSON, raw reply, error). Never raises for bad model output."""
+    async def ask(self, i: int, user: str) -> Reply:
+        """One model call. Never raises for bad model output or a failing server."""
         m = self.models[i]
         messages = [
             {"role": "system", "content": system_prompt(i)},
             {"role": "user", "content": user},
         ]
         try:
-            obj, raw = await self.client.complete_json(
+            obj, raw, info = await self.client.complete_json(
                 m.name,
                 messages,
                 temperature=m.temperature,
@@ -87,17 +117,19 @@ class LLMAgents:
                 api_base=m.api_base,
                 seed=self.seed,
             )
-            return obj, raw, None
-        except Exception as e:  # malformed JSON after repair, provider error, ...
-            return {}, "", f"{type(e).__name__}: {e}"[:500]
+            return Reply(obj, raw, info=info)
+        except LLMCallError as e:  # malformed JSON after repair, or the server failed
+            return Reply({}, e.raw, f"{e}"[:500], e.kind, e.info)
+        except Exception as e:  # anything else on the way to the model
+            return Reply({}, "", f"{type(e).__name__}: {e}"[:500], "provider")
 
-    async def ask_all(self, t: int, prompts: list[str]) -> list[tuple[dict, str, str | None]]:
+    async def ask_all(self, t: int, prompts: list[str]) -> list[Reply]:
         """Ask every agent concurrently; report each reply to `on_reply` as it arrives."""
 
-        async def one(i: int, p: str):
+        async def one(i: int, p: str) -> Reply:
             reply = await self.ask(i, p)
             if self.on_reply:
-                self.on_reply(t, i, reply[2])
+                self.on_reply(t, i, reply.error)
             return reply
 
         return await asyncio.gather(*(one(i, p) for i, p in enumerate(prompts)))
@@ -123,9 +155,9 @@ class LLMAgents:
         prompts = [initial_message_prompt(self.cfg.statement, float(v)) for v in x0]
         replies = await self.ask_all(0, prompts)
         events = []
-        for i, (obj, raw, err) in enumerate(replies):
-            self.state[i].message = str(obj.get("message", "")).strip()
-            events.append(self._event(0, i, [], "", self.state[i], prompts[i], raw, err))
+        for i, r in enumerate(replies):
+            self.state[i].message = str(r.obj.get("message", "")).strip()
+            events.append(self._event(0, i, [], "", self.state[i], prompts[i], r))
         return events
 
     async def step(self, x: np.ndarray, t: int) -> tuple[np.ndarray, list[dict]]:
@@ -145,24 +177,47 @@ class LLMAgents:
 
         new_x = x.copy()
         new_state, events = [], []
-        for i, (obj, raw, err) in enumerate(replies):
-            try:
-                if not err:
-                    new_x[i] = float(obj["belief"])
-            except (KeyError, TypeError, ValueError):
-                err = f"missing or invalid 'belief' in reply: {raw[:200]!r}"
+        for i, r in enumerate(replies):
+            belief_raw, clipped = None, False
+            if not r.error:
+                if "belief" not in r.obj:
+                    r.error, r.error_kind = (
+                        f"no 'belief' in reply: {r.raw[:200]!r}",
+                        "missing_belief",
+                    )
+                elif (belief_raw := parse_belief(r.obj["belief"])) is None:
+                    r.error, r.error_kind = (
+                        f"'belief' is not a finite number: {r.obj['belief']!r}"[:300],
+                        "invalid_belief",
+                    )
+                else:
+                    new_x[i] = min(max(belief_raw, OPINION_MIN), OPINION_MAX)
+                    clipped = bool(new_x[i] != belief_raw)
             old = self.state[i]
             s = TextState(
-                message=str(obj.get("message", "")).strip() or old.message,
-                memory=str(obj.get("memory", "")).strip() or old.memory,
+                message=str(r.obj.get("message", "")).strip() or old.message,
+                memory=str(r.obj.get("memory", "")).strip() or old.memory,
             )
-            reasoning = str(obj.get("reasoning", "")).strip()
+            reasoning = str(r.obj.get("reasoning", "")).strip()
             new_state.append(s)
-            events.append(self._event(t, i, interactions[i], reasoning, s, prompts[i], raw, err))
+            events.append(
+                self._event(t, i, interactions[i], reasoning, s, prompts[i], r, belief_raw, clipped)
+            )
         self.state = new_state  # applied together: synchronous update
         return new_x, events
 
-    def _event(self, t, i, interactions, reasoning, s: TextState, prompt, raw, err) -> dict:
+    def _event(
+        self,
+        t,
+        i,
+        interactions,
+        reasoning,
+        s: TextState,
+        prompt,
+        r: Reply,
+        belief_raw=None,
+        clipped=False,
+    ) -> dict:
         return {
             "step": t,
             "agent": i,
@@ -172,6 +227,10 @@ class LLMAgents:
             "message": s.message,
             "memory": s.memory,
             "prompt": prompt,
-            "raw": raw,
-            "error": err,
+            "raw": r.raw,
+            "error": r.error,
+            "error_kind": r.error_kind,
+            "belief_raw": belief_raw,
+            "clipped": clipped,
+            **r.info.to_dict(),  # latency_s, prompt_tokens, completion_tokens, cached
         }

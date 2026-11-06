@@ -94,6 +94,7 @@
         <ol>
           <li><a href="#run-folder">The run folder</a></li>
           <li><a href="#run-files-list">What each file holds</a></li>
+          <li><a href="#run-report">Run report</a></li>
           <li><a href="#loading-a-run">Loading a run</a></li>
         </ol>
       </li>
@@ -557,7 +558,8 @@ Respond ONLY with JSON:
     <p><strong>Thinking is off.</strong> Some models (e.g. <code>qwen3</code>) &ldquo;think&rdquo; before they answer: they write hidden reasoning first, then the reply. That reasoning uses up the reply budget (<code>max_tokens</code>), can contain braces that confuse the JSON parser, and is very slow: a 250-agent run with <code>qwen3</code> among its models ran for about 20 hours and finished 2 steps. disensa switches it off with <code>models[].think: false</code> (the default), which is saved with the run and is part of the cache key. On Ollama this is Ollama&rsquo;s own <code>think</code> option; on vLLM it is the chat-template flag <code>enable_thinking</code> of Qwen3-style models, which other models ignore. If a reply still starts with a <code>&lt;think&gt;&hellip;&lt;/think&gt;</code> block, it is dropped before the JSON is read. Set <code>think: true</code> to study a model with its reasoning on.</p>
 
     <h3 id="agent-reliability">Error handling and reproducibility</h3>
-    <p>Models do not always follow the format. disensa asks for JSON mode when the provider supports it, and repairs common mistakes (text around the JSON, trailing commas). If that fails, it asks the model once more to fix its reply. If the reply is still unusable, or the provider returns an error, the run does not stop: the agent keeps its previous opinion, message and memory for that step, and the error is saved with the step so it can be counted and inspected. A missing <code>message</code> or <code>memory</code> also keeps the previous one. The one case with nothing to keep is step 0: an agent whose first message fails has no message yet, so its neighbours cannot hear it until it says something.</p>
+    <p>Models do not always follow the format. disensa asks for JSON mode when the provider supports it, and repairs common mistakes (text around the JSON, trailing commas). If that fails, it asks the model once more to fix its reply. If the reply is still unusable, or the provider returns an error, the run does not stop: the agent keeps its previous opinion, message and memory for that step, and the error is saved with the step so it can be counted and inspected. The <code>belief</code> must be a finite number: <code>NaN</code>, <code>true</code> or <code>"a lot"</code> count as failed replies. A number outside \([-2, 2]\) is clipped to the nearest end, and both the clipping and the number the model gave are saved. A missing <code>message</code> or <code>memory</code> also keeps the previous one. The one case with nothing to keep is step 0: an agent whose first message fails has no message yet, so its neighbours cannot hear it until it says something.</p>
+    <p>A few failures are normal. Many are not, and they are easy to miss, because a failed reply keeps the opinion: a run where most calls fail looks like a run of very stubborn agents. So a run <strong>stops</strong> when more than <code>max_error_rate</code> of the replies of one step fail (default \(20\%\), step 0 included). It is marked <em>failed</em> with the reason, e.g. &ldquo;step 3: 47/50 replies failed (provider: connection refused)&rdquo;, every finished step is kept, and <code>disensa run</code> exits with an error. How many replies failed, and why, is in the <a href="#run-report">run report</a>.</p>
     <p>Every reply is <strong>cached</strong> on disk under its exact request: the model, the full prompt, the sampling settings (temperature, <code>top_p</code>, <code>top_k</code>), <code>max_tokens</code> and the seed. Running the same config again replays the same replies without calling any model, so an LLM run is reproducible once it has been run once. Changing anything in the prompt (the statement, a neighbour&rsquo;s message, the memory) makes it a new request.</p>
 
     <h3 id="agents-in-disensa">In disensa</h3>
@@ -580,6 +582,7 @@ Respond ONLY with JSON:
         <tr><td><code>max_tokens</code></td><td>longest reply allowed</td><td>\(400\)</td></tr>
         <tr><td><code>max_concurrency</code></td><td>parallel requests per provider</td><td>\(4\)</td></tr>
         <tr><td><code>cache_dir</code></td><td>where replies are cached</td><td><code>.cache/llm</code></td></tr>
+        <tr><td><code>max_error_rate</code></td><td>stop the run when more of one step&rsquo;s replies fail</td><td>\(0.2\)</td></tr>
       </tbody>
     </table></div>
     <p>To follow a run agent by agent, with each step&rsquo;s interactions, reasoning and memory, see <a href="#reading-a-run">Reading a run</a>.</p>
@@ -669,6 +672,9 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
         <tr><td><code>mean_opinion</code></td><td>\(\bar{x}\), the average opinion: shows whether the group drifts towards one side</td></tr>
         <tr><td><code>mean_opinion[&lt;model&gt;]</code></td><td>runs with several models only: the average opinion of the agents of each model</td></tr>
         <tr><td><code>errors</code></td><td>LLM runs: agents whose reply failed at that step (see <a href="#agent-reliability">Error handling</a>)</td></tr>
+        <tr><td><code>out_of_range</code></td><td>LLM runs: beliefs outside \([-2, 2]\) at that step, clipped (see <a href="#run-report">Run report</a>)</td></tr>
+        <tr><td><code>prompt_tokens</code>, <code>completion_tokens</code></td><td>LLM runs: tokens sent to and written by the models at that step</td></tr>
+        <tr><td><code>seconds</code></td><td>how long the step took, wall clock</td></tr>
       </tbody>
     </table></div>
     <h2 id="reading-a-run">Reading a run</h2>
@@ -687,13 +693,14 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
         <tr><td>Running</td><td>The run is in progress.</td></tr>
         <tr><td>Done</td><td>Every step finished.</td></tr>
         <tr><td>Cancelled</td><td>Stopped with <em>Stop</em>. The steps finished before that are kept.</td></tr>
-        <tr><td>Failed</td><td>An error stopped the run. Hovering the status shows the error.</td></tr>
+        <tr><td>Failed</td><td>An error stopped the run, or too many replies of one step failed (<a href="#agent-reliability">Error handling</a>). Hovering the status shows why; the finished steps are kept.</td></tr>
         <tr><td>Incomplete</td><td>The run neither finished nor was stopped, for example because the lab was closed while it ran. The finished steps can still be read.</td></tr>
       </tbody>
     </table></div>
+    <p>LLM runs with failed replies show their share next to the status, e.g. &ldquo;3% failed&rdquo;, in red above \(5\%\).</p>
 
     <h3 id="run-overview">The run at a glance</h3>
-    <p>The top of the page shows the run&rsquo;s name, its statement (numeric runs have none) and its settings in four groups: the network, the initial opinions, the models or the update rule, and the simulation (steps, interactions per step and seed). With several models, each is listed with the number of agents it drives, in the same colour as its line in <em>Mean opinion by model</em>.</p>
+    <p>The top of the page shows the run&rsquo;s name, its statement (numeric runs have none) and its settings in four groups: the network, the initial opinions, the models or the update rule, and the simulation (steps, interactions per step and seed). With several models, each is listed with the number of agents it drives, in the same colour as its line in <em>Mean opinion by model</em>, followed by the sampling settings. Below the settings, LLM runs show the <a href="#run-report">run report</a>: failed replies (by kind and, with several models, by model), tokens, time, beliefs out of range and belief granularity. It is updated after every step while the run goes.</p>
     <p>While a run is going, a progress bar shows the step being computed, how many agents have replied so far (and how many replies failed), the time elapsed and an estimate of the time left. The first replies are slow, because Ollama has to load the models first. The viewer follows the newest step as it arrives. <strong>Stop</strong> ends the run at once and keeps every finished step.</p>
 
     <h3 id="run-playback">Moving through time</h3>
@@ -758,10 +765,13 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
         <tr><td><code>config</code></td><td>the full config, with every default filled in (see <a href="#parameters">All parameters</a>). <em>Duplicate</em> in the lab starts from it.</td></tr>
         <tr><td><code>git_commit</code></td><td>the commit of the disensa code, when it runs from a git checkout; otherwise <code>null</code></td></tr>
         <tr><td><code>started</code></td><td>start time, <code>YYYYMMDD-HHMMSS</code></td></tr>
+        <tr><td><code>status</code></td><td><code>running</code>, <code>finished</code>, <code>cancelled</code> or <code>failed</code>. A run left at <code>running</code> that is not going any more was stopped by a crash; the lab shows it as <em>incomplete</em>. Runs made before disensa 0.3 have no status, only the two flags below.</td></tr>
+        <tr><td><code>reason</code></td><td>failed runs: why, e.g. &ldquo;step 3: 47/50 replies failed (provider: connection refused)&rdquo;</td></tr>
         <tr><td><code>finished</code></td><td><code>true</code> once every step is done</td></tr>
         <tr><td><code>cancelled</code></td><td><code>true</code> if the run was stopped</td></tr>
         <tr><td><code>seconds</code></td><td>how long the run took, in seconds</td></tr>
-        <tr><td><code>llm_calls</code>, <code>cache_hits</code></td><td>LLM runs: requests made to models, including those answered from the cache, and how many of them were answered from the cache</td></tr>
+        <tr><td><code>llm_calls</code>, <code>cache_hits</code></td><td>LLM runs: requests made to models, including those answered from the cache, and how many of them were answered from the cache. A JSON repair is a second request.</td></tr>
+        <tr><td><code>report</code></td><td>the <a href="#run-report">run report</a>, updated after every step</td></tr>
       </tbody>
     </table></div>
     <p><strong><code>agents.parquet</code></strong> has one row per agent: <code>agent</code> (its number, \(0\) to \(N-1\)), <code>model</code> (the model string, or <code>numeric/&lt;rule&gt;</code> for numeric runs), <code>degree</code> (its number of links) and <code>initial_opinion</code> (\(x_i(0)\)).</p>
@@ -780,9 +790,32 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
         <tr><td><code>prompt</code></td><td>the exact prompt it was sent; the system prompt, the same for every agent, is not repeated (see <a href="#agents">LLM agents</a>)</td></tr>
         <tr><td><code>raw</code></td><td>the model&rsquo;s reply, unparsed</td></tr>
         <tr><td><code>error</code></td><td><code>null</code>, or why the reply could not be used</td></tr>
+        <tr><td><code>error_kind</code></td><td><code>null</code>, <code>provider</code>, <code>invalid_json</code>, <code>missing_belief</code> or <code>invalid_belief</code> (see <a href="#run-report">Run report</a>)</td></tr>
+        <tr><td><code>belief_raw</code></td><td>the belief the model gave, before clipping; <code>null</code> at step 0 and for failed replies</td></tr>
+        <tr><td><code>clipped</code></td><td><code>true</code> if the belief was outside \([-2, 2]\) and was clipped</td></tr>
+        <tr><td><code>prompt_tokens</code>, <code>completion_tokens</code></td><td>tokens in and out, over every request of the reply (a JSON repair counts too)</td></tr>
+        <tr><td><code>latency_s</code></td><td>seconds the model took</td></tr>
+        <tr><td><code>cached</code></td><td><code>true</code> if the reply came from the cache: it cost nothing this time, and the tokens and seconds are what the original call cost</td></tr>
       </tbody>
     </table></div>
-    <p>Lines for step 0 are the first messages: no interactions, no reasoning and an empty memory. The opinion is not repeated in <code>events.jsonl</code>; it is in <code>opinions.parquet</code>.</p>
+    <p>Lines for step 0 are the first messages: no interactions, no reasoning and an empty memory. The opinion is not repeated in <code>events.jsonl</code>; it is in <code>opinions.parquet</code>. Runs made before disensa 0.3 have no <code>error_kind</code>, <code>belief_raw</code>, <code>clipped</code>, tokens, latency or <code>cached</code>; the lab shows those numbers as &ldquo;not recorded&rdquo;.</p>
+
+    <h3 id="run-report">Run report</h3>
+    <p>Every LLM run reports how far it can be trusted and what it cost. The report is the <code>report</code> object in <code>meta.json</code>, updated after every step; the lab shows it under the run&rsquo;s settings, and <code>disensa run</code> prints it at the end.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>calls</code>, <code>cache_hits</code></td><td>agent replies (one per agent and step, step 0 included), and how many came entirely from the cache</td></tr>
+        <tr><td><code>failed</code>, <code>failed_pct</code></td><td>replies that could not be used, and their share of all replies</td></tr>
+        <tr><td><code>failed_by_kind</code></td><td>the same, by kind: <code>provider</code> (the model server failed or could not be reached), <code>invalid_json</code> (no JSON object, even after asking the model to fix it), <code>missing_belief</code> (JSON without a <code>belief</code>), <code>invalid_belief</code> (a belief that is not a finite number)</td></tr>
+        <tr><td><code>failed_by_model</code></td><td>for each model: replies, failures and their share</td></tr>
+        <tr><td><code>prompt_tokens</code>, <code>completion_tokens</code></td><td>tokens in and out over the whole run, and per reply (<code>_mean</code>)</td></tr>
+        <tr><td><code>seconds</code>, <code>seconds_per_call</code></td><td>wall-clock time of the run, and the mean time of a model call, over the calls that reached a model this time and got an answer</td></tr>
+        <tr><td><code>out_of_range</code></td><td>beliefs outside \([-2, 2]\), clipped</td></tr>
+        <tr><td><code>granularity</code></td><td>among valid self-ratings from step 1 on: how many are whole numbers (\(1\), \(-2\)), halves (\(0.5\), \(-1.5\)) or anything else (\(0.7\))</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Why it matters.</strong> A failed reply keeps the agent&rsquo;s opinion, so failures do not show as errors in the opinions: they look like stubbornness. The failure rate, and which model it comes from, says how much of the run&rsquo;s inertia is real. Tokens and time are the run&rsquo;s compute cost. Out-of-range answers and granularity are findings about the models themselves: a model answering \(5\) on a \(-2\) to \(2\) scale has not understood the scale, and a model that only ever answers whole numbers cannot make the small moves that numeric rules make. A cached run reports what its replies originally cost; <code>cache_hits</code> says how many were free this time.</p>
 
     <h3 id="loading-a-run">Loading a run in Python</h3>
     <p><code>load_run</code> reads a run folder, also while the run is still going:</p>
@@ -833,7 +866,8 @@ dynamics:
   memory_words: 60
   max_tokens: 400
   max_concurrency: 4
-  cache_dir: .cache/llm</code></pre>
+  cache_dir: .cache/llm
+  max_error_rate: 0.2</code></pre>
     <p>For a numeric run, <code>dynamics</code> is instead:</p>
 <pre><code>dynamics:
   type: numeric
@@ -910,6 +944,7 @@ dynamics:
         <tr><td><code>max_tokens</code></td><td>longest reply allowed, \(&gt; 0\)</td><td>\(400\)</td></tr>
         <tr><td><code>max_concurrency</code></td><td>requests sent at the same time to one provider, \(&gt; 0\)</td><td>\(4\)</td></tr>
         <tr><td><code>cache_dir</code></td><td>where replies are cached (<a href="#agent-reliability">Error handling and reproducibility</a>)</td><td><code>.cache/llm</code></td></tr>
+        <tr><td><code>max_error_rate</code></td><td>share of one step&rsquo;s replies, \(0\) to \(1\), that may fail before the run stops (<a href="#agent-reliability">Error handling</a>)</td><td>\(0.2\)</td></tr>
       </tbody>
     </table></div>
 
