@@ -1,6 +1,6 @@
 """disensa: multi-model LLM-agent opinion dynamics on social networks."""
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # Opinion scale shared by every component (Wang et al. 2025 use [-2, 2]).
 OPINION_MIN = -2.0

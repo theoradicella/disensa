@@ -31,8 +31,18 @@ uv run disensa sweep configs/sweeps/numeric_bc_epsilon.yaml   # 200 runs from on
 uv run pytest                              # tests (no model calls)
 ```
 
+After the runs, the same command line scores the agents' messages with a separate model,
+prepares blind human ratings, and makes the thesis figures:
+
+```bash
+uv run disensa score runs/topics_core --model ollama_chat/qwen2.5:7b
+uv run disensa validation export runs/topics_core --n 100 --out validation/topics_core
+uv run --extra analysis disensa analyze runs/topics_core runs/numeric_bc_epsilon --out figures
+```
+
 A sweep runs every combination of a few settings, e.g. 20 values of ε × 10 seeds, into
 `runs/<sweep name>/`; `--dry-run` lists the runs first. On a GPU cluster the same file runs
 as a SLURM job array against vLLM: see `scripts/indaco/README.md`.
 
-The app's **docs** page explains how a run works; run outputs are described in `src/disensa/runs.py`.
+The app's **docs** page explains how a run works, the run report, sweeps, the scorer and the
+analysis; run outputs are described in `src/disensa/runs.py`.

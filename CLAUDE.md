@@ -32,8 +32,21 @@ Research questions are deliberately not fixed yet — do not invent or add them.
   Tests replace `LLMClient._call_litellm` with the offline stand-in in `tests/fake_llm.py`
   (`conftest.py`, autouse); never call real APIs in tests.
 - Model output is untrusted: parse with `parse_json`, and a malformed reply must never crash a
-  run — log it in `error` and keep the previous state. In the web pages, insert model text
-  with `textContent` only.
+  run — log it in `error` (with `error_kind`) and keep the previous state. A belief must be a
+  finite number; out of [-2, 2] it is clipped and flagged, keeping `belief_raw`. In the web
+  pages, insert model text with `textContent` only.
+- Every run reports how far it can be trusted and what it cost (`report.py`): per call in
+  `events.jsonl`, per step in `metrics.parquet`, per run in `meta.json` `report`. LLM runs stop
+  as `failed` when a step's failures exceed `max_error_rate`. `meta.json` `status` is
+  running | finished | cancelled | failed.
+- Sampling is explicit: temperature, top_p, top_k, `think` (off) and the sampling seed are sent
+  on every call and are part of the cache key. vLLM models are `hosted_vllm/<model>` +
+  `api_base`, never `openai/` (it refuses to send without an API key).
+- The scorer (`scorer.py`) is a measurement only: it rates logged texts after a run and never
+  feeds back. Self-rating is the simulation state; human validation (`validation.py`) decides
+  which one the analysis uses.
+- Old run folders (before 0.3) lack the new fields: everything that reads runs must still open
+  them, showing "not recorded".
 - Run outputs: see the docstring in `runs.py`. Parquet for tables, JSONL for text.
 - Metrics follow Wang et al. §4.2 (`metrics.py`); cite the source in docstrings when adding more.
 - Frontend: plain HTML/CSS/JS, no build step. One folder per page under `app/web/`
@@ -46,21 +59,38 @@ Research questions are deliberately not fixed yet — do not invent or add them.
 src/disensa/
   config.py          Pydantic schema for YAML configs (`dynamics.type`: numeric | llm)
   network.py         ER / WS / BA graphs, initial opinions
-  engine.py          the simulation loop
+  engine.py          the simulation loop, run status and the failure guard
   metrics.py         polarization, global disagreement, neighbour correlation
-  runs.py            run folders: writing (RunWriter) and reading (load_run)
-  cli.py             `disensa run | app | ping`
+  report.py          the run report: failures, tokens, time, out-of-range, granularity
+  seeding.py         random streams: `seed` = the world, `replicate` = the dynamics
+  runs.py            run folders: writing (RunWriter) and reading (load_run), config hash
+  checks.py          warnings/errors on a config before it runs
+  sweep.py           `disensa sweep`: grids of runs, resume, shards, sweep.json
+  scorer.py          offline opinion scorer -> scores.parquet (measurement only)
+  validation.py      human validation: sample export, Krippendorff's alpha, agreement report
+  cli.py             `disensa run | sweep | score | validation | analyze | app | ping`
   dynamics/
     __init__.py      the Dynamics interface + make_dynamics
-    numeric.py       DeGroot, bounded confidence
+    numeric.py       DeGroot, bounded confidence, Friedkin–Johnsen
     llm_agent.py     LLM agents (Wang et al. §3), model assignment by weight
   llm/
-    client.py        LiteLLM client, cache, JSON parsing/repair
-    prompts.py       every prompt template (quoted verbatim in the thesis)
+    client.py        LiteLLM client, cache, JSON parsing/repair, per-provider thinking switch
+    prompts.py       every prompt template (quoted verbatim in the thesis), scorer included
+    serving.py       what served each model (Ollama digest/quantization, vLLM model ids)
+    ollama.py        starting Ollama, installed models, downloads
+  analysis/          many runs together (matplotlib only for figures: the `analysis` extra)
+    load.py          find_run_dirs, load_runs -> one row per run
+    summary.py       clusters, convergence, drift, movement, Wasserstein
+    fit.py           numeric rules fitted to an LLM run on its own world, + baseline
+    response.py      micro response curve and each rule's prediction
+    figures.py       the thesis figures (PDF + CSV)
+    analyze.py       `disensa analyze`
   app/
     server.py        stdlib HTTP server + JSON API, runs in threads
     payload.py       run folder -> JSON for the viewer
     web/             shared/, landing/ (/), lab/ (/lab), docs/ (/docs), vendor/d3.min.js
+configs/             example configs; configs/sweeps/ example sweep files
+scripts/indaco/      SLURM job-array template for vLLM on INDACO, and its README
 ```
 
 ## Commands
@@ -71,9 +101,17 @@ uv run pytest && uv run ruff check . && uv run ruff format --check .
 uv run disensa run configs/numeric_bc.yaml    # numeric, instant
 uv run disensa run configs/quick.yaml         # Ollama, minutes
 uv run disensa app                            # web app: configure, run, watch live
+uv run disensa ping hosted_vllm/llama3.2:3b --api-base http://localhost:11434/v1
+uv run disensa sweep configs/sweeps/numeric_bc_epsilon.yaml [--dry-run] [--shard i/N]
+uv run disensa score runs/<run or sweep> --model ollama_chat/<scorer>
+uv run disensa validation export runs/<sweep> --n 100 --out validation/<name>
+uv run disensa validation report validation/<name>
+uv run disensa analyze runs/<sweep> ... --out figures/
 ```
 
 ## Not done yet
 
-- `docs/index.html` still describes the full prototype; to be rewritten.
-- Running on INDACO (vLLM + SLURM). The code only needs `api_base` pointed at a vLLM server.
+- Running on INDACO: `scripts/indaco/sweep.slurm` is untested until access works; partitions,
+  GPU memory and time limits are placeholders.
+- The topic statements of `configs/sweeps/topics_core.yaml` (political, factual, trivial) are
+  placeholders: Theo chooses them.
