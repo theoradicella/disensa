@@ -20,7 +20,9 @@ Research questions are deliberately not fixed yet — do not invent or add them.
 - One loop for everything (`engine.py`). Numeric and LLM agents differ only in the `Dynamics`
   object (`dynamics/`): `labels()`, `start(x0)`, `step(x, t) -> (new x, events)`.
 - Opinions live on **[-2, 2]** everywhere (−2 strongly oppose, +2 strongly support the statement).
-- Everything is seeded. RNG streams: network/opinions/interactions `seed`, model assignment `seed+2000`.
+- Everything is seeded (`seeding.py`). `seed` = the world (network, opinions, model assignment),
+  the same for numeric and LLM runs; `replicate` = the dynamics (interactions, LLM sampling
+  seed). Every stream has its own `SeedSequence`; never reuse one stream for two draws.
 - Steps are synchronous: agents use the state of step t−1 and all updates apply together.
 - **Vocabulary: no social-media framing.** LLM agents have *interactions*; each interaction is
   an *author* and the *message* they shared at t−1. Say *step*, never *day*; *message*, never

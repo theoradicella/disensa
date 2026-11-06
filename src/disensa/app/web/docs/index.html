@@ -30,6 +30,7 @@
       <li><a href="#how-a-run-works">How a run works</a>
         <ol>
           <li><a href="#run-setup">Setup</a></li>
+          <li><a href="#seeds">Seeds and replicates</a></li>
           <li><a href="#run-step">One step</a></li>
           <li><a href="#run-end">At the end</a></li>
         </ol>
@@ -173,11 +174,26 @@ disensa ping ollama_chat/llama3.2:3b</code></pre>
 
     <h3 id="run-setup">Setup</h3>
     <ol class="steps">
-      <li><strong>Read the config.</strong> The file is checked before anything runs: a missing or out-of-range parameter stops the run with an error. The <code>seed</code> fixes every random draw, so the same config always gives the same network and the same starting opinions.</li>
+      <li><strong>Read the config.</strong> The file is checked before anything runs: a missing or out-of-range parameter stops the run with an error. The <code>seed</code> fixes the world (network, starting opinions, model placement) and <code>replicate</code> the random draws of the dynamics, so the same config always gives the same run (see <a href="#seeds">Seeds and replicates</a>).</li>
       <li><strong>Build the network.</strong> Agents are its nodes, numbered \(0\) to \(N-1\), and an agent only ever interacts with its neighbours. The network is redrawn until it is connected. See <a href="#topologies">Network topologies</a>.</li>
       <li><strong>Draw the initial opinions</strong>, one per agent. Together they are written \(x(0)\), the opinions at step 0; in general \(x(t)\) are the opinions after step \(t\). See <a href="#initial-opinions">Initial opinions</a>.</li>
       <li><strong>Prepare the agents.</strong> Numeric agents need no further setup. With LLM agents, two more things happen. First, every agent is given a model: each model gets the share of agents set by its <code>weight</code>, placed at random on the network. Then every agent writes a <strong>first message</strong> stating its initial opinion. These are the messages the others will read at step 1.</li>
     </ol>
+
+    <h3 id="seeds">Seeds and replicates</h3>
+    <p>Every random draw in a run comes from two numbers. The <strong><code>seed</code></strong> fixes the <em>world</em>: the network, the starting opinions and which agent gets which model. The <strong><code>replicate</code></strong> (default \(0\)) fixes the <em>dynamics</em>: which neighbours each agent hears at each step, and the sampling seed sent with every model call.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Draw</th><th>Fixed by</th></tr></thead>
+      <tbody>
+        <tr><td>the network</td><td><code>seed</code></td></tr>
+        <tr><td>the starting opinions \(x(0)\)</td><td><code>seed</code></td></tr>
+        <tr><td>which agent gets which model</td><td><code>seed</code></td></tr>
+        <tr><td>who interacts with whom, at every step</td><td><code>seed</code> and <code>replicate</code></td></tr>
+        <tr><td>the sampling seed of the model calls</td><td><code>seed</code> and <code>replicate</code></td></tr>
+      </tbody>
+    </table></div>
+    <p>This split gives the two comparisons the experiments need. <strong>Same seed, different dynamics:</strong> an LLM run and a numeric run with the same seed start from exactly the same network and opinions, so the numeric rules are baselines for that very LLM run. <strong>Same seed, different replicate:</strong> two LLM runs on the same world differ only in the dynamics&rsquo; own randomness, so how much their outcomes differ measures how much of an outcome is chance rather than the world. Numeric rules are deterministic and ignore <code>replicate</code>; setting it on a numeric run gives a warning. A run with a replicate other than \(0\) has <code>_r&lt;replicate&gt;</code> at the end of its folder name.</p>
+    <p>Each draw has its own random stream, derived from the two numbers with NumPy&rsquo;s <code>SeedSequence</code> (<code>seeding.py</code>), so no two draws share random numbers. <code>meta.json</code> records <code>"seeding": 2</code>. Runs made before disensa 0.3 used a single stream for opinions and interactions, have no <code>seeding</code> key, and cannot be reproduced exactly with the current code.</p>
 
     <h3 id="run-step">One step</h3>
     <p>At step \(t\), every agent computes its new opinion from the state at step \(t-1\): its own opinion and what its neighbours held or said. Updates are <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-synchronous">synchronous</button><span class="term-pop" role="tooltip" id="pop-synchronous"><strong>Synchronous update</strong>: every agent works from the same snapshot, the state at step \(t-1\), and all new opinions replace the old ones at once. In an <em>asynchronous</em> update agents would go one at a time, each seeing the changes made before it, so the order in which they go would matter.</span></span>: no agent sees another&rsquo;s step-\(t\) opinion until the step is over, so the order in which agents are processed never matters. How an agent turns what it sees into a new opinion depends on its kind:</p>
@@ -194,7 +210,7 @@ disensa ping ollama_chat/llama3.2:3b</code></pre>
     <p>Then, for both kinds of agents, the step ends the same way. Opinions are kept on the scale from \(-2\) to \(+2\): if a language model replies with a value outside it, say \(3\), it is set to the nearest end, \(+2\). Then the <a href="#metrics">metrics</a> are computed, and the step is written to disk. A run with <code>steps: 10</code> records 11 states: step 0 and ten updates.</p>
 
     <h3 id="run-end">At the end</h3>
-    <p>Each run gets its own folder, <code>runs/&lt;timestamp&gt;_&lt;name&gt;_s&lt;seed&gt;/</code>, filled step by step while the run goes: if a run is stopped, every finished step is kept. When the loop is done the run is marked as finished, with its duration and, for LLM runs, the number of model calls. What each file holds is in <a href="#outputs">Run files</a>; how to follow a run in the lab, agent by agent, is in <a href="#reading-a-run">Reading a run</a>.</p>
+    <p>Each run gets its own folder, <code>runs/&lt;timestamp&gt;_&lt;name&gt;_s&lt;seed&gt;/</code> (with <code>_r&lt;replicate&gt;</code> for a replicate other than \(0\)), filled step by step while the run goes: if a run is stopped, every finished step is kept. When the loop is done the run is marked as finished, with its duration and, for LLM runs, the number of model calls. What each file holds is in <a href="#outputs">Run files</a>; how to follow a run in the lab, agent by agent, is in <a href="#reading-a-run">Reading a run</a>.</p>
     <div class="note"><strong>Reproducibility.</strong> A numeric run is fully determined by its config. An LLM run is too, once its replies are cached: every reply is stored on disk under its exact request, so running the same config again replays the same replies instead of calling the models, and the run comes out identical.</div>
     <h2 id="topologies">Network topologies</h2>
     <p>Each agent is a node in the network, with its own independent state. In an LLM run, different nodes can be driven by different models (e.g. Llama, Qwen, Gemma); see <a href="#agents">LLM agents</a> for how models are assigned to nodes. A link between two nodes means those agents interact. Networks are undirected and unweighted: if \(i\) is linked to \(j\), then \(j\) is linked to \(i\), and every link counts the same. Three classic models are available to generate the network:</p>
@@ -550,7 +566,7 @@ Respond ONLY with JSON:
     </details>
 
     <h3 id="agent-models">Models</h3>
-    <p>The models of a run are listed under <code>dynamics.models</code>. Each has a <code>weight</code>, and each model gets that share of the agents: three models with equal weight and 20 agents give \(7 + 7 + 6\). Shares are rounded so the counts always add up to \(N\) (<span class="term-wrap"><button type="button" class="term" aria-describedby="pop-largest-remainder">largest remainder</button><span class="term-pop" role="tooltip" id="pop-largest-remainder">Each model first gets the whole part of its exact share (\(20/3 = 6.67 \to 6\)). The agents left over go one each to the models with the largest fractional parts.</span></span>). The agents are then placed on the network at random: the list of model labels is shuffled and handed out to the agents. The shuffle has its own random generator, separate from the rest of the run, so two runs with the same seed but different models have the same network, initial opinions and interactions; only the models differ.</p>
+    <p>The models of a run are listed under <code>dynamics.models</code>. Each has a <code>weight</code>, and each model gets that share of the agents: three models with equal weight and 20 agents give \(7 + 7 + 6\). Shares are rounded so the counts always add up to \(N\) (<span class="term-wrap"><button type="button" class="term" aria-describedby="pop-largest-remainder">largest remainder</button><span class="term-pop" role="tooltip" id="pop-largest-remainder">Each model first gets the whole part of its exact share (\(20/3 = 6.67 \to 6\)). The agents left over go one each to the models with the largest fractional parts.</span></span>). The agents are then placed on the network at random: the list of model labels is shuffled and handed out to the agents. The shuffle has its own random generator, fixed by the <code>seed</code> alone (see <a href="#seeds">Seeds and replicates</a>), so two runs with the same seed but different models have the same network, initial opinions and interactions; only the models differ.</p>
     <p>A model is written as <code>ollama_chat/&lt;name&gt;</code>, e.g. <code>ollama_chat/llama3.2:3b</code>: <code>ollama_chat</code> says the model runs on Ollama, on the same computer as disensa, and the rest is the model&rsquo;s name there. Only local models are used, so runs are free and no data leaves the machine. How to install and download models is in <a href="#local-models">Local models</a>. disensa sends every request through <a href="https://docs.litellm.ai/docs/providers" target="_blank" rel="noopener">LiteLLM</a>, a library that talks to model servers in a uniform way.</p>
     <p>Each request also carries settings that are not part of the prompt. The <span class="term-wrap"><button type="button" class="term" aria-describedby="pop-temperature"><strong>temperature</strong></button><span class="term-pop" role="tooltip" id="pop-temperature"><strong>Temperature</strong> \(T\): a model writes one token at a time, giving each candidate \(k\) a score \(z_k\) and drawing it with probability \(p_k \propto e^{z_k / T}\). As \(T \to 0\) the top token almost always wins; at \(T = 1\) the model&rsquo;s own probabilities are used; above \(1\) unlikely tokens get through more often.</span></span> (default \(0.7\)) sets how varied the replies are: low values give nearly the same reply to the same prompt, higher values more varied ones. <strong><code>top_p</code></strong> (default \(0.9\)) and <strong><code>top_k</code></strong> (default \(40\)) narrow the draw further: only the \(k\) most likely tokens, and among them only the smallest set whose probabilities add up to \(p\), can be picked. <strong><code>max_tokens</code></strong> caps the length of the reply. Every model gets the same prompts and the same settings unless set otherwise, so that differences between agents come from the models. The same temperature does not make two models equally random, though: it reshapes each model&rsquo;s own word probabilities, so it treats them the same way, not makes them behave the same.</p>
     <p><strong>Sampling settings are fixed and recorded.</strong> disensa sends the temperature, <code>top_p</code>, <code>top_k</code> and a sampling seed with every request, instead of leaving any of them to the model server. Ollama and vLLM have different defaults, so a setting left to the server would make results from the two differ for a reason nobody chose. The defaults are Ollama&rsquo;s, so runs match the ones made locally. They are set in the config file only (not in the lab&rsquo;s setup) and saved with the run; the run view shows them under <em>Models</em>.</p>
@@ -560,7 +576,7 @@ Respond ONLY with JSON:
     <h3 id="agent-reliability">Error handling and reproducibility</h3>
     <p>Models do not always follow the format. disensa asks for JSON mode when the provider supports it, and repairs common mistakes (text around the JSON, trailing commas). If that fails, it asks the model once more to fix its reply. If the reply is still unusable, or the provider returns an error, the run does not stop: the agent keeps its previous opinion, message and memory for that step, and the error is saved with the step so it can be counted and inspected. The <code>belief</code> must be a finite number: <code>NaN</code>, <code>true</code> or <code>"a lot"</code> count as failed replies. A number outside \([-2, 2]\) is clipped to the nearest end, and both the clipping and the number the model gave are saved. A missing <code>message</code> or <code>memory</code> also keeps the previous one. The one case with nothing to keep is step 0: an agent whose first message fails has no message yet, so its neighbours cannot hear it until it says something.</p>
     <p>A few failures are normal. Many are not, and they are easy to miss, because a failed reply keeps the opinion: a run where most calls fail looks like a run of very stubborn agents. So a run <strong>stops</strong> when more than <code>max_error_rate</code> of the replies of one step fail (default \(20\%\), step 0 included). It is marked <em>failed</em> with the reason, e.g. &ldquo;step 3: 47/50 replies failed (provider: connection refused)&rdquo;, every finished step is kept, and <code>disensa run</code> exits with an error. How many replies failed, and why, is in the <a href="#run-report">run report</a>.</p>
-    <p>Every reply is <strong>cached</strong> on disk under its exact request: the model, the full prompt, the sampling settings (temperature, <code>top_p</code>, <code>top_k</code>), <code>max_tokens</code> and the seed. Running the same config again replays the same replies without calling any model, so an LLM run is reproducible once it has been run once. Changing anything in the prompt (the statement, a neighbour&rsquo;s message, the memory) makes it a new request.</p>
+    <p>Every reply is <strong>cached</strong> on disk under its exact request: the model, the full prompt, the sampling settings (temperature, <code>top_p</code>, <code>top_k</code>), <code>max_tokens</code> and the sampling seed. Running the same config again replays the same replies without calling any model, so an LLM run is reproducible once it has been run once. Changing anything in the prompt (the statement, a neighbour&rsquo;s message, the memory) makes it a new request.</p>
 
     <h3 id="agents-in-disensa">In disensa</h3>
     <p>Set <code>dynamics.type: llm</code>, a statement and at least one model. <code>configs/quick.yaml</code> is the smallest run, one small Ollama model; <code>configs/mixed_local.yaml</code> mixes three Ollama models on a Mac.</p>
@@ -588,7 +604,7 @@ Respond ONLY with JSON:
     <p>To follow a run agent by agent, with each step&rsquo;s interactions, reasoning and memory, see <a href="#reading-a-run">Reading a run</a>.</p>
 
     <h2 id="initial-opinions">Initial opinions</h2>
-    <p>Before the first step, every agent gets a starting opinion \(x_i(0)\) on the scale from \(-2\) (strongly oppose) to \(+2\) (strongly support), with \(0\) as neutral. Together they form \(x(0)\), the input to every rule. The opinions are drawn at random from a <strong>distribution</strong> chosen in the config, once per run, from the run&rsquo;s <code>seed</code>.</p>
+    <p>Before the first step, every agent gets a starting opinion \(x_i(0)\) on the scale from \(-2\) (strongly oppose) to \(+2\) (strongly support), with \(0\) as neutral. Together they form \(x(0)\), the input to every rule. The opinions are drawn at random from a <strong>distribution</strong> chosen in the config, once per run, from the run&rsquo;s <code>seed</code> (<a href="#seeds">Seeds and replicates</a>).</p>
 
     <h3 id="opinion-distributions">Distributions</h3>
     <div class="table-wrap"><table>
@@ -684,7 +700,7 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
     <p>Runs are listed newest first, with their name, kind of agents, start time and status. Clicking a row shows its details (duration, agents, steps, seed, network, and the models or the rule) and three actions:</p>
     <ul>
       <li><strong>Open run</strong> opens the viewer described below. Its address, <code>/lab?run=&lt;folder&gt;</code>, can be bookmarked or reloaded.</li>
-      <li><strong>Duplicate</strong> fills <em>New run</em> with the same configuration, ready to change. Changing one setting and keeping the seed gives a controlled comparison: the same network, starting opinions and interactions, with only that setting different.</li>
+      <li><strong>Duplicate</strong> fills <em>New run</em> with the same configuration, ready to change. Changing one setting and keeping the seed gives a controlled comparison: the same network, starting opinions and interactions, with only that setting different. The replicate is not part of the form, so a duplicate runs with replicate \(0\).</li>
       <li><strong>Delete</strong> removes the run folder from disk. This cannot be undone, and a running run has to be stopped first.</li>
     </ul>
     <div class="table-wrap"><table>
@@ -700,7 +716,7 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
     <p>LLM runs with failed replies show their share next to the status, e.g. &ldquo;3% failed&rdquo;, in red above \(5\%\).</p>
 
     <h3 id="run-overview">The run at a glance</h3>
-    <p>The top of the page shows the run&rsquo;s name, its statement (numeric runs have none) and its settings in four groups: the network, the initial opinions, the models or the update rule, and the simulation (steps, interactions per step and seed). With several models, each is listed with the number of agents it drives, in the same colour as its line in <em>Mean opinion by model</em>, followed by the sampling settings. Below the settings, LLM runs show the <a href="#run-report">run report</a>: failed replies (by kind and, with several models, by model), tokens, time, beliefs out of range and belief granularity. It is updated after every step while the run goes.</p>
+    <p>The top of the page shows the run&rsquo;s name, its statement (numeric runs have none) and its settings in four groups: the network, the initial opinions, the models or the update rule, and the simulation (steps, interactions per step, seed and replicate). With several models, each is listed with the number of agents it drives, in the same colour as its line in <em>Mean opinion by model</em>, followed by the sampling settings. Below the settings, LLM runs show the <a href="#run-report">run report</a>: failed replies (by kind and, with several models, by model), tokens, time, beliefs out of range and belief granularity. It is updated after every step while the run goes.</p>
     <p>While a run is going, a progress bar shows the step being computed, how many agents have replied so far (and how many replies failed), the time elapsed and an estimate of the time left. The first replies are slow, because Ollama has to load the models first. The viewer follows the newest step as it arrives. <strong>Stop</strong> ends the run at once and keeps every finished step.</p>
 
     <h3 id="run-playback">Moving through time</h3>
@@ -747,7 +763,7 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
     <p>Every run, from the lab or from <code>disensa run</code>, writes one folder. Everything in the lab is read from these files, so a run folder can be analysed outside disensa, archived, or copied to another computer.</p>
 
     <h3 id="run-folder">The run folder</h3>
-    <p>Run folders go in <code>runs/</code> (set by <code>output_dir</code>), relative to the folder disensa was started from, and are named <code>&lt;timestamp&gt;_&lt;name&gt;_s&lt;seed&gt;</code>, e.g. <code>20261103-230240_Big_Run_s44</code>. Characters of the name other than letters, digits, <code>-</code> and <code>_</code> become <code>_</code> in the folder name; the name itself is kept as typed in <code>meta.json</code>. The lab lists every folder in <code>runs/</code>, so a run copied there, for example from a computing cluster, appears under <em>Previous runs</em>.</p>
+    <p>Run folders go in <code>runs/</code> (set by <code>output_dir</code>), relative to the folder disensa was started from, and are named <code>&lt;timestamp&gt;_&lt;name&gt;_s&lt;seed&gt;</code>, plus <code>_r&lt;replicate&gt;</code> for a replicate other than \(0\), e.g. <code>20261103-230240_Big_Run_s44</code>. Characters of the name other than letters, digits, <code>-</code> and <code>_</code> become <code>_</code> in the folder name; the name itself is kept as typed in <code>meta.json</code>. The lab lists every folder in <code>runs/</code>, so a run copied there, for example from a computing cluster, appears under <em>Previous runs</em>.</p>
 <pre><code>runs/20261103-230240_Big_Run_s44/
   meta.json          the config, timing and status
   agents.parquet     one row per agent
@@ -763,6 +779,7 @@ opinions: {distribution: bimodal, mean: 1.2, std: 0.4}</code></pre>
       <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
       <tbody>
         <tr><td><code>config</code></td><td>the full config, with every default filled in (see <a href="#parameters">All parameters</a>). <em>Duplicate</em> in the lab starts from it.</td></tr>
+        <tr><td><code>seeding</code></td><td>the random-stream scheme, \(2\) since disensa 0.3; missing for older runs (<a href="#seeds">Seeds and replicates</a>)</td></tr>
         <tr><td><code>git_commit</code></td><td>the commit of the disensa code, when it runs from a git checkout; otherwise <code>null</code></td></tr>
         <tr><td><code>started</code></td><td>start time, <code>YYYYMMDD-HHMMSS</code></td></tr>
         <tr><td><code>status</code></td><td><code>running</code>, <code>finished</code>, <code>cancelled</code> or <code>failed</code>. A run left at <code>running</code> that is not going any more was stopped by a crash; the lab shows it as <em>incomplete</em>. Runs made before disensa 0.3 have no status, only the two flags below.</td></tr>
@@ -835,6 +852,7 @@ run.events[0]["message"]     # LLM runs: the events, as a list of dicts</code></
     <p>Only <code>name</code>, <code>network.topology</code> with its parameters, <code>dynamics.type</code> and, for LLM runs, <code>dynamics.models</code> are required. Everything else has a default. This config sets every parameter of an LLM run, each at its default where it has one:</p>
 <pre><code>name: Euthanasia, small-world
 seed: 0
+replicate: 0
 steps: 10
 output_dir: runs
 
@@ -882,7 +900,8 @@ dynamics:
       <thead><tr><th>Parameter</th><th>Values</th><th>Default</th></tr></thead>
       <tbody>
         <tr><td><code>name</code></td><td>any text; shown in the lab and used in the folder name</td><td>required</td></tr>
-        <tr><td><code>seed</code></td><td>integer; fixes the network, the initial opinions, the interactions and the model placement (<a href="#run-setup">Setup</a>)</td><td>\(0\)</td></tr>
+        <tr><td><code>seed</code></td><td>integer; fixes the world: the network, the initial opinions and the model placement (<a href="#seeds">Seeds and replicates</a>)</td><td>\(0\)</td></tr>
+        <tr><td><code>replicate</code></td><td>integer \(\ge 0\); fixes the dynamics: the interactions and the LLM sampling seed. Numeric runs ignore it (<a href="#seeds">Seeds and replicates</a>)</td><td>\(0\)</td></tr>
         <tr><td><code>steps</code></td><td>number of update steps, \(&gt; 0\); step 0 is saved as well (<a href="#run-step">One step</a>)</td><td>\(10\)</td></tr>
         <tr><td><code>output_dir</code></td><td>where run folders go (<a href="#run-folder">The run folder</a>)</td><td><code>runs</code></td></tr>
       </tbody>

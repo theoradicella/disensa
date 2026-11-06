@@ -288,11 +288,25 @@ def model_checks(cfg: LLMDynamics) -> list[Check]:
 # ---------------------------------------------------------------- entry points
 
 
+def replicate_check(replicate: int) -> list[Check]:
+    if not replicate:
+        return []
+    return [
+        Check(
+            "replicate",
+            f"replicate = {replicate} has no effect on a numeric run: the rules are "
+            "deterministic, so every replicate of the same seed gives the same run.",
+            "seeds",
+            "How a run works › Seeds and replicates",
+        )
+    ]
+
+
 def config_checks(cfg: ExperimentConfig) -> list[Check]:
     out = network_checks(cfg.network) + opinion_checks(cfg.opinions)
     d = cfg.dynamics
     if d.type == "numeric":
-        out += numeric_checks(d)
+        out += numeric_checks(d) + replicate_check(cfg.replicate)
     else:
         out += interaction_checks(d.interactions, cfg.network) + model_checks(d)
     return out

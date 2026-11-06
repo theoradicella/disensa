@@ -29,6 +29,7 @@ from disensa import OPINION_MAX, OPINION_MIN
 from disensa.config import LLMDynamics, ModelSpec
 from disensa.llm import CallInfo, LLMCallError, LLMClient
 from disensa.llm.prompts import initial_message_prompt, system_prompt, update_prompt
+from disensa.seeding import interactions_rng, models_rng, sampling_seed
 
 
 @dataclass
@@ -68,7 +69,8 @@ def parse_belief(value) -> float | None:
 def assign_models(models: list[ModelSpec], n: int, seed: int) -> list[ModelSpec]:
     """Exact shares by weight (largest-remainder rounding), randomly placed on the network.
 
-    Uses its own RNG stream (seed + 2_000) so interactions are unaffected by the model mix.
+    Uses its own RNG stream (seeding.models_rng), so interactions are unaffected by the
+    model mix, and the same seed places the models the same way whatever else changes.
     """
     w = np.array([m.weight for m in models], dtype=float)
     raw = w / w.sum() * n
@@ -76,19 +78,21 @@ def assign_models(models: list[ModelSpec], n: int, seed: int) -> list[ModelSpec]
     for i in np.argsort(-(raw - counts), kind="stable")[: n - counts.sum()]:
         counts[i] += 1
     pool = [m for m, c in zip(models, counts, strict=True) for _ in range(c)]
-    rng = np.random.default_rng(seed + 2_000)
+    rng = models_rng(seed)
     return [pool[i] for i in rng.permutation(n)]
 
 
 class LLMAgents:
-    def __init__(self, cfg: LLMDynamics, graph: nx.Graph, seed: int = 0):
+    def __init__(self, cfg: LLMDynamics, graph: nx.Graph, seed: int = 0, replicate: int = 0):
         self.cfg = cfg
         self.graph = graph
         self.seed = seed
+        self.replicate = replicate
         self.n = graph.number_of_nodes()
-        self.models = assign_models(cfg.models, self.n, seed)
+        self.models = assign_models(cfg.models, self.n, seed)  # the world: seed only
         self.state = [TextState() for _ in range(self.n)]
-        self.rng = np.random.default_rng(seed)  # whom each agent interacts with
+        self.rng = interactions_rng(seed, replicate)  # whom each agent interacts with
+        self.sampling_seed = sampling_seed(seed, replicate)  # sent with every model call
         self.client = LLMClient(cfg.cache_dir, cfg.max_concurrency)
         # called after every reply with (step, agent, error or None); used for live progress
         self.on_reply: Callable[[int, int, str | None], None] | None = None
@@ -115,7 +119,7 @@ class LLMAgents:
                 think=m.think,
                 max_tokens=self.cfg.max_tokens,
                 api_base=m.api_base,
-                seed=self.seed,
+                seed=self.sampling_seed,
             )
             return Reply(obj, raw, info=info)
         except LLMCallError as e:  # malformed JSON after repair, or the server failed

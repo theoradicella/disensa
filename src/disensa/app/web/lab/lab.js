@@ -968,7 +968,7 @@
       section("Update rule", ALGO_LABEL[d.rule] || d.rule,
         d.rule === "bounded_confidence" ? `ε = ${d.epsilon} · μ = ${d.mu}` : d.rule === "friedkin_johnsen" ? `λ = ${d.stubbornness}` : "");
     }
-    section("Simulation", `${c.steps} steps`, join(llm && d.interactions ? `${d.interactions.min}–${d.interactions.max} interactions per step` : "", `seed ${c.seed}`));
+    section("Simulation", `${c.steps} steps`, join(llm && d.interactions ? `${d.interactions.min}–${d.interactions.max} interactions per step` : "", `seed ${c.seed}`, c.replicate ? `replicate ${c.replicate}` : ""));
   }
   // the run report (report.py): how far the run can be trusted, and what it cost.
   // Older runs did not record every number: those show "not recorded".

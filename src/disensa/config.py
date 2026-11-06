@@ -129,7 +129,10 @@ Dynamics = Annotated[NumericDynamics | LLMDynamics, Field(discriminator="type")]
 
 class ExperimentConfig(BaseModel):
     name: str
+    # the world: network, starting opinions, model assignment (seeding.py)
     seed: int = 0
+    # the dynamics: interactions and the LLM sampling seed; numeric runs ignore it
+    replicate: int = Field(0, ge=0)
     network: NetworkConfig
     opinions: InitialOpinions = InitialOpinions()
     steps: int = Field(10, gt=0, description="number of update steps")

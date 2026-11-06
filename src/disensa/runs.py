@@ -1,6 +1,6 @@
 """Storing runs on disk: one folder per run, written while it runs, read back by the lab.
 
-runs/<timestamp>_<name>_s<seed>/
+runs/<timestamp>_<name>_s<seed>[_r<replicate>]/
   meta.json          the full config, git commit, start time, status (running | finished |
                      cancelled | failed, with a `reason` when failed), timings, and the
                      run `report` (report.py), updated after every step
@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from disensa.config import ExperimentConfig
+from disensa.seeding import SEEDING
 
 
 def _git_commit() -> str | None:
@@ -46,7 +47,8 @@ def new_run_dir(cfg: ExperimentConfig) -> Path:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     # only the folder name is slugged; the name itself is kept as typed
     slug = re.sub(r"[^A-Za-z0-9_-]+", "_", cfg.name).strip("_") or "run"
-    base = cfg.output_dir / f"{stamp}_{slug}_s{cfg.seed}"
+    rep = f"_r{cfg.replicate}" if cfg.replicate else ""
+    base = cfg.output_dir / f"{stamp}_{slug}_s{cfg.seed}{rep}"
     run_dir, i = base, 1
     while run_dir.exists():  # two runs in the same second
         run_dir = base.with_name(f"{base.name}-{i}")
@@ -57,6 +59,7 @@ def new_run_dir(cfg: ExperimentConfig) -> Path:
         "git_commit": _git_commit(),
         "started": stamp,
         "status": "running",  # running | finished | cancelled | failed (engine.py)
+        "seeding": SEEDING,  # which random-stream scheme made this run (seeding.py)
     }
     (run_dir / "meta.json").write_text(json.dumps(meta, indent=2))
     return run_dir

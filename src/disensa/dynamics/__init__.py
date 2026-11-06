@@ -41,4 +41,4 @@ def make_dynamics(cfg: ExperimentConfig, graph: nx.Graph) -> Dynamics:
         return NumericAgents(cfg.dynamics, graph)
     from disensa.dynamics.llm_agent import LLMAgents
 
-    return LLMAgents(cfg.dynamics, graph, seed=cfg.seed)
+    return LLMAgents(cfg.dynamics, graph, seed=cfg.seed, replicate=cfg.replicate)

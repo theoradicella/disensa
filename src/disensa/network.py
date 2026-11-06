@@ -7,6 +7,7 @@ import numpy as np
 
 from disensa import OPINION_MAX, OPINION_MIN
 from disensa.config import InitialOpinions, NetworkConfig
+from disensa.seeding import opinions_rng
 
 
 def build_network(cfg: NetworkConfig, seed: int = 0, max_tries: int = 100) -> nx.Graph:
@@ -33,8 +34,8 @@ def _redraw_seed(seed: int, attempt: int) -> int:
 
 
 def initial_opinions(cfg: InitialOpinions, n: int, seed: int = 0) -> np.ndarray:
-    """Draw n initial opinions on [OPINION_MIN, OPINION_MAX]."""
-    rng = np.random.default_rng(seed)
+    """Draw n initial opinions on [OPINION_MIN, OPINION_MAX], from the run's opinions stream."""
+    rng = opinions_rng(seed)
     if cfg.distribution == "uniform":
         x = rng.uniform(OPINION_MIN, OPINION_MAX, n)
     elif cfg.distribution == "normal":
