@@ -84,6 +84,9 @@ class ModelSpec(BaseModel):
     temperature: float = Field(0.7, ge=0)
     top_p: float = Field(0.9, gt=0, le=1)
     top_k: int = Field(40, gt=0)
+    # "thinking" models (e.g. qwen3) write hidden reasoning before the answer: it eats the
+    # reply budget, can confuse the JSON parser and is very slow. Off unless asked for.
+    think: bool = False
 
 
 class InteractionsConfig(BaseModel):

@@ -33,6 +33,32 @@ class LLMResponse:
     model: str
     cached: bool = False
     usage: dict = field(default_factory=dict)
+    thinking: str = ""  # hidden reasoning the server returned separately, if any
+
+
+_THINK_BLOCK = re.compile(r"^\s*<think>.*?</think>", re.DOTALL)
+
+
+def strip_think(text: str) -> str:
+    """Drop a leading <think>…</think> block, which thinking models may put before the answer."""
+    return _THINK_BLOCK.sub("", text, count=1)
+
+
+def thinking_kwargs(model: str, think: bool | None) -> dict:
+    """How to switch a model's thinking on or off, per provider (checked on LiteLLM 1.102).
+
+    ollama_chat   Ollama's `think` field (LiteLLM forwards a `think` kwarg as is)
+    hosted_vllm   the chat template flag of Qwen3-style models; other templates ignore it
+    Other providers get nothing: models without thinking have nothing to switch off.
+    """
+    if think is None:
+        return {}
+    provider = model.split("/", 1)[0]
+    if provider == "ollama_chat":
+        return {"think": think}
+    if provider == "hosted_vllm":
+        return {"extra_body": {"chat_template_kwargs": {"enable_thinking": think}}}
+    return {}
 
 
 def _cache_key(model: str, messages: list[Message], params: dict) -> str:
@@ -41,8 +67,11 @@ def _cache_key(model: str, messages: list[Message], params: dict) -> str:
 
 
 def parse_json(text: str) -> dict[str, Any]:
-    """Extract the first JSON object from a model reply (tolerates prose and code fences)."""
-    text = text.strip()
+    """Extract the first JSON object from a model reply (tolerates prose and code fences).
+
+    A leading <think>…</think> block is dropped first: its braces are not the answer.
+    """
+    text = strip_think(text).strip()
     try:
         obj = json.loads(text)
         if isinstance(obj, dict):
@@ -95,6 +124,7 @@ class LLMClient:
         temperature: float = 0.7,
         top_p: float | None = None,
         top_k: int | None = None,
+        think: bool | None = None,
         max_tokens: int = 512,
         api_base: str | None = None,
         seed: int | None = None,
@@ -107,6 +137,7 @@ class LLMClient:
             "temperature": temperature,
             "top_p": top_p,
             "top_k": top_k,
+            "think": think,
             "max_tokens": max_tokens,
             "seed": seed,
         }
@@ -115,13 +146,19 @@ class LLMClient:
         if use_cache and key in self.cache:
             self.cache_hits += 1
             hit = self.cache[key]
-            return LLMResponse(text=hit["text"], model=model, cached=True, usage=hit["usage"])
+            return LLMResponse(
+                text=hit["text"],
+                model=model,
+                cached=True,
+                usage=hit["usage"],
+                thinking=hit.get("thinking", ""),
+            )
 
         async with self._semaphore(model):
             resp = await self._call_litellm(model, messages, params, api_base, json_mode)
 
         if use_cache:
-            self.cache[key] = {"text": resp.text, "usage": resp.usage}
+            self.cache[key] = {"text": resp.text, "usage": resp.usage, "thinking": resp.thinking}
         return resp
 
     async def complete_json(
@@ -159,7 +196,8 @@ class LLMClient:
         litellm.suppress_debug_info = True
         # a provider that does not support a setting (e.g. `seed`) drops it instead of failing
         litellm.drop_params = True
-        kwargs = {k: v for k, v in params.items() if v is not None}
+        kwargs = {k: v for k, v in params.items() if v is not None and k != "think"}
+        kwargs.update(thinking_kwargs(model, params.get("think")))
         kwargs["num_retries"] = 4  # LiteLLM retries rate limits / transient errors with backoff
         if api_base:
             kwargs["api_base"] = api_base
@@ -167,4 +205,10 @@ class LLMClient:
             kwargs["response_format"] = {"type": "json_object"}
         r = await litellm.acompletion(model=model, messages=messages, **kwargs)
         usage = dict(r.usage) if getattr(r, "usage", None) else {}
-        return LLMResponse(text=r.choices[0].message.content or "", model=model, usage=usage)
+        msg = r.choices[0].message
+        return LLMResponse(
+            text=msg.content or "",
+            model=model,
+            usage=usage,
+            thinking=getattr(msg, "reasoning_content", None) or "",
+        )

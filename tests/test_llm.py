@@ -63,3 +63,45 @@ def test_agents_send_their_model_sampling_settings(make_cfg, litellm_kwargs):
     dyn["models"] = [{"name": "ollama_chat/x", "api_base": "http://h", "top_p": 0.8, "top_k": 20}]
     asyncio.run(run(make_cfg(dynamics=dyn, steps=1)))
     assert {(k["temperature"], k["top_p"], k["top_k"]) for k in litellm_kwargs} == {(0.7, 0.8, 20)}
+
+
+def test_parse_json_skips_a_think_block():
+    text = '<think>\nThey said {"belief": 2}, but {hm} I disagree.\n</think>\n{"belief": -1}'
+    assert parse_json(text) == {"belief": -1}
+
+
+@pytest.mark.parametrize(
+    "model,expected",
+    [
+        ("ollama_chat/qwen3:4b", {"think": False}),
+        (
+            "hosted_vllm/Qwen/Qwen3-8B",
+            {"extra_body": {"chat_template_kwargs": {"enable_thinking": False}}},
+        ),
+        ("fake/other", {}),
+    ],
+)
+def test_thinking_is_switched_off_per_provider(tmp_path, litellm_kwargs, model, expected):
+    client = LLMClient(tmp_path / "cache")
+    asyncio.run(client.complete(model, [{"role": "user", "content": "hi"}], think=False))
+    (kw,) = litellm_kwargs
+    assert {k: kw[k] for k in ("think", "extra_body") if k in kw} == expected
+
+
+def test_agents_send_think_false_by_default(make_cfg, litellm_kwargs):
+    from disensa.engine import run
+
+    dyn = make_cfg().dynamics.model_dump(mode="json")
+    dyn["models"] = [{"name": "ollama_chat/qwen3:4b", "api_base": "http://h"}]
+    cfg = make_cfg(dynamics=dyn, steps=1)
+    assert cfg.dynamics.models[0].think is False
+    asyncio.run(run(cfg))
+    assert litellm_kwargs and all(k["think"] is False for k in litellm_kwargs)
+
+
+def test_think_is_part_of_the_cache_key(tmp_path, litellm_kwargs):
+    client = LLMClient(tmp_path / "cache")
+    msgs = [{"role": "user", "content": "hi"}]
+    asyncio.run(client.complete("ollama_chat/x", msgs, think=False))
+    b = asyncio.run(client.complete("ollama_chat/x", msgs, think=True))
+    assert not b.cached and len(litellm_kwargs) == 2

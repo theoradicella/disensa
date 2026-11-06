@@ -71,6 +71,9 @@ def ping(
     api_base: str = typer.Option(
         None, help="server address, e.g. http://localhost:8000/v1 for vLLM"
     ),
+    think: bool = typer.Option(
+        None, "--think/--no-think", help="switch thinking on or off (default: not sent)"
+    ),
 ):
     """Send one prompt to a model, to check that it answers."""
     from disensa.llm import LLMClient, ollama
@@ -78,12 +81,22 @@ def ping(
     if model.startswith("ollama") and not api_base and (err := ollama.ensure_running()):
         raise typer.BadParameter(err)
 
+    t0 = time.time()
     resp = asyncio.run(
         LLMClient().complete(
-            model, [{"role": "user", "content": prompt}], api_base=api_base, use_cache=False
+            model,
+            [{"role": "user", "content": prompt}],
+            api_base=api_base,
+            think=think,
+            use_cache=False,
         )
     )
     typer.echo(f"[{resp.model}] {resp.text}")
+    tokens = resp.usage.get("completion_tokens")
+    typer.echo(
+        f"({tokens if tokens is not None else '?'} reply tokens, {time.time() - t0:.1f}s, "
+        + (f"thinking: {len(resp.thinking)} characters)" if resp.thinking else "no thinking)")
+    )
 
 
 if __name__ == "__main__":

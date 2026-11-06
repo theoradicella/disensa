@@ -950,6 +950,7 @@
         `temperature ${m.temperature ?? "not recorded"}`,
         `top_p ${m.top_p ?? "not recorded"}`,
         `top_k ${m.top_k ?? "not recorded"}`,
+        m.think == null ? "thinking not recorded" : m.think ? "thinking on" : "thinking off",
       ].join(" · ");
       const lines = [...new Set(d.models.map(sampling))];
       lines.forEach((line) => {
