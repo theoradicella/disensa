@@ -155,6 +155,51 @@ def score(
         )
 
 
+validation_app = typer.Typer(
+    no_args_is_help=True, help="Human validation of self-rating and scorer (see /docs#validation)"
+)
+app.add_typer(validation_app, name="validation")
+
+
+@validation_app.command("export")
+def validation_export(
+    paths: list[Path],
+    n: int = typer.Option(100, help="how many messages to sample"),
+    seed: int = typer.Option(0, help="seed of the sample"),
+    out: str = typer.Option(..., help="folder to write, e.g. validation/topics_core"),
+):
+    """Sample messages for blind human rating, stratified by self-rated level."""
+    from disensa import validation
+
+    out = Path(out)
+    try:
+        sample, key = validation.export(paths, out, n=n, seed=seed)
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from None
+    levels = key["self_rating"].map(validation._level).value_counts().sort_index()
+    typer.echo(
+        f"{len(sample)} messages from {key['run'].nunique()} runs -> {out}/sample.csv "
+        f"(by self-rated level: {', '.join(f'{k:+d}: {v}' for k, v in levels.items())})"
+    )
+    typer.echo(
+        f"give raters sample.csv and INSTRUCTIONS.md, never key.csv; collect "
+        f"ratings_<rater>.csv into {out}/"
+    )
+
+
+@validation_app.command("report")
+def validation_report(folder: Path):
+    """Agreement between raters, and of self-rating and each scorer with the raters."""
+    from disensa import validation
+
+    try:
+        r = validation.report(folder)
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from None
+    typer.echo(validation.to_markdown(r))
+    typer.echo(f"written to {folder}/report.json and {folder}/report.md")
+
+
 @app.command(name="app")
 def app_cmd(
     port: int = typer.Option(8765, help="port on 127.0.0.1"),

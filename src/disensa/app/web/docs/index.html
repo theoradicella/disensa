@@ -62,6 +62,7 @@
           <li><a href="#agent-models">Models</a></li>
           <li><a href="#agent-reliability">Error handling</a></li>
           <li><a href="#measuring-opinions">Measuring opinions</a></li>
+          <li><a href="#validation">Human validation</a></li>
           <li><a href="#agents-in-disensa">In disensa</a></li>
         </ol>
       </li>
@@ -607,6 +608,20 @@ Respond ONLY with JSON: {"score": &lt;one of -2, -1, 0, 1, 2, or "unclear"&gt;}<
       </div>
     </details>
 
+    <h3 id="validation">Human validation</h3>
+    <p>To decide between the self-rating and the scorer, a sample of messages is rated by several people who know nothing about the run, and both measures are compared with them (the protocol Chuang et al. used for their classifier, App. M, applied to both measures).</p>
+<pre><code>disensa validation export runs/topics_core --n 100 --seed 0 --out validation/topics_core
+# send sample.csv and INSTRUCTIONS.md to each rater; collect ratings_&lt;name&gt;.csv
+disensa validation report validation/topics_core</code></pre>
+    <p><strong>Export</strong> samples messages from the given runs or sweep folders, <strong>stratified by self-rated level</strong>: each self-rating is rounded to \(-2, \dots, 2\) and the levels are sampled as equally as possible (a level with too few messages gives its share to the others), so that strong and weak positions on both sides are all tested, not just the most common one. Only messages from step 1 on whose reply was used are sampled: at step 0 the opinion is given to the agent, and a failed reply repeats an older message. The sample is shuffled across runs and topics. It writes three files: <code>sample.csv</code> (<code>item_id</code>, <code>statement</code>, <code>message</code> and an empty <code>rating</code>), which is all a rater sees; <code>key.csv</code>, which links each item to its run, step, agent, model, self-rating and scorer ratings and is <strong>never</strong> given to the raters; and <code>INSTRUCTIONS.md</code>. For each message the rater answers &ldquo;What is the author&rsquo;s position on this statement?&rdquo; with one of the five levels (or <code>unclear</code>), rating only the text, alone, without discussing it with the others.</p>
+    <p><strong>Report</strong> reads every <code>ratings_&lt;rater&gt;.csv</code> (a copy of <code>sample.csv</code> with <code>rating</code> filled in) and writes <code>report.json</code> and <code>report.md</code>:</p>
+    <ul>
+      <li>how much the raters agree with each other: <strong>Krippendorff&rsquo;s \(\alpha\)</strong> with the ordinal metric, which counts a \(1\) against a \(2\) as a smaller disagreement than a \(-2\) against a \(2\) and handles missing ratings. \(\alpha = 1\) is perfect agreement, \(0\) is chance; Chuang et al.&rsquo;s raters reached \(0.81\);</li>
+      <li>the raters&rsquo; <strong>majority</strong> rating of each item: the level more than half of them gave, or else their median (a median halfway between two levels goes toward \(0\));</li>
+      <li>for the self-rating and for each scorer: how often it matches the majority exactly, how often it is within one level, the mean absolute difference, and a confusion matrix (rows: the raters, columns: the measure).</li>
+    </ul>
+    <p>The measure that agrees better with the raters is the one the analysis relies on; reporting both is also possible. Since the scorer never changes a run, nothing has to be rerun whichever one wins.</p>
+
     <h3 id="agents-in-disensa">In disensa</h3>
     <p>Set <code>dynamics.type: llm</code>, a statement and at least one model. <code>configs/quick.yaml</code> is the smallest run, one small Ollama model; <code>configs/mixed_local.yaml</code> mixes three Ollama models on a Mac.</p>
 <pre><code>dynamics:
@@ -1038,6 +1053,8 @@ dynamics:
         <tr><td><code>disensa run &lt;config&gt;</code></td><td>runs a config and prints the metrics after every step. <code>--steps N</code> overrides <code>steps</code>.</td></tr>
         <tr><td><code>disensa sweep &lt;file&gt;</code></td><td>runs every combination of a sweep file (<a href="#sweeps">Sweeps</a>). <code>--dry-run</code>, <code>--shard i/N</code>, <code>--cache-dir</code>.</td></tr>
         <tr><td><code>disensa score &lt;run or sweep&gt; --model &lt;m&gt;</code></td><td>rates every agent text with a separate scorer model (<a href="#measuring-opinions">Measuring opinions</a>). <code>--field message|reasoning</code>, <code>--api-base</code>, <code>--max-concurrency</code>.</td></tr>
+        <tr><td><code>disensa validation export &lt;runs&gt; --out &lt;dir&gt;</code></td><td>samples messages for blind human rating (<a href="#validation">Human validation</a>). <code>--n</code>, <code>--seed</code>.</td></tr>
+        <tr><td><code>disensa validation report &lt;dir&gt;</code></td><td>compares the raters with each other, and the self-rating and each scorer with the raters.</td></tr>
         <tr><td><code>disensa app</code></td><td>opens the lab at <code>http://127.0.0.1:8765</code>. <code>--port</code> changes the port, <code>--no-open</code> does not open the browser.</td></tr>
         <tr><td><code>disensa ping &lt;model&gt;</code></td><td>sends one prompt to a model, to check that it answers (<a href="#local-models">Local models</a>). <code>--prompt</code> changes the prompt, <code>--api-base</code> sends it to another server (<a href="#vllm">vLLM</a>), <code>--think/--no-think</code> switches a model&rsquo;s thinking on or off. It prints the reply, its length in tokens, the time it took and whether the model thought.</td></tr>
       </tbody>
@@ -1054,6 +1071,7 @@ dynamics:
       <li>Chuang, Y.-S., Goyal, A., Harlalka, N., Suresh, S., Hawkins, R., Yang, S., Shah, D., Hu, J. &amp; Rogers, T. T. (2024). Simulating opinion dynamics with networks of LLM-based agents. In <em>Findings of the Association for Computational Linguistics: NAACL 2024</em>, 3326–3346. <a href="https://aclanthology.org/2024.findings-naacl.211/" target="_blank" rel="noopener">aclanthology.org/2024.findings-naacl.211</a></li>
       <li>Cinus, F., Minici, M., Monti, C. &amp; Bonchi, F. (2022). The effect of people recommenders on echo chambers and polarization. In <em>Proceedings of the International AAAI Conference on Web and Social Media (ICWSM 2022)</em>, 16(1). <a href="https://doi.org/10.1609/icwsm.v16i1.19275" target="_blank" rel="noopener">doi:10.1609/icwsm.v16i1.19275</a></li>
       <li>Deffuant, G., Neau, D., Amblard, F. &amp; Weisbuch, G. (2000). Mixing beliefs among interacting agents. <em>Advances in Complex Systems</em>, 3, 87–98. <a href="https://doi.org/10.1142/S0219525900000078" target="_blank" rel="noopener">doi:10.1142/S0219525900000078</a></li>
+      <li>Hayes, A. F. &amp; Krippendorff, K. (2007). Answering the call for a standard reliability measure for coding data. <em>Communication Methods and Measures</em>, 1(1), 77–89. <a href="https://doi.org/10.1080/19312450709336664" target="_blank" rel="noopener">doi:10.1080/19312450709336664</a></li>
       <li>DeGroot, M. H. (1974). Reaching a consensus. <em>Journal of the American Statistical Association</em>, 69(345), 118–121. <a href="https://doi.org/10.1080/01621459.1974.10480137" target="_blank" rel="noopener">doi:10.1080/01621459.1974.10480137</a></li>
       <li>Erdős, P. &amp; Rényi, A. (1959). On random graphs I. <em>Publicationes Mathematicae Debrecen</em>, 6, 290–297. <a href="https://publi.math.unideb.hu/paper/2769" target="_blank" rel="noopener">publi.math.unideb.hu</a></li>
       <li>Flache, A., Mäs, M., Feliciani, T., Chattoe-Brown, E., Deffuant, G., Huet, S. &amp; Lorenz, J. (2017). Models of social influence: towards the next frontiers. <em>Journal of Artificial Societies and Social Simulation</em>, 20(4), 2. <a href="https://www.jasss.org/20/4/2.html" target="_blank" rel="noopener">jasss.org/20/4/2</a></li>
