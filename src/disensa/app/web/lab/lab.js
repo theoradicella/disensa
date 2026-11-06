@@ -320,7 +320,7 @@
       row("Self-rating", step === 0 ? "— (given)" : fmt(DATA.opinions[step][a.id]));
       Object.entries(p.scores).forEach(([label, v]) => {
         const [model, field] = label.split(" · ");
-        row(`Scorer ${short(model)} (${field})`, typeof v === "number" ? (v > 0 ? "+" : "") + v : v, label);
+        row(`Scorer: ${short(model)} (${field})`, typeof v === "number" ? (v > 0 ? "+" : "") + v : v, label);
       });
       box.appendChild(sc);
     }
@@ -1042,10 +1042,12 @@
     ]);
     section("Out of range", r.out_of_range == null ? NR : `${rnum(r.out_of_range)}`, [r.out_of_range == null ? "" : "beliefs outside −2…+2, clipped"]);
     const g = r.granularity;
+    const rated = g ? g.whole + g.half + g.other : 0;
     if (!g) section("Belief granularity", NR);
+    else if (!rated) section("Belief granularity", "—", ["no valid self-ratings yet"]);
     else {
-      const n = (g.whole + g.half + g.other) || 1, pct = (v) => `${Math.round((100 * v) / n)}%`;
-      section("Belief granularity", `${pct(g.whole)} whole · ${pct(g.half)} half · ${pct(g.other)} other`, [`${rnum(n)} valid self-ratings, steps ≥ 1`]);
+      const pct = (v) => `${Math.round((100 * v) / rated)}%`;
+      section("Belief granularity", `${pct(g.whole)} whole · ${pct(g.half)} half · ${pct(g.other)} other`, [`${rnum(rated)} valid self-ratings, steps ≥ 1`]);
     }
   }
   function renderReview() {
