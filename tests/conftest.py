@@ -1,8 +1,12 @@
+from types import SimpleNamespace
+
 import pytest
 from fake_llm import fake_reply
 
 from disensa.config import ExperimentConfig
 from disensa.llm import client as llm_client
+
+_REAL_CALL = llm_client.LLMClient._call_litellm  # before the autouse fixture replaces it
 
 
 @pytest.fixture(autouse=True)
@@ -38,3 +42,26 @@ def make_cfg(tmp_path):
         return ExperimentConfig.model_validate(raw)
 
     return make
+
+
+@pytest.fixture
+def litellm_kwargs(monkeypatch):
+    """Run the real `_call_litellm`, but stop at `litellm.acompletion` and record its kwargs.
+
+    Returns the list the kwargs of every call are appended to. Nothing leaves the machine.
+    """
+    import litellm
+
+    seen: list[dict] = []
+
+    async def fake_acompletion(**kwargs):
+        seen.append(kwargs)
+        msg = SimpleNamespace(content='{"belief": 1}')
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=msg)],
+            usage={"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10},
+        )
+
+    monkeypatch.setattr(llm_client.LLMClient, "_call_litellm", _REAL_CALL)
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    return seen

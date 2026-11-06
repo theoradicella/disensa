@@ -30,3 +30,15 @@ def test_cache_makes_reruns_free(tmp_path):
     b = asyncio.run(client.complete("fake/bounded", msgs))
     assert not a.cached and b.cached and a.text == b.text
     assert json.loads(a.text)["message"]
+
+
+def test_vllm_connector_gets_json_mode(tmp_path, litellm_kwargs):
+    client = LLMClient(tmp_path / "cache")
+    msgs = [{"role": "user", "content": "hi"}]
+    asyncio.run(
+        client.complete("hosted_vllm/x", msgs, api_base="http://localhost:8000/v1", json_mode=True)
+    )
+    (kw,) = litellm_kwargs
+    assert kw["model"] == "hosted_vllm/x"
+    assert kw["api_base"] == "http://localhost:8000/v1"
+    assert kw["response_format"] == {"type": "json_object"}

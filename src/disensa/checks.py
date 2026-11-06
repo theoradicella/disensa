@@ -8,6 +8,7 @@ Nothing here changes a run: impossible settings are rejected by `config.py` inst
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import asdict, dataclass
 
 from pydantic import BaseModel, ValidationError
@@ -17,6 +18,7 @@ from disensa.config import (
     ExperimentConfig,
     InitialOpinions,
     InteractionsConfig,
+    LLMDynamics,
     NetworkConfig,
     NumericDynamics,
 )
@@ -264,6 +266,25 @@ def interaction_checks(cfg: InteractionsConfig, net: NetworkConfig | None) -> li
     return []
 
 
+def model_checks(cfg: LLMDynamics) -> list[Check]:
+    out: list[Check] = []
+    for i, m in enumerate(cfg.models):
+        if m.name.startswith("openai/") and m.api_base and not os.environ.get("OPENAI_API_KEY"):
+            out.append(
+                Check(
+                    f"dynamics.models.{i}.name",
+                    f"{m.name} with api_base {m.api_base}: LiteLLM's openai/ connector refuses "
+                    "to send a request without an OPENAI_API_KEY, so every call would fail and "
+                    "every agent would keep its opinion. For a vLLM server use "
+                    f"hosted_vllm/{m.name.removeprefix('openai/')} instead.",
+                    "vllm",
+                    "Quick start › Running on a vLLM server",
+                    level="error",
+                )
+            )
+    return out
+
+
 # ---------------------------------------------------------------- entry points
 
 
@@ -273,7 +294,7 @@ def config_checks(cfg: ExperimentConfig) -> list[Check]:
     if d.type == "numeric":
         out += numeric_checks(d)
     else:
-        out += interaction_checks(d.interactions, cfg.network)
+        out += interaction_checks(d.interactions, cfg.network) + model_checks(d)
     return out
 
 
@@ -310,4 +331,8 @@ def raw_checks(raw: dict) -> list[dict]:
         inter = parse(InteractionsConfig, d.get("interactions"), "dynamics.interactions")
         if inter:
             out += interaction_checks(inter, net)
+        if d.get("models"):
+            llm = parse(LLMDynamics, d, "dynamics")
+            if llm:
+                out += model_checks(llm)
     return [c.to_dict() for c in out]

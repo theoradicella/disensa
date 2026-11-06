@@ -23,11 +23,13 @@ def run(config: Path, steps: int = typer.Option(None, help="override `steps`")):
     cfg = ExperimentConfig.from_yaml(config)
     if steps:
         cfg.steps = steps
-    for c in config_checks(cfg):
-        typer.secho(f"warning: {c.message}", fg="yellow", err=True)
-        typer.secho(
-            f"         see the docs: {c.docs_title} (/docs#{c.docs})", fg="yellow", err=True
-        )
+    checks = config_checks(cfg)
+    for c in checks:
+        color = "red" if c.level == "error" else "yellow"
+        typer.secho(f"{c.level}: {c.message}", fg=color, err=True)
+        typer.secho(f"         see the docs: {c.docs_title} (/docs#{c.docs})", fg=color, err=True)
+    if any(c.level == "error" for c in checks):
+        raise typer.Exit(2)
     d = cfg.dynamics
     if d.type == "llm" and any(m.name.startswith("ollama") and not m.api_base for m in d.models):
         from disensa.llm import ollama
@@ -63,15 +65,23 @@ def app_cmd(
 
 
 @app.command()
-def ping(model: str, prompt: str = "In one sentence: is remote work good for society?"):
+def ping(
+    model: str,
+    prompt: str = "In one sentence: is remote work good for society?",
+    api_base: str = typer.Option(
+        None, help="server address, e.g. http://localhost:8000/v1 for vLLM"
+    ),
+):
     """Send one prompt to a model, to check that it answers."""
     from disensa.llm import LLMClient, ollama
 
-    if model.startswith("ollama") and (err := ollama.ensure_running()):
+    if model.startswith("ollama") and not api_base and (err := ollama.ensure_running()):
         raise typer.BadParameter(err)
 
     resp = asyncio.run(
-        LLMClient().complete(model, [{"role": "user", "content": prompt}], use_cache=False)
+        LLMClient().complete(
+            model, [{"role": "user", "content": prompt}], api_base=api_base, use_cache=False
+        )
     )
     typer.echo(f"[{resp.model}] {resp.text}")
 

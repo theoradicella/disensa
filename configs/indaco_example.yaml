@@ -1,0 +1,17 @@
+# An LLM run against a vLLM server, e.g. on INDACO (see scripts/indaco/README.md).
+# vLLM speaks the OpenAI format, but use the hosted_vllm/ prefix, not openai/: LiteLLM's
+# openai/ connector refuses to send a request without an OpenAI API key.
+# The model name after hosted_vllm/ is the one given to `vllm serve`.
+name: indaco_example
+seed: 1
+network: {topology: watts_strogatz, n: 50, k: 6, beta: 0.1}
+opinions: {distribution: uniform}
+steps: 10
+dynamics:
+  type: llm
+  statement: Euthanasia should be legal for terminally ill adults who clearly request it.
+  models:
+    - name: hosted_vllm/meta-llama/Llama-3.1-8B-Instruct
+      api_base: http://localhost:8000/v1
+  interactions: {min: 1, max: 5}
+  max_concurrency: 32   # vLLM batches requests; 32-64 keeps the GPU busy

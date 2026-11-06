@@ -21,7 +21,12 @@
     <p>Contents</p>
     <ol class="top">
       <li><a href="#introduction">Introduction</a></li>
-      <li><a href="#quick-start">Quick start</a></li>
+      <li><a href="#quick-start">Quick start</a>
+        <ol>
+          <li><a href="#local-models">Local models</a></li>
+          <li><a href="#vllm">vLLM server (INDACO)</a></li>
+        </ol>
+      </li>
       <li><a href="#how-a-run-works">How a run works</a>
         <ol>
           <li><a href="#run-setup">Setup</a></li>
@@ -131,7 +136,12 @@
 <pre><code>ollama pull llama3.2:3b
 disensa ping ollama_chat/llama3.2:3b</code></pre>
     <p>Installed models appear in the lab&rsquo;s model list. In a config file a model is written <code>ollama_chat/&lt;name&gt;</code>, e.g. <code>ollama_chat/qwen3:4b</code> (see <a href="#agent-models">Models</a>). A model has to fit in memory while it runs, and its download size is a rough guide to how much it needs: models of 3&ndash;4B parameters (2&ndash;3&nbsp;GB) run comfortably on a laptop with 16&nbsp;GB, larger ones need more memory or a GPU.</p>
-    <p>Without the lab, a run can be started from a config file: <code>disensa run configs/quick.yaml</code>. This is also how disensa runs on a server, such as a university computing cluster: install disensa and Ollama there, run the configs, and copy the run folders back into <code>runs/</code> to open them in the lab.</p>
+    <p>Without the lab, a run can be started from a config file: <code>disensa run configs/quick.yaml</code>. This is also how disensa runs on a server, such as a university computing cluster: run the configs there and copy the run folders back into <code>runs/</code> to open them in the lab.</p>
+
+    <h3 id="vllm">Running on a vLLM server (INDACO)</h3>
+    <p>On a GPU cluster such as INDACO the models are served by <a href="https://docs.vllm.ai" target="_blank" rel="noopener">vLLM</a> instead of Ollama. vLLM speaks the OpenAI request format, but a model is written <code>hosted_vllm/&lt;model&gt;</code> with <code>api_base: http://&lt;host&gt;:8000/v1</code>, not <code>openai/&lt;model&gt;</code>: LiteLLM&rsquo;s <code>openai/</code> connector refuses to send a request without an OpenAI API key, so every call would fail and the run would look like a run of perfectly stubborn agents. disensa stops such a config before it runs. <code>configs/indaco_example.yaml</code> is a complete example. The connector can be tried on a Mac against Ollama&rsquo;s OpenAI-compatible endpoint:</p>
+<pre><code>disensa ping hosted_vllm/llama3.2:3b --api-base http://localhost:11434/v1</code></pre>
+    <p>The same model name on Ollama and on vLLM is not the same model: Ollama usually serves 4-bit quantized weights, vLLM the full ones. Never mix runs from the two inside one comparison.</p>
     <h2 id="how-a-run-works">How a run works</h2>
     <p>A run is one simulation: a group of agents, linked by a network, each holding an opinion on the same statement. Time moves in rounds called <strong>steps</strong>. At every step each agent looks at what its neighbours think and updates its own opinion. Everything about a run is set in a config file: how many agents there are, how they are linked, how many steps to run, and what kind of agents to use.</p>
     <p>Every run goes through two phases. The <strong>setup</strong> builds the network and gives every agent a starting opinion. The <strong>loop</strong> then runs one step after another, as many as the config asks for (<code>steps</code>, default 10), and saves the opinions after each one.</p>
@@ -885,7 +895,7 @@ dynamics:
         <tr><td><code>models[].name</code></td><td>model string, e.g. <code>ollama_chat/llama3.2:3b</code> (<a href="#agent-models">Models</a>)</td><td>required</td></tr>
         <tr><td><code>models[].weight</code></td><td>share of the agents, \(&gt; 0\), relative to the other models</td><td>\(1\)</td></tr>
         <tr><td><code>models[].temperature</code></td><td>how varied the replies are</td><td>\(0.7\)</td></tr>
-        <tr><td><code>models[].api_base</code></td><td>address of the server that runs the model; empty for Ollama on the same computer</td><td>empty</td></tr>
+        <tr><td><code>models[].api_base</code></td><td>address of the server that runs the model, e.g. <code>http://localhost:8000/v1</code> for vLLM (<a href="#vllm">vLLM</a>); empty for Ollama on the same computer</td><td>empty</td></tr>
         <tr><td><code>interactions.min</code>, <code>.max</code></td><td>how many neighbours&rsquo; messages an agent reads per step, \(0 \le \min \le \max\), \(\max \ge 1\) (<a href="#agent-interactions">Interactions</a>)</td><td>\(1\), \(5\)</td></tr>
         <tr><td><code>memory_words</code></td><td>word limit asked for the memory, \(&gt; 0\)</td><td>\(60\)</td></tr>
         <tr><td><code>max_tokens</code></td><td>longest reply allowed, \(&gt; 0\)</td><td>\(400\)</td></tr>
@@ -900,7 +910,7 @@ dynamics:
       <tbody>
         <tr><td><code>disensa run &lt;config&gt;</code></td><td>runs a config and prints the metrics after every step. <code>--steps N</code> overrides <code>steps</code>.</td></tr>
         <tr><td><code>disensa app</code></td><td>opens the lab at <code>http://127.0.0.1:8765</code>. <code>--port</code> changes the port, <code>--no-open</code> does not open the browser.</td></tr>
-        <tr><td><code>disensa ping &lt;model&gt;</code></td><td>sends one prompt to a model, to check that it answers (<a href="#local-models">Local models</a>). <code>--prompt</code> changes the prompt.</td></tr>
+        <tr><td><code>disensa ping &lt;model&gt;</code></td><td>sends one prompt to a model, to check that it answers (<a href="#local-models">Local models</a>). <code>--prompt</code> changes the prompt, <code>--api-base</code> sends it to another server (<a href="#vllm">vLLM</a>).</td></tr>
       </tbody>
     </table></div>
     <p>If Ollama is installed but not running, <code>disensa app</code> starts it on launch, and <code>disensa run</code> starts it when the config uses an Ollama model.</p>

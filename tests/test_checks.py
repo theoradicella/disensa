@@ -91,3 +91,22 @@ def test_numeric_epsilon_and_interactions():
 def test_raw_checks_reports_invalid_sections_as_errors():
     out = raw_checks({"network": {"topology": "watts_strogatz", "k": 6}})
     assert out and all(c["level"] == "error" for c in out)
+
+
+def _llm_cfg(name, api_base):
+    return ExperimentConfig.model_validate(
+        {
+            "name": "t",
+            "network": {"topology": "watts_strogatz", "k": 4, "beta": 0.1},
+            "dynamics": {"type": "llm", "models": [{"name": name, "api_base": api_base}]},
+        }
+    )
+
+
+def test_openai_connector_without_a_key_is_an_error(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    (c,) = [c for c in config_checks(_llm_cfg("openai/llama", "http://h:8000/v1"))]
+    assert c.level == "error" and "hosted_vllm/llama" in c.message
+    assert config_checks(_llm_cfg("hosted_vllm/llama", "http://h:8000/v1")) == []
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-x")
+    assert config_checks(_llm_cfg("openai/llama", "http://h:8000/v1")) == []

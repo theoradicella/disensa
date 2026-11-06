@@ -41,7 +41,8 @@ def _git_commit() -> str | None:
 
 def new_run_dir(cfg: ExperimentConfig) -> Path:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", cfg.name).strip("_") or "run"  # the name itself is kept as typed
+    # only the folder name is slugged; the name itself is kept as typed
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", cfg.name).strip("_") or "run"
     base = cfg.output_dir / f"{stamp}_{slug}_s{cfg.seed}"
     run_dir, i = base, 1
     while run_dir.exists():  # two runs in the same second

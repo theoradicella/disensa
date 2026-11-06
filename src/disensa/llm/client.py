@@ -1,8 +1,12 @@
 """One async client for local LLMs (via LiteLLM), with a disk cache.
 
 Model strings follow LiteLLM conventions, e.g.
-  "ollama_chat/llama3.2:3b"            local Ollama (default http://localhost:11434)
-  "openai/<model>" + api_base=<url>    any OpenAI-compatible server, e.g. vLLM on INDACO
+  "ollama_chat/llama3.2:3b"                 local Ollama (default http://localhost:11434)
+  "hosted_vllm/<model>" + api_base=<url>    a vLLM server, e.g. on INDACO, with
+                                            api_base = "http://<host>:8000/v1"
+
+Use `hosted_vllm/`, not `openai/`, for vLLM: LiteLLM's `openai/` connector refuses to send a
+request without an OpenAI API key, so every call would fail.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ import diskcache
 Message = dict[str, str]
 
 # Providers where LiteLLM's JSON mode is reliable; others rely on the prompt + parser.
-_JSON_MODE_PROVIDERS = ("ollama", "ollama_chat", "openai")
+_JSON_MODE_PROVIDERS = ("ollama", "ollama_chat", "openai", "hosted_vllm")
 
 
 @dataclass
@@ -144,7 +148,8 @@ class LLMClient:
         import litellm  # imported lazily: heavy
 
         litellm.suppress_debug_info = True
-        litellm.drop_params = True  # a server that rejects a setting (e.g. `seed`) drops it instead of failing
+        # a provider that does not support a setting (e.g. `seed`) drops it instead of failing
+        litellm.drop_params = True
         kwargs = {k: v for k, v in params.items() if v is not None}
         kwargs["num_retries"] = 4  # LiteLLM retries rate limits / transient errors with backoff
         if api_base:
