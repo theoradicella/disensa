@@ -145,10 +145,10 @@ def test_response_curve_with_a_scorer(make_cfg, tmp_path):
 def test_summary_and_table(make_cfg):
     d = make_run(make_cfg, dynamics={"type": "numeric", "rule": "degroot"}, steps=60)
     s = summarize_run(load_run(d))
-    assert s["clusters"] == 1 and s["convergence_step"] is not None and s["granularity"] is None
+    assert s["clusters"] == 1 and s["convergence_step"] is not None and s["rounding"] is None
     llm = make_run(make_cfg)
     s = summarize_run(load_run(llm))
-    assert sum(s["granularity"].values()) == 20 * 4
+    assert sum(s["rounding"].values()) == 20 * 4
     t = load_runs(d.parent)
     assert set(t["engine"]) == {"numeric", "llm"} and (t["status"] == "finished").all()
 

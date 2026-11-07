@@ -1,7 +1,7 @@
 """Reading many runs together: the numbers and figures of the thesis results.
 
   load       load_runs(paths) -> one row per run, config fields flattened
-  summary    per-run summaries: clusters, convergence, drift, movement, granularity
+  summary    per-run summaries: clusters, convergence, drift, movement, rounding
   fit        which numeric rule, with which parameters, an LLM run resembles (macro)
   response   how much agents move against how far the opinions they heard were (micro)
   figures    the thesis figures, as PDFs (needs matplotlib: `pip install disensa[analysis]`)

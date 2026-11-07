@@ -11,7 +11,7 @@ import pytest
 from disensa.app.payload import build_payload
 from disensa.app.server import RunManager
 from disensa.engine import RunFailed, run
-from disensa.report import format_report, granularity, summarize
+from disensa.report import format_report, rounding, summarize
 from disensa.runs import load_run, new_run_dir
 
 
@@ -90,7 +90,7 @@ def test_out_of_range_beliefs_are_clipped_and_counted(make_cfg):
     assert (r.opinion_matrix()[1:] == 2).all()
     assert (r.metrics["out_of_range"].iloc[1:] == 20).all()
     assert r.meta["report"]["out_of_range"] == 20 * cfg.steps
-    assert r.meta["report"]["granularity"] == {"whole": 20 * cfg.steps, "half": 0, "other": 0}
+    assert r.meta["report"]["rounding"] == {"whole": 20 * cfg.steps, "half": 0, "other": 0}
 
 
 def test_step_metrics_and_report(make_cfg):
@@ -105,7 +105,7 @@ def test_step_metrics_and_report(make_cfg):
     assert rep["failed_by_model"]["fake/nobelief"]["pct"] == pytest.approx(100 * 4 / 5)
     assert rep["failed_by_model"]["fake/halves"]["failed"] == 0
     assert rep["prompt_tokens"] == r.metrics["prompt_tokens"].sum()
-    g = rep["granularity"]
+    g = rep["rounding"]
     assert g["other"] == 0 and g["whole"] + g["half"] == 19 * cfg.steps
     assert "failed" in format_report(rep) and "beliefs" in format_report(rep)
 
@@ -135,8 +135,8 @@ def test_a_few_failures_do_not_stop_a_run(make_cfg):
     assert len(history) == cfg.steps + 1 and history[1]["errors"] == 4
 
 
-def test_granularity():
-    assert [granularity(v) for v in (1.0, -2, 0.5, -1.5, 0.7, 1.25)] == [
+def test_rounding():
+    assert [rounding(v) for v in (1.0, -2, 0.5, -1.5, 0.7, 1.25)] == [
         "whole",
         "whole",
         "half",
@@ -172,7 +172,7 @@ def test_old_run_folders_still_load(make_cfg, tmp_path):
     payload = build_payload(r)
     rep = payload["report"]
     assert rep["failed"] == 1 and rep["failed_by_kind"] == {"not recorded": 1}
-    assert rep["prompt_tokens"] is None and rep["granularity"] is None
+    assert rep["prompt_tokens"] is None and rep["rounding"] is None
     assert rep["out_of_range"] is None and rep["cache_hits"] is None
     json.dumps(payload, allow_nan=False)
     listed = RunManager(old.parent).list()

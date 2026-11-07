@@ -50,6 +50,36 @@
   }
   const edgesAt = () => DATA.edges; // the network is static for now (no rewiring)
   const xTarget = (v) => W / 2 + (v ?? 0) * (W * 0.19);
+  // two layouts: "opinion" (x = belief, links drawn on top) and "topology" (the network's own
+  // seeded layout from payload.py, colour = belief). The choice is remembered per browser.
+  let layoutMode = "opinion";
+  try { if (localStorage.getItem("disensa.layout") === "topology") layoutMode = "topology"; } catch (e) { /* no storage */ }
+  const topoX = (i) => 40 + DATA.positions[i][0] * (W - 80);
+  const topoY = (i) => 30 + DATA.positions[i][1] * (H - 60);
+  const targetX = (d) => (layoutMode === "topology" ? topoX(d.id) : xTarget(opinionAt(d.id, t)));
+  const LAYOUT_HINT = {
+    opinion: "Horizontal position follows opinion; lines are the network's links; bigger nodes have more links. Drag nodes to move them.",
+    topology: "Nodes sit where the network puts them: linked agents are close, colour shows opinion, size the number of links. Drag nodes to move them.",
+  };
+  function applyLayout() {
+    if (!sim) return;
+    const topo = layoutMode === "topology";
+    guide.attr("display", topo ? "none" : null);
+    sim.force("x").x(targetX).strength(topo ? 0.3 : 0.22);
+    sim.force("y").y((d) => (topo ? topoY(d.id) : H / 2 + 10)).strength(topo ? 0.3 : 0.035);
+    sim.force("link").strength(topo ? 0 : 0.05);
+    sim.force("charge").strength(topo ? 0 : -30);
+    sim.alpha(0.7).restart();
+    const hint = $("net-legend").querySelector(".layout-hint");
+    if (hint) hint.textContent = LAYOUT_HINT[layoutMode];
+    document.querySelectorAll("#net-layout button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.layout === layoutMode)));
+  }
+  document.querySelectorAll("#net-layout button").forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.layout === layoutMode) return;
+    layoutMode = b.dataset.layout;
+    try { localStorage.setItem("disensa.layout", layoutMode); } catch (e) { /* no storage */ }
+    applyLayout();
+  }));
 
   // draw the opinion guide once
   function drawGuide() {
@@ -67,12 +97,14 @@
     const n = DATA.agents.length;
     const deg = new Array(n).fill(0);
     edgesAt(0).forEach(([u, v]) => { deg[u]++; deg[v]++; });
-    const size = d3.scaleSqrt().domain([0, d3.max(deg) || 1]).range([90, 380]);
+    // node area grows linearly with degree (radius ~ sqrt(degree)), so hubs stand out in
+    // scale-free networks while regular networks (similar degrees) keep similar sizes
+    const size = d3.scaleLinear().domain([0, d3.max(deg) || 1]).range([40, 700]);
     const prev = new Map(nodes.map((d) => [d.id, d]));
     nodes = DATA.agents.map((a) => {
       const old = prev.get(a.id);
       const [px, py] = DATA.positions[a.id];
-      return { id: a.id, model: a.model, area: size(deg[a.id]), x: old ? old.x : xTarget(DATA.opinions[0][a.id]), y: old ? old.y : 40 + py * (H - 80), vx: 0, vy: 0 };
+      return { id: a.id, model: a.model, area: size(deg[a.id]), x: old ? old.x : layoutMode === "topology" ? topoX(a.id) : xTarget(DATA.opinions[0][a.id]), y: old ? old.y : 40 + py * (H - 80), vx: 0, vy: 0 };
     });
     const models = DATA.models;
     const shapeOf = (m) => SHAPES[models.indexOf(m) % SHAPES.length];
@@ -103,7 +135,7 @@
       .force("link", d3.forceLink([]).id((d) => d.id).distance(30).strength(0.05))
       .force("charge", d3.forceManyBody().strength(-30).distanceMax(160))
       .force("collide", d3.forceCollide((d) => Math.sqrt(d.area) / 1.6 + 2))
-      .force("x", d3.forceX((d) => xTarget(opinionAt(d.id, t))).strength(0.22))
+      .force("x", d3.forceX(targetX).strength(0.22))
       .force("y", d3.forceY(H / 2 + 10).strength(0.035))
       .on("tick", drawPositions);
     lastStepDrawn = -1;
@@ -126,7 +158,8 @@
       it.appendChild(el("span", null, short(m)));
       leg.appendChild(it);
     });
-    leg.appendChild(el("span", "hint", "Horizontal position follows opinion; links pull neighbours together. Drag nodes to move them."));
+    leg.appendChild(el("span", "hint layout-hint", LAYOUT_HINT[layoutMode]));
+    applyLayout();
   }
 
   function updateLinks() {
@@ -277,20 +310,27 @@
   }
 
   // ============================================================ agent panel & table
-  function select(id) { selected = selected === id ? null : id; lastPanel = ""; paintNodes(); drawPositions(); drawPanel(); }
+  function select(id) { selected = selected === id ? null : id; lastPanel = ""; paintNodes(); drawPositions(); drawPanel(); drawTable(); }
   let lastPanel = "";
+  let memoryOpen = false;
   function drawPanel() {
     const step = Math.round(t);
     const key = `${selected}|${step}|${D()}`;
     if (key === lastPanel) return; lastPanel = key;
     const box = $("agent"); box.replaceChildren();
     if (selected == null) {
+      box.appendChild(el("div", "label agent-empty-label", "Agent"));
       box.appendChild(el("p", "hint", "Click a node to follow one agent: whom it interacted with at each step, how it reasoned, and the message it shared."));
       return;
     }
     const a = DATA.agents[selected];
-    box.appendChild(el("div", "agent-head", `Agent ${a.id}`));
-    box.appendChild(el("div", "agent-meta", `Model: ${short(a.model)}`));
+    // the network is static (no rewiring), so the number of links is the same at every step
+    const nLinks = edgesAt(step).reduce((n, [u, v]) => n + (u === a.id) + (v === a.id), 0);
+    // one row of label-over-value fields: Agent (the name, larger), Model, Links
+    const top = el("div", "agent-top");
+    [["Agent", `Agent ${a.id}`, "agent-head"], ["Model", short(a.model), "agent-meta-value"], ["Links", String(nLinks), "agent-meta-value"]]
+      .forEach(([k, v, cls]) => top.append(el("div", "label", k), el("div", cls, v)));
+    box.appendChild(top);
 
     const SW = 320, SH = 96, sm = { t: 8, r: 8, b: 18, l: 26 };
     const sx = d3.scaleLinear().domain([0, Math.max(1, D())]).range([sm.l, SW - sm.r]);
@@ -304,11 +344,16 @@
       .attr("d", d3.line().defined((d) => d[1] != null).x((d) => sx(d[0])).y((d) => sy(d[1])).curve(d3.curveMonotoneX));
     s.append("circle").attr("cx", sx(step)).attr("cy", sy(DATA.opinions[step][a.id] ?? 0)).attr("r", 5).attr("fill", opinionColor(DATA.opinions[step][a.id])).attr("stroke", css("--ink")).attr("stroke-width", 1.5);
 
-    const kv = el("div", "kv"); kv.append(el("span", "hint", `Step ${step}`), el("b", null, fmt(DATA.opinions[step][a.id])));
+    // everything below the chart is about one step: say which
+    box.appendChild(el("div", "step-head", `Step ${step}`));
+    const kv = el("div", "kv belief-row"); kv.append(el("span", "belief-key", "Belief"), el("b", null, fmt(DATA.opinions[step][a.id])));
     if (step > 0) {
       const prev = DATA.opinions[step - 1][a.id], cur = DATA.opinions[step][a.id];
-      if (prev != null && cur != null) kv.append(el("span", "hint", `${cur - prev >= 0 ? "▲" : "▼"} ${Math.abs(cur - prev).toFixed(2)} since step ${step - 1}`));
-    }
+      if (prev != null && cur != null) {
+        const dv = Math.round((cur - prev) * 100) / 100;
+        kv.append(el("span", "hint", dv === 0 ? `no change since step ${step - 1}` : `${dv > 0 ? "▲" : "▼"} ${Math.abs(dv).toFixed(2)} since step ${step - 1}`));
+      }
+    } else kv.append(el("span", "hint", "initial belief"));
     box.appendChild(kv);
     const p = DATA.agent_steps[step][a.id];
     if (!p) return;
@@ -340,20 +385,39 @@
     if (p.reasoning) { box.appendChild(el("div", "label", "Reasoning")); box.appendChild(el("p", "reasoning", p.reasoning)); }
     if (p.message) { box.appendChild(el("div", "label", "Message")); box.appendChild(el("p", "message", p.message)); }
     if (p.error) box.appendChild(el("div", "agent-error", "Model reply could not be used: " + p.error));
+    // the memory this step's reply was based on: the one written at the step before (step 0 has
+    // none). Closed by default; stays open across steps once opened.
+    if (step > 0) {
+      const before = DATA.agent_steps[step - 1] && DATA.agent_steps[step - 1][a.id];
+      const det = el("details", "memory"); det.open = memoryOpen;
+      det.appendChild(el("summary", "label", "Memory"));
+      det.appendChild(before && before.memory ? el("p", "reasoning", before.memory) : el("p", "hint", "Empty: nothing remembered yet."));
+      det.addEventListener("toggle", () => { memoryOpen = det.open; });
+      box.appendChild(det);
+    }
   }
 
   let lastTable = "";
+  // a row of the table: select that agent (never unselect) and scroll up to the network and its panel
+  function showAgent(id) {
+    if (selected !== id) select(id);
+    const grid = document.querySelector("#view .grid"), bar = document.querySelector("#view .controls");
+    const offset = 84 + (bar ? bar.offsetHeight : 0) + 12; // floating header + sticky playback bar
+    window.scrollTo({ top: grid.getBoundingClientRect().top + window.scrollY - offset, behavior: reduceMotion ? "auto" : "smooth" });
+  }
   function drawTable() {
-    const step = Math.round(t), key = `${step}|${D()}`;
+    const step = Math.round(t), key = `${step}|${D()}|${selected}`;
     if (key === lastTable) return; lastTable = key;
     const deg = new Array(DATA.agents.length).fill(0);
     edgesAt(step).forEach(([u, v]) => { deg[u]++; deg[v]++; });
     const tb = $("tbody"); tb.replaceChildren();
     DATA.agents.forEach((a) => {
-      const tr = el("tr"); const p = DATA.agent_steps[step][a.id];
-      [[a.id, "num"], [short(a.model)], [fmt(DATA.opinions[step][a.id]), "num"], [deg[a.id], "num"], [p ? p.message : ""]]
+      const tr = el("tr", a.id === selected ? "selected" : null); const p = DATA.agent_steps[step][a.id];
+      [[a.id, "id"], [short(a.model)], [fmt(DATA.opinions[step][a.id]), "num"], [deg[a.id], "num"], [p ? p.message : ""]]
         .forEach(([v, c]) => tr.appendChild(el("td", c || null, String(v))));
-      tr.style.cursor = "pointer"; tr.addEventListener("click", () => select(a.id));
+      tr.tabIndex = 0; tr.title = `Show agent ${a.id} in the network`;
+      tr.addEventListener("click", () => showAgent(a.id));
+      tr.addEventListener("keydown", (e) => { if (e.key === "Enter") showAgent(a.id); });
       tb.appendChild(tr);
     });
   }
@@ -366,7 +430,7 @@
     scrub.value = D() ? t / D() : 0;
     $("step").textContent = String(Math.round(t));
     updateLinks();
-    sim.force("x").x((d) => xTarget(opinionAt(d.id, t)));
+    sim.force("x").x(targetX);
     if (sim.alpha() < 0.08) sim.alpha(0.08).restart();
     paintNodes(); drawHist(); moveCursors(); drawPanel(); drawTable();
   }
@@ -397,7 +461,7 @@
     if (e.key === "ArrowRight") { stop(); setTime(Math.floor(t) + 1); }
     else if (e.key === "ArrowLeft") { stop(); setTime(Math.ceil(t) - 1); }
     else if (e.key === " ") { e.preventDefault(); playing ? stop() : play(); }
-    else if (e.key === "Escape") { selected = null; lastPanel = ""; paintNodes(); drawPositions(); drawPanel(); }
+    else if (e.key === "Escape") { selected = null; lastPanel = ""; paintNodes(); drawPositions(); drawPanel(); drawTable(); }
   });
 
   // ============================================================ loading a run
@@ -532,7 +596,10 @@
     if (mode) setDrawer("runs", mode);
   }
   $("back").addEventListener("click", () => closeRun("push"));
-  $("cancel").addEventListener("click", () => api(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" }));
+  $("cancel").addEventListener("click", () => {
+    if (!confirm("Stop this run?\n\nThe steps already finished are kept, but a stopped run cannot be resumed.")) return;
+    api(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" });
+  });
 
   // runs list
   let RUNS = [];
@@ -618,7 +685,7 @@
   function runDetails(r, llm) {
     const tr = el("tr", "run-details"), td = el("td"); td.colSpan = 5;
     const dl = el("dl");
-    [["Duration", duration(r.status === "running" ? r.elapsed : r.seconds)], ["Agents", r.n], ["Steps", r.steps ?? "—"], ["Seed", r.seed ?? "—"],
+    [["Duration", r.status === "running" ? "In progress" : duration(r.seconds)], ["Agents", r.n], ["Steps", r.steps ?? "—"], ["Seed", r.seed ?? "—"],
       ...(r.replicate ? [["Replicate", r.replicate]] : []),
       ...(llm ? [["Failed replies", r.failed_pct == null ? NR : `${rnum(r.failed_pct, 1)}%`]] : []),
       ["Network", (TOPO_LABEL[r.topology] || r.topology || "").split(" (")[0]],
@@ -1013,7 +1080,6 @@
   // Older runs did not record every number: those show "not recorded".
   const NR = "not recorded";
   const rnum = (v, digits = 0) => v == null ? NR : Number(v).toLocaleString(undefined, { maximumFractionDigits: digits });
-  const KIND_LABEL = { provider: "server error", invalid_json: "not JSON", missing_belief: "no belief", invalid_belief: "belief not a number" };
   function renderReport(data) {
     const r = data.report, card = $("report-card"), grid = $("report-grid");
     grid.replaceChildren();
@@ -1028,12 +1094,27 @@
       (subs || []).filter(Boolean).forEach((sub) => box.appendChild(el("div", "spec-sub", sub)));
       grid.appendChild(box);
     };
-    const kinds = Object.entries(r.failed_by_kind || {}).map(([k, v]) => `${KIND_LABEL[k] || k} ${v}`).join(" · ");
     const models = Object.entries(r.failed_by_model || {});
-    section("Failed replies", `${rnum(r.failed_pct, 1)}%`, [
-      `${rnum(r.failed)} of ${rnum(r.calls)} replies`, r.failed ? kinds : "",
-      ...(r.failed && models.length > 1 ? models.map(([m, x]) => `${short(m)}: ${x.failed}/${x.calls} (${rnum(x.pct, 1)}%)`) : []),
-    ], r.failed_pct > 5);
+    // failed replies: share with the count beside it, the kinds, one chip per model, where to look
+    {
+      const box = el("div", "spec");
+      box.appendChild(el("span", "meta-label", "Failed replies"));
+      const main = el("div", "spec-main" + (r.failed_pct > 5 ? " bad" : ""), `${rnum(r.failed_pct, 1)}%`);
+      main.appendChild(el("span", "spec-count", `${rnum(r.failed)}/${rnum(r.calls)} replies`));
+      box.appendChild(main);
+      if (r.failed && models.length > 1) {
+        const chips = el("div", "fail-models");
+        models.forEach(([m, x]) => {
+          const c = el("span", "fail-chip" + (x.failed ? " has" : ""));
+          c.append(el("span", "fail-chip-name", short(m)), el("span", "fail-chip-n", `${x.failed}/${x.calls}`));
+          c.title = `${short(m)}: ${x.failed} of ${x.calls} replies failed (${rnum(x.pct, 1)}%)`;
+          chips.appendChild(c);
+        });
+        box.appendChild(chips);
+      }
+      if (r.failed) box.appendChild(el("div", "spec-note", "Details in events.jsonl"));
+      grid.appendChild(box);
+    }
     section("Tokens", r.prompt_tokens == null ? NR : `${rnum(r.prompt_tokens)} in · ${rnum(r.completion_tokens)} out`,
       [r.prompt_tokens_mean == null ? "" : `${rnum(r.prompt_tokens_mean)} in · ${rnum(r.completion_tokens_mean)} out per reply`]);
     section("Time", duration(r.seconds), [
@@ -1043,13 +1124,20 @@
       r.cache_hits == null ? `cache: ${NR}` : `${rnum(r.cache_hits)} of ${rnum(r.calls)} replies from the cache`,
     ]);
     section("Out of range", r.out_of_range == null ? NR : `${rnum(r.out_of_range)}`, [r.out_of_range == null ? "" : "beliefs outside −2…+2, clipped"]);
-    const g = r.granularity;
+    const g = r.rounding;
     const rated = g ? g.whole + g.half + g.other : 0;
-    if (!g) section("Belief granularity", NR);
-    else if (!rated) section("Belief granularity", "—", ["no valid self-ratings yet"]);
+    // how round the self-rated beliefs are (report.py "rounding"): one row per kind
+    if (!g) section("Belief rounding", NR);
+    else if (!rated) section("Belief rounding", "—", ["no valid self-ratings yet"]);
     else {
-      const pct = (v) => `${Math.round((100 * v) / rated)}%`;
-      section("Belief granularity", `${pct(g.whole)} whole · ${pct(g.half)} half · ${pct(g.other)} other`, [`${rnum(rated)} valid self-ratings, steps ≥ 1`]);
+      const box = el("div", "spec");
+      box.appendChild(el("span", "meta-label", "Belief rounding"));
+      const rows = el("div", "round-rows");
+      ["whole", "half", "other"].forEach((k) => {
+        rows.append(el("span", "round-pct", `${Math.round((100 * g[k]) / rated)}%`), el("span", "round-label", k));
+      });
+      box.append(rows, el("div", "spec-sub", `${rnum(rated)} valid self-ratings, steps ≥ 1`));
+      grid.appendChild(box);
     }
   }
   function renderReview() {

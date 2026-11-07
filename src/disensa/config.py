@@ -52,7 +52,7 @@ class InitialOpinions(BaseModel):
     distribution: Literal["uniform", "normal", "bimodal"] = "uniform"
     # normal: mean/std; bimodal: two normals at ±mean with std
     mean: float = 0.0
-    std: float = 1.0
+    std: float = Field(1.0, ge=0)
 
 
 # ---------------------------------------------------------------- dynamics

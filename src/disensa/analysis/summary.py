@@ -87,9 +87,9 @@ def opinion_matrix(run, measure: str = "self") -> np.ndarray:
     return X.to_numpy()
 
 
-def granularity(values) -> dict:
+def rounding(values) -> dict:
     """Counts of whole / half / other numbers (see report.py)."""
-    from disensa.report import granularity as kind
+    from disensa.report import rounding as kind
 
     out = {"whole": 0, "half": 0, "other": 0}
     for v in values:
@@ -120,7 +120,7 @@ def summarize_x(X, delta: float = DELTA, tol: float = TOL) -> dict:
 
 def summarize_run(run, delta: float = DELTA, tol: float = TOL, measure: str = "self") -> dict:
     """`summarize_x` of a loaded run (disensa.runs.load_run), with its opinions measured by
-    `measure` (see opinion_matrix), plus the granularity of its self-ratings: for LLM runs
+    `measure` (see opinion_matrix), plus the rounding of its self-ratings: for LLM runs
     over the valid self-ratings from step 1 on, as in the run report."""
     out = summarize_x(opinion_matrix(run, measure), delta, tol)
     beliefs = [
@@ -135,5 +135,5 @@ def summarize_run(run, delta: float = DELTA, tol: float = TOL, measure: str = "s
             for e in run.events
             if e["step"] >= 1 and not e.get("error") and (e["step"], e["agent"]) in ops.index
         ]
-    out["granularity"] = granularity(beliefs) if beliefs else None
+    out["rounding"] = rounding(beliefs) if beliefs else None
     return out

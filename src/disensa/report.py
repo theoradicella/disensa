@@ -7,7 +7,7 @@ step (in `metrics.parquet`) and per run (the `report` object in `meta.json`):
   failures     how many replies could not be used, by kind and by model
   cost         tokens in and out, wall-clock time, seconds per model call
   out of range beliefs outside [-2, 2] (clipped, but counted: that is a finding)
-  granularity  whole / half / other numbers among valid self-ratings (a finding too)
+  rounding     whole / half / other numbers among valid self-ratings (a finding too)
 
 `summarize` works on the events of any run folder: older runs, which lack the newer fields,
 get `None` ("not recorded") for what they did not log.
@@ -46,7 +46,7 @@ def compact(event: dict) -> dict:
     return {k: event[k] for k in EVENT_FIELDS if k in event}
 
 
-def granularity(v: float) -> str:
+def rounding(v: float) -> str:
     """ "whole" (1, -2), "half" (0.5, -1.5) or "other" (0.7, 1.25)."""
     if abs(v - round(v)) < 1e-9:
         return "whole"
@@ -93,7 +93,7 @@ def summarize(events: Iterable[dict], seconds: float | None = None) -> dict:
         for e in events
         if e.get("step", 0) >= 1 and not e.get("error") and e.get("belief_raw") is not None
     ]
-    grains = Counter(granularity(v) for v in rated)
+    grains = Counter(rounding(v) for v in rated)
     has_beliefs = any("belief_raw" in e for e in events)
     return {
         "calls": calls,
@@ -111,7 +111,7 @@ def summarize(events: Iterable[dict], seconds: float | None = None) -> dict:
         "seconds": None if seconds is None else round(seconds, 1),
         "seconds_per_call": round(sum(lat) / len(lat), 2) if lat else None,
         "out_of_range": sum(bool(e.get("clipped")) for e in events) if has_beliefs else None,
-        "granularity": (
+        "rounding": (
             {k: grains.get(k, 0) for k in ("whole", "half", "other")} if has_beliefs else None
         ),
     }
@@ -174,13 +174,13 @@ def format_report(r: dict | None) -> str:
         f"time      {_fmt(r.get('seconds'), ' s')}, " + _per_call(r),
         f"range     {_fmt(r.get('out_of_range'))} beliefs outside [-2, 2] (clipped)",
     ]
-    g = r.get("granularity")
+    g = r.get("rounding", r.get("granularity"))  # "granularity": runs before the rename
     if g is not None and not sum(g.values()):
-        lines.append("beliefs   no valid self-ratings")
+        lines.append("rounding  no valid self-ratings")
     elif g:
         n = sum(g.values()) or 1
         lines.append(
-            "beliefs   "
+            "rounding  "
             + ", ".join(f"{k} {v} ({100 * v / n:.0f}%)" for k, v in g.items())
             + " (steps ≥ 1)"
         )

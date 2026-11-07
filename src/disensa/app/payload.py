@@ -37,13 +37,16 @@ def build_payload(run: Run) -> dict:
     ops = run.opinion_matrix()
     steps = run.steps
 
-    # what each agent did at each step: its interactions (author ids), reasoning and message
+    # what each agent did at each step: its interactions (author ids), reasoning, message and
+    # memory (the summary written at this step; the lab shows it with the next step, whose
+    # prompt it went into)
     agent_steps: list[list[dict | None]] = [[None] * n for _ in range(steps + 1)]
     for e in run.events:
         if e["step"] <= steps:  # a live run can log events before that step's opinions
             agent_steps[e["step"]][e["agent"]] = {
                 "message": e.get("message") or "",
                 "reasoning": e.get("reasoning") or "",
+                "memory": e.get("memory") or "",
                 "interactions": [int(it["author"]) for it in e.get("interactions") or []],
                 "error": e.get("error") or None,
             }
@@ -65,6 +68,8 @@ def build_payload(run: Run) -> dict:
     report = run.meta.get("report")
     if report is None and dyn["type"] == "llm":
         report = summarize(run.events, run.meta.get("seconds"))
+    if report and "granularity" in report:  # runs from before the rename to "rounding"
+        report = {("rounding" if k == "granularity" else k): v for k, v in report.items()}
     return {
         "name": cfg["name"],
         "config": cfg,

@@ -60,7 +60,7 @@ def analyze(paths, out: Path, measure: str = "self", delta: float = DELTA, echo=
             echo(f"skipped {p}: {e}")
             continue
         s["moved_by_step"] = json.dumps(s["moved_by_step"])
-        s["granularity"] = json.dumps(s["granularity"])
+        s["rounding"] = json.dumps(s["rounding"])
         summaries.append({"path": p, **s})
     pd.DataFrame(summaries).to_csv(out / "summary.csv", index=False)
     echo(f"{len(runs)} runs: runs.csv, summary.csv")
