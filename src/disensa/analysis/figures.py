@@ -311,38 +311,103 @@ def topic_runs(run, fits: pd.DataFrame, out: Path, name: str, measure: str = "se
     return _save(fig, pd.DataFrame(rows), out, name)
 
 
-def fit_distances(fits: pd.DataFrame, out: Path, measure: str = "wasserstein") -> Path | None:
-    """Per topic: each rule's best distance to the LLM runs (mean over its runs), with the
-    "nobody moves" baseline. `fits` needs a `topic` column (see analyze)."""
+def fit_distances(
+    fits: pd.DataFrame,
+    out: Path,
+    measure: str = "wasserstein",
+    statements: dict[str, str] | None = None,
+) -> Path | None:
+    """Per topic, one panel: each rule's best distance to the LLM runs (mean ± sd over the
+    runs), against the "nobody moves" baseline drawn as a dashed line. A rule left of the line
+    explains something; in the shaded zone it does worse than nobody moving.
+
+    `fits` needs a `topic` column (see analyze); `statements` maps a topic label to its
+    statement, shown shortened in the panel title."""
     f = fits[fits["measure"] == measure]
     if f.empty:
         return None
     data = f.groupby(["topic", "rule"])["distance"].agg(["mean", "std", "count"]).reset_index()
     topics = list(dict.fromkeys(data["topic"]))
-    order = ["nobody_moves", "degroot", "bounded_confidence", "friedkin_johnsen"]
+    rules = [
+        r for r in ("degroot", "bounded_confidence", "friedkin_johnsen") if r in set(data["rule"])
+    ]
+    xmax = float((data["mean"] + data["std"].fillna(0)).max()) * 1.3 or 1.0
+
     pyplot = plt()
-    fig, ax = pyplot.subplots(figsize=(5.6, 0.55 * len(topics) + 1.2))
-    for k, rule in enumerate(order):
-        g = data[data["rule"] == rule].set_index("topic").reindex(topics)
-        y = np.arange(len(topics)) + (k - 1.5) * 0.15
-        ax.errorbar(
-            g["mean"],
-            y,
-            xerr=g["std"].fillna(0),
-            fmt=MARKERS[rule],
-            color=COLORS[rule],
-            ms=5,
-            capsize=2,
-            lw=1,
-            label=NAMES[rule],
-        )
-    ax.set_yticks(np.arange(len(topics)), topics)
-    ax.invert_yaxis()
-    ax.set_xlabel({"wasserstein": "Wasserstein distance, final opinions"}.get(measure, measure))
-    ax.set_xlim(left=0)
-    ax.set_title("How close the best numeric rule gets, by topic", loc="left")
-    ax.legend(ncols=2, loc="upper center", bbox_to_anchor=(0.5, -0.22 - 0.02 * len(topics)))
-    ax.grid(axis="y", visible=False)
+    fig, axes = pyplot.subplots(
+        len(topics), 1, figsize=(6.2, 1.45 * len(topics) + 0.8), sharex=True, squeeze=False
+    )
+    for i, topic in enumerate(topics):
+        ax = axes.flat[i]
+        g = data[data["topic"] == topic].set_index("rule")
+        if "nobody_moves" in g.index:
+            base = float(g.loc["nobody_moves", "mean"])
+            ax.axvspan(base, xmax, color=GRID, alpha=0.6, lw=0)
+            ax.axvline(base, color=MUTED, ls=(0, (3, 2)), lw=1)
+            ax.annotate(
+                "nobody moves",
+                (base, 1),
+                xycoords=("data", "axes fraction"),
+                xytext=(3, 0),
+                textcoords="offset points",
+                ha="left",
+                va="bottom",
+                fontsize=7.5,
+                color=MUTED,
+            )
+        for y, rule in enumerate(rules):
+            if rule not in g.index:
+                continue
+            m, sd, n = (g.loc[rule, c] for c in ("mean", "std", "count"))
+            ax.errorbar(
+                m,
+                y,
+                xerr=sd if n > 1 and pd.notna(sd) else None,
+                fmt=MARKERS[rule],
+                color=COLORS[rule],
+                ms=6,
+                capsize=2,
+                lw=1,
+            )
+            ax.annotate(
+                f"{m:.2f}",
+                (m, y),
+                xytext=(7, 0),
+                textcoords="offset points",
+                va="center",
+                fontsize=7.5,
+                color=INK,
+            )
+        ax.set_yticks(range(len(rules)), [NAMES[r] for r in rules])
+        ax.set_ylim(len(rules) - 0.5, -0.5)
+        ax.set_xlim(0, xmax)
+        ax.grid(axis="y", visible=False)
+        statement = (statements or {}).get(topic, "")
+        short = statement if len(statement) <= 80 else statement[:79] + "…"
+        ax.set_title(f"{topic}: {short}" if short else topic, loc="left", fontsize=8.5, pad=12)
+        if i == len(topics) - 1:  # the bottom panel
+            ax.set_xlabel(
+                {"wasserstein": "distance between final opinions (Wasserstein)"}.get(
+                    measure, measure
+                )
+            )
+    fig.suptitle(
+        "How close each numeric rule gets to the LLM runs  (lower is closer)",
+        x=0.02,
+        ha="left",
+        fontsize=10,
+    )
+    fig.text(
+        0.02,
+        -0.02,
+        "Each rule at its best-fit parameters on the run's own network; mean ± sd over runs. "
+        "Shaded: worse than nobody moving.",
+        fontsize=7.5,
+        color=MUTED,
+        ha="left",
+        va="top",
+    )
+    fig.tight_layout()
     return _save(fig, data, out, f"fit_distances_{measure}")
 
 

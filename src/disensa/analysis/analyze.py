@@ -97,7 +97,9 @@ def analyze(paths, out: Path, measure: str = "self", delta: float = DELTA, echo=
             raise ValueError(f"no LLM run could be read with --measure {measure}")
         fits = pd.concat(all_fits, ignore_index=True)
         fits.to_csv(out / "fits.csv", index=False)
-        if path := figures.fit_distances(fits, out):
+        if path := figures.fit_distances(
+            fits, out, statements={label: s for s, label in topics.items()}
+        ):
             made.append(path.name)
         for statement, label in topics.items():
             group = llm[(llm["statement"] == statement) & llm["path"].isin(fits["path"])]
