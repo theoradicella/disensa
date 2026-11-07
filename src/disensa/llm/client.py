@@ -27,6 +27,16 @@ Message = dict[str, str]
 # Providers where LiteLLM's JSON mode is reliable; others rely on the prompt + parser.
 _JSON_MODE_PROVIDERS = ("ollama", "ollama_chat", "openai", "hosted_vllm")
 
+# Provider errors are retried with backoff (rate limits, a server restarting), except the ones
+# that repeat the same way: with the sampling seed fixed, a model that loops until Ollama aborts
+# it ("token repeat limit reached") loops again on every retry, so retrying only costs time.
+PROVIDER_RETRIES = 4
+_NOT_TRANSIENT = ("repeat limit",)
+
+
+def _is_transient(error: Exception) -> bool:
+    return not any(marker in str(error).lower() for marker in _NOT_TRANSIENT)
+
 
 @dataclass
 class LLMResponse:
@@ -201,10 +211,17 @@ class LLMClient:
                 latency_s=hit.get("latency_s"),  # entries written before 0.3 have none
             )
 
-        async with self._semaphore(model):
-            t0 = time.perf_counter()
-            resp = await self._call_litellm(model, messages, params, api_base, json_mode)
-            resp.latency_s = round(time.perf_counter() - t0, 3)
+        for attempt in range(PROVIDER_RETRIES + 1):
+            try:
+                async with self._semaphore(model):
+                    t0 = time.perf_counter()
+                    resp = await self._call_litellm(model, messages, params, api_base, json_mode)
+                    resp.latency_s = round(time.perf_counter() - t0, 3)
+                break
+            except Exception as e:
+                if attempt == PROVIDER_RETRIES or not _is_transient(e):
+                    raise
+                await asyncio.sleep(2**attempt)  # outside the semaphore: others keep going
 
         if use_cache:
             self.cache[key] = {
@@ -261,7 +278,7 @@ class LLMClient:
         litellm.drop_params = True
         kwargs = {k: v for k, v in params.items() if v is not None and k != "think"}
         kwargs.update(thinking_kwargs(model, params.get("think")))
-        kwargs["num_retries"] = 4  # LiteLLM retries rate limits / transient errors with backoff
+        kwargs["num_retries"] = 0  # retries are done in `complete` (PROVIDER_RETRIES)
         if api_base:
             kwargs["api_base"] = api_base
         if json_mode and model.split("/", 1)[0] in _JSON_MODE_PROVIDERS:

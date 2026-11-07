@@ -125,3 +125,44 @@ def test_one_client_serves_several_event_loops(tmp_path, monkeypatch):
 
     for tag in ("first loop", "second loop"):
         assert len(asyncio.run(many(tag))) == 4
+
+
+def test_provider_errors_retried_unless_they_repeat(tmp_path, monkeypatch):
+    """A transient provider error is retried; a model looping until Ollama aborts it is not:
+    with the seed fixed it loops again on every retry (found in a live run with gemma3:4b)."""
+    from disensa.llm import client as llm_client
+
+    async def no_sleep(_):
+        return None
+
+    monkeypatch.setattr(llm_client.asyncio, "sleep", no_sleep)
+    attempts = []
+
+    def failing(message, fail_times):
+        async def call(self, model, messages, params, api_base, json_mode):
+            attempts.append(model)
+            if len(attempts) <= fail_times:
+                raise RuntimeError(message)
+            return llm_client.LLMResponse(text='{"a": 1}', model=model)
+
+        return call
+
+    msgs = [{"role": "user", "content": "hi"}]
+    client = LLMClient(tmp_path / "cache")
+
+    monkeypatch.setattr(llm_client.LLMClient, "_call_litellm", failing("503 overloaded", 2))
+    assert asyncio.run(client.complete("fake/x", msgs, use_cache=False)).text == '{"a": 1}'
+    assert len(attempts) == 3
+
+    attempts.clear()
+    loop_error = '{"error":"prediction aborted, token repeat limit reached"}'
+    monkeypatch.setattr(llm_client.LLMClient, "_call_litellm", failing(loop_error, 99))
+    with pytest.raises(RuntimeError, match="repeat limit"):
+        asyncio.run(client.complete("fake/x", msgs, use_cache=False))
+    assert len(attempts) == 1
+
+
+def test_litellm_does_not_retry_itself(litellm_kwargs, tmp_path):
+    client = LLMClient(tmp_path / "cache")
+    asyncio.run(client.complete("ollama_chat/x", [{"role": "user", "content": "hi"}]))
+    assert litellm_kwargs[0]["num_retries"] == 0
