@@ -92,11 +92,13 @@ class ModelSpec(BaseModel):
 class InteractionsConfig(BaseModel):
     """How many other agents an agent interacts with per step (Wang: a random number).
 
-    For now the authors are drawn from the agent's network neighbours.
+    For now the authors are drawn from the agent's network neighbours. `max: 0` is the
+    no-interaction control (Chuang et al. 2024): agents are asked for their opinion every
+    step, with the same prompt, but hear nobody, so any movement is the model's own drift.
     """
 
     min: int = Field(1, ge=0)
-    max: int = Field(5, ge=1)
+    max: int = Field(5, ge=0)
 
     @model_validator(mode="after")
     def _check_range(self) -> InteractionsConfig:

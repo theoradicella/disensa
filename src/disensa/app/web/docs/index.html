@@ -526,7 +526,7 @@ Respond ONLY with JSON: {"message": "&lt;your message&gt;"}</code></pre>
     </details>
 
     <h3 id="agent-interactions">Interactions</h3>
-    <p>At each step an agent interacts with a few of its neighbours: it hears the message each of them shared at step \(t-1\). How many is random, drawn every step between <code>interactions.min</code> and <code>interactions.max</code> (default \(1\) to \(5\)), and capped at the agent&rsquo;s number of neighbours: an agent with 3 neighbours that draws 5 hears all 3. The neighbours are then picked uniformly at random: every neighbour is equally likely, whatever its opinion or degree. Both draws are new at every step and separate for each agent, so hearing is not mutual: agent \(i\) can hear \(j\) at a step without \(j\) hearing \(i\). A message from a neighbour reaches the agent as one line of the prompt: <code>- Agent 7 said: "..."</code>.</p>
+    <p>At each step an agent interacts with a few of its neighbours: it hears the message each of them shared at step \(t-1\). How many is random, drawn every step between <code>interactions.min</code> and <code>interactions.max</code> (default \(1\) to \(5\)), and capped at the agent&rsquo;s number of neighbours: an agent with 3 neighbours that draws 5 hears all 3. The neighbours are then picked uniformly at random: every neighbour is equally likely, whatever its opinion or degree. Both draws are new at every step and separate for each agent, so hearing is not mutual: agent \(i\) can hear \(j\) at a step without \(j\) hearing \(i\). A message from a neighbour reaches the agent as one line of the prompt: <code>- Agent 7 said: "..."</code>. With <code>interactions.max: 0</code> nobody is heard: the prompt is the same, with <code>(nobody in this step)</code> in place of the messages. This is the no-interaction control of Chuang et al.: the agents are only asked for their opinion again at every step, so whatever they still move is the model&rsquo;s own drift, not social influence.</p>
     <p>This is a different kind of influence from the numeric rules. There, an agent sees the <em>opinions</em> of <em>all</em> its neighbours, every step. Here it sees the <em>messages</em> of <em>some</em> of them, and never their numbers: whatever a neighbour&rsquo;s opinion is, only the words reach the agent. A hub can still hear only five others per step, but it is heard by many.</p>
 
     <h3 id="agent-update">Updating the opinion</h3>
@@ -594,7 +594,7 @@ Respond ONLY with JSON:
     <p>There are two ways to read an LLM agent&rsquo;s opinion. The <strong>self-rating</strong> is the <code>belief</code> the agent reports in its own reply. It is what the simulation runs on: it becomes \(x_i(t)\), the agent sees it again in its next prompt, and the metrics are computed from it. The <strong>scorer</strong> is a separate model that reads what the agent wrote and rates it on the same 5-point scale, the way a human reader would. Chuang et al. (2024) used a scorer of this kind (Flan-T5-XXL) and validated it against blind human ratings: three raters agreed with each other at Krippendorff&rsquo;s \(\alpha = 0.81\), and the scorer matched the raters&rsquo; majority 84% of the time. Self-rating was never measured against humans.</p>
     <p>In disensa the scorer is <strong>a measurement only</strong>. It runs after a run, on the texts in <code>events.jsonl</code>, and never feeds back into the simulation, so the same run can be scored by several models, or again later, without changing anything that happened. Which of the two measures the analysis relies on is decided with data: a sample of messages is rated blind by several people (<a href="#validation">Human validation</a>), and the measure that agrees better with them is used.</p>
 <pre><code>disensa score runs/20261103-230240_Big_Run_s44 --model ollama_chat/qwen2.5:7b
-disensa score runs/topics_core --model ollama_chat/qwen2.5:7b --field reasoning</code></pre>
+disensa score runs/core_llama31_8b --model ollama_chat/qwen2.5:7b --field reasoning</code></pre>
     <p><code>disensa score</code> rates every text of a run, or of every LLM run in a sweep folder: by default the <code>message</code> each agent shared at each step (step 0 included), or its <code>reasoning</code> with <code>--field reasoning</code>. Calls go through the same client and cache as the agents, at temperature 0, with JSON replies; <code>--api-base</code> points it at another server. Use a scorer that is not one of the run&rsquo;s agent models: a model rating its own texts may share their blind spots, and disensa warns when it is. Use a capable one, too: in a test, <code>qwen3:0.6b</code> rated every message \(+2\). The validation will show whether a scorer is any good, but a quick look at its ratings first saves a round of human rating. The ratings go to <code>scores.parquet</code> in the run folder (<a href="#run-files-list">Run files</a>), and the lab shows them in the agent panel next to the self-rating. The prompt, adapted from Chuang et al.&rsquo;s App. I to a community instead of a social network:</p>
     <details class="example">
       <summary>Prompt: scorer</summary>
@@ -619,9 +619,9 @@ Respond ONLY with JSON: {"score": &lt;one of -2, -1, 0, 1, 2, or "unclear"&gt;}<
 
     <h3 id="validation">Human validation</h3>
     <p>To decide between the self-rating and the scorer, a sample of messages is rated by several people who know nothing about the run, and both measures are compared with them (the protocol Chuang et al. used for their classifier, App. M, applied to both measures).</p>
-<pre><code>disensa validation export runs/topics_core --n 100 --seed 0 --out validation/topics_core
+<pre><code>disensa validation export runs/core_llama31_8b --n 100 --seed 0 --out validation/core_llama31_8b
 # send sample.csv and INSTRUCTIONS.md to each rater; collect ratings_&lt;name&gt;.csv
-disensa validation report validation/topics_core</code></pre>
+disensa validation report validation/core_llama31_8b</code></pre>
     <p><strong>Export</strong> samples messages from the given runs or sweep folders, <strong>stratified by self-rated level</strong>: each self-rating is rounded to \(-2, \dots, 2\) and the levels are sampled as equally as possible (a level with too few messages gives its share to the others), so that strong and weak positions on both sides are all tested, not just the most common one. Only messages from step 1 on whose reply was used are sampled: at step 0 the opinion is given to the agent, and a failed reply repeats an older message. The sample is shuffled across runs and topics. It writes three files: <code>sample.csv</code> (<code>item_id</code>, <code>statement</code>, <code>message</code> and an empty <code>rating</code>), which is all a rater sees; <code>key.csv</code>, which links each item to its run, step, agent, model, self-rating and scorer ratings and is <strong>never</strong> given to the raters; and <code>INSTRUCTIONS.md</code>. For each message the rater answers &ldquo;What is the author&rsquo;s position on this statement?&rdquo; with one of the five levels (or <code>unclear</code>), rating only the text, alone, without discussing it with the others.</p>
     <p><strong>Report</strong> reads every <code>ratings_&lt;rater&gt;.csv</code> (a copy of <code>sample.csv</code> with <code>rating</code> filled in) and writes <code>report.json</code> and <code>report.md</code>:</p>
     <ul>
@@ -907,8 +907,8 @@ run.events[0]["message"]     # LLM runs: the events, as a list of dicts</code></
 
     <h2 id="sweeps">Sweeps</h2>
     <p>An experiment is rarely one run: it is the same setup over several seeds, topics or parameter values. A <strong>sweep file</strong> describes all of them at once, and <code>disensa sweep</code> runs them one after the other.</p>
-<pre><code>name: topics_core
-base: configs/topics_base.yaml       # a normal config file, or the config itself
+<pre><code>name: topics
+base: base.yaml                     # a normal config file, or the config itself
 grids:
   - seed: [1, 2, 3]
     dynamics.statement:
@@ -920,7 +920,7 @@ grids:
       - {type: numeric, rule: bounded_confidence}
     dynamics.epsilon: [0.5, 1.0]</code></pre>
     <p>Each <strong>grid</strong> maps settings to lists of values and stands for every combination of them (its cartesian product); the sweep is all the grids together. Settings are dotted paths into the config: <code>seed</code>, <code>network.n</code>, <code>dynamics.statement</code>. A value can be a whole block, such as a <code>dynamics</code> mapping, which replaces that block of the base; deeper settings like <code>dynamics.epsilon</code> are applied after it. Every combination is checked as a complete config before anything runs, so a typo stops the sweep at once instead of after hours. The same config twice is run once.</p>
-    <p>Each run is named after the sweep and the values that vary in its grid, e.g. <code>topics_core__seed=2__statement=1</code>; a long value appears as its position in the list (1 for the first). Runs go into <code>runs/&lt;sweep name>/</code>, next to <code>sweep.json</code>: the list of runs with their config hash, status, folder and a summary of their <a href="#run-report">run report</a>. The lab groups them under the sweep&rsquo;s name in <em>Previous runs</em>.</p>
+    <p>Each run is named after the sweep and the values that vary in its grid, e.g. <code>topics__seed=2__statement=1</code>; a long value appears as its position in the list (1 for the first). Runs go into <code>runs/&lt;sweep name>/</code>, next to <code>sweep.json</code>: the list of runs with their config hash, status, folder and a summary of their <a href="#run-report">run report</a>. The lab groups them under the sweep&rsquo;s name in <em>Previous runs</em>.</p>
     <div class="table-wrap"><table>
       <thead><tr><th>Command</th><th>What it does</th></tr></thead>
       <tbody>
@@ -928,15 +928,16 @@ grids:
         <tr><td><code>--dry-run</code></td><td>lists the runs and estimates the LLM calls they will make, \(N \times (\text{steps} + 1)\) per LLM run, without running anything</td></tr>
         <tr><td><code>--shard i/N</code></td><td>runs only share \(i\) of \(N\) (1-based): runs \(i, i+N, i+2N, \dots\) of the list. The \(N\) shares are disjoint and together cover the sweep; this is how a SLURM job array splits it</td></tr>
         <tr><td><code>--cache-dir</code></td><td>uses another LLM cache folder for every run (one per job on a cluster)</td></tr>
+        <tr><td><code>--api-base</code></td><td>sends every model&rsquo;s requests to another server address, e.g. a vLLM server on a free port of a cluster node. Like the cache folder, the address is not part of what a run computes, so changing it never makes a finished run look new</td></tr>
       </tbody>
     </table></div>
     <p><strong>Resuming.</strong> A run whose config already has a finished folder in the sweep folder is skipped, so running the same sweep again continues where it stopped. The comparison is by a hash of the config without its name, folders, cache folder and concurrency, which do not change what a run computes. A run that crashed, was cancelled or failed is run again from scratch; the LLM cache replays the replies it already got, so that part is instant. One failed run never stops the sweep: it is marked failed in <code>sweep.json</code> and the sweep goes on.</p>
     <p><strong>Sequential on purpose.</strong> On a Mac, Ollama answers one request at a time per loaded model anyway, so running several runs at once would not be faster; speed comes from <code>max_concurrency</code> within a run. On a cluster, a job array runs one share per GPU, each against its own vLLM server: see <code>scripts/indaco/</code> in the repository, and <a href="#vllm">Running on a vLLM server</a>.</p>
-    <p>Example sweep files are in <code>configs/sweeps/</code>: bounded confidence over \(\varepsilon\) (<code>numeric_bc_epsilon.yaml</code>, 200 runs), Friedkin&ndash;Johnsen over the stubbornness (<code>numeric_fj_stubbornness.yaml</code>), and the topic runs with their numeric baselines (<code>topics_core.yaml</code>).</p>
+    <p>Example sweep files are in <code>configs/sweeps/</code>: bounded confidence over \(\varepsilon\) (<code>numeric_bc_epsilon.yaml</code>, 200 runs), Friedkin&ndash;Johnsen over the stubbornness (<code>numeric_fj_stubbornness.yaml</code>), and the thesis experiments are in <code>configs/experiments/</code> (one sweep file per model and stage; see its README).</p>
 
     <h2 id="analysis">Analysis</h2>
     <p>The lab looks at one run at a time; the analysis reads many runs together and turns them into tables and figures. It runs from the terminal (the figures need <code>pip install 'disensa[analysis]'</code>, which adds matplotlib):</p>
-<pre><code>disensa analyze runs/topics_core runs/numeric_bc_epsilon --out figures/</code></pre>
+<pre><code>disensa analyze runs/core_llama31_8b runs/numeric_baselines --out figures/</code></pre>
     <p>It takes run folders, sweep folders or a whole <code>runs/</code> folder, keeps the finished runs, and writes into <code>--out</code>: <code>runs.csv</code> (one row per run, with its config fields), <code>summary.csv</code> (one row per run, below), for LLM runs <code>fits.csv</code>, <code>response.csv</code> and <code>topics.csv</code> (below), and the figures the runs allow, each as a PDF with a CSV of the numbers it plots. Every function is also importable from <code>disensa.analysis</code>, e.g. in a notebook.</p>
     <p><strong>LLM beliefs are coarse</strong>: mostly whole or half numbers (see <a href="#run-report">Run report</a>), while numeric opinions move continuously. So LLM runs are compared with numeric ones through distributions, cluster counts, and the direction and frequency of moves, never step-by-step trajectories.</p>
 
@@ -1087,7 +1088,7 @@ dynamics:
         <tr><td><code>models[].top_k</code></td><td>sample only from this many most likely tokens, \(&gt; 0\)</td><td>\(40\)</td></tr>
         <tr><td><code>models[].think</code></td><td>let a thinking model reason before it answers (<a href="#agent-models">Models</a>)</td><td><code>false</code></td></tr>
         <tr><td><code>models[].api_base</code></td><td>address of the server that runs the model, e.g. <code>http://localhost:8000/v1</code> for vLLM (<a href="#vllm">vLLM</a>); empty for Ollama on the same computer</td><td>empty</td></tr>
-        <tr><td><code>interactions.min</code>, <code>.max</code></td><td>how many neighbours&rsquo; messages an agent reads per step, \(0 \le \min \le \max\), \(\max \ge 1\) (<a href="#agent-interactions">Interactions</a>)</td><td>\(1\), \(5\)</td></tr>
+        <tr><td><code>interactions.min</code>, <code>.max</code></td><td>how many neighbours&rsquo; messages an agent reads per step, \(0 \le \min \le \max\); \(\max = 0\) is the no-interaction control (<a href="#agent-interactions">Interactions</a>)</td><td>\(1\), \(5\)</td></tr>
         <tr><td><code>memory_words</code></td><td>word limit asked for the memory, \(&gt; 0\)</td><td>\(60\)</td></tr>
         <tr><td><code>max_tokens</code></td><td>longest reply allowed, \(&gt; 0\)</td><td>\(400\)</td></tr>
         <tr><td><code>max_concurrency</code></td><td>requests sent at the same time to one provider, \(&gt; 0\)</td><td>\(4\)</td></tr>
@@ -1101,7 +1102,7 @@ dynamics:
       <thead><tr><th>Command</th><th>What it does</th></tr></thead>
       <tbody>
         <tr><td><code>disensa run &lt;config&gt;</code></td><td>runs a config and prints the metrics after every step. <code>--steps N</code> overrides <code>steps</code>.</td></tr>
-        <tr><td><code>disensa sweep &lt;file&gt;</code></td><td>runs every combination of a sweep file (<a href="#sweeps">Sweeps</a>). <code>--dry-run</code>, <code>--shard i/N</code>, <code>--cache-dir</code>.</td></tr>
+        <tr><td><code>disensa sweep &lt;file&gt;</code></td><td>runs every combination of a sweep file (<a href="#sweeps">Sweeps</a>). <code>--dry-run</code>, <code>--shard i/N</code>, <code>--cache-dir</code>, <code>--api-base</code>.</td></tr>
         <tr><td><code>disensa score &lt;run or sweep&gt; --model &lt;m&gt;</code></td><td>rates every agent text with a separate scorer model (<a href="#measuring-opinions">Measuring opinions</a>). <code>--field message|reasoning</code>, <code>--api-base</code>, <code>--max-concurrency</code>.</td></tr>
         <tr><td><code>disensa validation export &lt;runs&gt; --out &lt;dir&gt;</code></td><td>samples messages for blind human rating (<a href="#validation">Human validation</a>). <code>--n</code>, <code>--seed</code>.</td></tr>
         <tr><td><code>disensa validation report &lt;dir&gt;</code></td><td>compares the raters with each other, and the self-rating and each scorer with the raters.</td></tr>

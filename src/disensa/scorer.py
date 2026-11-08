@@ -122,6 +122,16 @@ async def score_run(
     return new
 
 
+def is_scored(run_dir: Path, model: str, field: str = "message") -> bool:
+    """True if every logged text of the run has a row by this scorer and field."""
+    scores = load_scores(run_dir)
+    if scores is None:
+        return False
+    with open(run_dir / "events.jsonl", encoding="utf-8") as f:
+        n = sum(1 for line in f if line.strip())
+    return int(((scores["scorer_model"] == model) & (scores["field"] == field)).sum()) == n
+
+
 def load_scores(run_dir: str | Path) -> pd.DataFrame | None:
     path = Path(run_dir) / "scores.parquet"
     return pd.read_parquet(path) if path.exists() else None

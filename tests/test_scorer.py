@@ -98,6 +98,11 @@ def test_disensa_score_on_a_sweep_folder(make_cfg, tmp_path, monkeypatch):
     res = CliRunner().invoke(app, ["score", str(out / "s"), "--model", "fake/scorer"])
     assert res.exit_code == 0, res.output
     assert res.output.count("-> scores.parquet") == 2  # the numeric run is not scored
+    resume = ["score", str(out / "s"), "--model", "fake/scorer", "--resume", "--cache-dir", "c"]
+    res = CliRunner().invoke(app, resume)
+    assert res.exit_code == 0 and res.output.count("already scored, skipped") == 2
+    res = CliRunner().invoke(app, [*resume[:3], "fake/other", *resume[4:]])
+    assert res.output.count("-> scores.parquet") == 2 and (tmp_path / "c").is_dir()
 
 
 def test_the_scorer_prompt_is_quotable():

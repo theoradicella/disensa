@@ -9,3 +9,11 @@ dist/
 .ruff_cache/
 .DS_Store
 CLAUDE.md
+
+thesis/
+figures/
+.claude/
+
+# cluster: job logs and each user's own settings (scripts/indaco/README.md)
+logs/
+scripts/indaco/cluster.local.env

@@ -1,0 +1,22 @@
+# NUMERIC BASELINES on the experiment worlds: the three rules, with fixed parameters, on
+# the 5 seeds × 3 topologies of core/ (same networks, same starting opinions), 30 steps.
+# 45 runs, instant: run it on the Mac. The fitted parameters come from `disensa analyze`,
+# which simulates every rule over a grid on each LLM run's own world anyway.
+#   uv run disensa sweep configs/experiments/numeric_baselines.yaml
+name: numeric_baselines
+base:
+  name: numeric_baselines
+  opinions: {distribution: uniform}
+  steps: 30
+  network: {topology: watts_strogatz, n: 50, k: 6, beta: 0.1}
+  dynamics: {type: numeric}
+grids:
+  - seed: [1, 2, 3, 4, 5]
+    network:
+      - {topology: watts_strogatz, n: 50, k: 6, beta: 0.1}
+      - {topology: barabasi_albert, n: 50, m: 3}
+      - {topology: erdos_renyi, n: 50, p: 0.12}
+    dynamics:
+      - {type: numeric, rule: degroot}
+      - {type: numeric, rule: bounded_confidence, epsilon: 1.0, mu: 0.5}
+      - {type: numeric, rule: friedkin_johnsen, stubbornness: 1.0}

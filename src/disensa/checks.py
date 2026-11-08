@@ -249,6 +249,17 @@ def numeric_checks(cfg: NumericDynamics) -> list[Check]:
 
 
 def interaction_checks(cfg: InteractionsConfig, net: NetworkConfig | None) -> list[Check]:
+    if cfg.max == 0:
+        return [
+            Check(
+                "dynamics.interactions.max",
+                "Interactions max is 0: agents never hear anyone, so the network plays no "
+                "part. This is the no-interaction control: any movement is the model's own "
+                "drift under repeated questioning.",
+                "agent-interactions",
+                "LLM agents › Interactions",
+            )
+        ]
     if net is None or net.topology == "erdos_renyi":
         return []
     fewest = net.m if net.topology == "barabasi_albert" else net.k

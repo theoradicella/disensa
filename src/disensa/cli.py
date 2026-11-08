@@ -72,13 +72,16 @@ def sweep(
     dry_run: bool = typer.Option(False, "--dry-run", help="list the runs, run nothing"),
     shard: str = typer.Option(None, help="run share i of N (1-based), e.g. 2/4"),
     cache_dir: str = typer.Option(None, help="override dynamics.cache_dir for every run"),
+    api_base: str = typer.Option(
+        None, help="override every model's api_base, e.g. http://127.0.0.1:8123/v1"
+    ),
 ):
     """Run every combination of a sweep file, one after the other (see /docs#sweeps)."""
     from disensa import sweep as sw
 
     try:
         spec, base = sw.load_sweep(file)
-        runs = sw.expand(spec, base, Path(cache_dir) if cache_dir else None)
+        runs = sw.expand(spec, base, Path(cache_dir) if cache_dir else None, api_base)
         part = sw.parse_shard(shard)
     except sw.SweepError as e:
         typer.secho(f"error: {e}", fg="red", err=True)
@@ -122,6 +125,12 @@ def score(
     api_base: str = typer.Option(None, help="server address, e.g. http://localhost:8000/v1"),
     field: str = typer.Option("message", help="which text to rate: message or reasoning"),
     max_concurrency: int = typer.Option(8, help="parallel requests to the scorer"),
+    cache_dir: str = typer.Option(".cache/llm", help="folder of the reply cache"),
+    resume: bool = typer.Option(
+        False,
+        "--resume",
+        help="skip runs that are not finished, or already scored by this scorer and field",
+    ),
 ):
     """Rate every logged agent text of a run (or of every run of a sweep) with a scorer model.
 
@@ -137,8 +146,14 @@ def score(
         raise typer.BadParameter(f"no LLM run folder at {path}")
     if model.startswith("ollama") and not api_base and (err := ollama.ensure_running()):
         raise typer.BadParameter(err)
-    client = LLMClient(max_concurrency=max_concurrency)
+    client = LLMClient(cache_dir, max_concurrency=max_concurrency)
     for d in dirs:
+        if resume and load_meta(d).get("status") != "finished":
+            typer.echo(f"{d.name}: not finished, skipped")
+            continue
+        if resume and scorer.is_scored(d, model, field):
+            typer.echo(f"{d.name}: already scored, skipped")
+            continue
         if model in scorer.agent_models(load_meta(d)):
             typer.secho(
                 f"warning: {model} is also one of the agents' models in {d.name}: it would "
@@ -166,7 +181,7 @@ def validation_export(
     paths: list[Path],
     n: int = typer.Option(100, help="how many messages to sample"),
     seed: int = typer.Option(0, help="seed of the sample"),
-    out: str = typer.Option(..., help="folder to write, e.g. validation/topics_core"),
+    out: str = typer.Option(..., help="folder to write, e.g. validation/core_llama31_8b"),
 ):
     """Sample messages for blind human rating, stratified by self-rated level."""
     from disensa import validation

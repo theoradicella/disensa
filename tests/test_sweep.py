@@ -120,6 +120,18 @@ def test_cache_dir_does_not_change_what_a_run_is(tmp_path, base):
     assert b[0].config.dynamics.cache_dir == tmp_path / "elsewhere"
 
 
+def test_api_base_override_reaches_every_model_and_keeps_the_hash(tmp_path, base):
+    path = write_sweep(tmp_path, base, [{"seed": [1, 2]}])
+    spec, b = sw.load_sweep(path)
+    a = sw.expand(spec, b)
+    o = sw.expand(spec, b, api_base="http://127.0.0.1:8123/v1")
+    assert [r.hash for r in a] == [r.hash for r in o]
+    assert all(
+        m.api_base == "http://127.0.0.1:8123/v1" for r in o for m in r.config.dynamics.models
+    )
+    assert all(m.api_base is None for r in a for m in r.config.dynamics.models)
+
+
 def run_cli(*args):
     return CliRunner().invoke(app, ["sweep", *map(str, args)])
 
@@ -195,7 +207,7 @@ def test_the_lab_lists_sweep_runs(tmp_path, base):
 
 
 def test_the_example_sweeps_expand():
-    for name in ("numeric_bc_epsilon", "numeric_fj_stubbornness", "topics_core"):
+    for name in ("numeric_bc_epsilon", "numeric_fj_stubbornness"):
         spec, runs = plan(f"configs/sweeps/{name}.yaml")
         assert runs and spec.name == name
     _, bc = plan("configs/sweeps/numeric_bc_epsilon.yaml")

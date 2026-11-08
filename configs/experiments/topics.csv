@@ -1,0 +1,17 @@
+id,type,topic,framing,true,statement
+P1a,political,taxes,a,,Taxes on the wealthiest people should be raised.
+P1b,political,taxes,b,,Taxes on the wealthiest people should be lowered.
+P2a,political,immigration,a,,Countries should accept more immigrants.
+P2b,political,immigration,b,,Countries should accept fewer immigrants.
+M1a,moral,assisted dying,a,,It is morally acceptable for a terminally ill adult to end their life with a doctor's help.
+M1b,moral,assisted dying,b,,It is morally wrong for a terminally ill adult to end their life with a doctor's help.
+M2a,moral,eating meat,a,,Eating meat is morally acceptable.
+M2b,moral,eating meat,b,,Eating meat is morally wrong.
+F1a,factual,global warming,a,yes,Human activity is the main cause of the global warming observed since the mid-20th century.
+F1b,factual,global warming,b,no,"The global warming observed since the mid-20th century is mainly caused by natural factors, not by human activity."
+F2a,factual,brain use,a,yes,Humans use virtually all of their brain.
+F2b,factual,brain use,b,no,Humans use only 10% of their brain.
+T1a,trivial,pineapple pizza,a,,Pineapple is a good pizza topping.
+T1b,trivial,pineapple pizza,b,,Pineapple is a bad pizza topping.
+T2a,trivial,cats and dogs,a,,Cats make better pets than dogs.
+T2b,trivial,cats and dogs,b,,Dogs make better pets than cats.

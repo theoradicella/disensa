@@ -3,8 +3,8 @@
 A sweep file names a base config and one or more grids. Each grid is a cartesian product of
 values for dotted config paths; the sweep is the union of the grids:
 
-    name: topics_core
-    base: configs/topics_base.yaml     # a path (relative to the sweep file) or a mapping
+    name: topics
+    base: base.yaml                    # a path (relative to the sweep file) or a mapping
     grids:
       - seed: [1, 2, 3]
         dynamics.statement: ["...", "..."]
@@ -158,8 +158,15 @@ def load_sweep(path: str | Path) -> tuple[SweepFile, dict]:
     return sweep, base
 
 
-def expand(sweep: SweepFile, base: dict, cache_dir: Path | None = None) -> list[PlannedRun]:
-    """Every run of the sweep, validated. Raises SweepError listing every invalid combination."""
+def expand(
+    sweep: SweepFile, base: dict, cache_dir: Path | None = None, api_base: str | None = None
+) -> list[PlannedRun]:
+    """Every run of the sweep, validated. Raises SweepError listing every invalid combination.
+
+    `cache_dir` and `api_base` override the file's values for every LLM run (`api_base` for
+    every model): on a cluster each job has its own cache folder and its own server port.
+    Neither is part of the config hash, so overriding them never makes a run look new.
+    """
     out: list[PlannedRun] = []
     problems: list[str] = []
     seen: dict[str, str] = {}  # hash -> name: the same config twice is run once
@@ -174,8 +181,13 @@ def expand(sweep: SweepFile, base: dict, cache_dir: Path | None = None) -> list[
             raw = apply(base, values)
             raw["name"] = name
             raw["output_dir"] = str(sweep.output_dir / sweep.name)
-            if cache_dir is not None and isinstance(raw.get("dynamics"), dict):
-                raw["dynamics"]["cache_dir"] = str(cache_dir)
+            dyn = raw.get("dynamics")
+            if cache_dir is not None and isinstance(dyn, dict):
+                dyn["cache_dir"] = str(cache_dir)
+            if api_base is not None and isinstance(dyn, dict):
+                for m in dyn.get("models") or []:
+                    if isinstance(m, dict):
+                        m["api_base"] = api_base
             try:
                 cfg = ExperimentConfig.model_validate(raw)
             except ValidationError as e:

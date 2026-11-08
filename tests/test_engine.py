@@ -49,6 +49,26 @@ def test_llm_run_logs_every_agent_every_day(make_cfg):
     assert ops.min() >= -2 and ops.max() <= 2 and not np.allclose(ops[0], ops[-1])
 
 
+def test_no_interaction_control(make_cfg):
+    """interactions.max = 0: every agent is asked every step, hears nobody, and the prompt
+    says so; the run still completes and logs every agent."""
+    cfg = make_cfg(
+        dynamics={
+            "type": "llm",
+            "models": [{"name": "fake/conformist"}],
+            "interactions": {"min": 0, "max": 0},
+            "cache_dir": str(make_cfg().dynamics.cache_dir),
+        }
+    )
+    run_dir = new_run_dir(cfg)
+    asyncio.run(run(cfg, run_dir))
+    r = load_run(run_dir)
+    assert len(r.events) == 20 * (cfg.steps + 1)
+    later = [e for e in r.events if e["step"] >= 1]
+    assert all(e["interactions"] == [] and e["error"] is None for e in later)
+    assert all("(nobody in this step)" in e["prompt"] for e in later)
+
+
 def test_update_is_synchronous(make_cfg):
     """Every interaction carries the author's message from step t-1, never from step t."""
     cfg = make_cfg()

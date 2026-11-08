@@ -1,0 +1,21 @@
+# PILOT, Qwen/Qwen2.5-7B-Instruct (Alibaba): is this model reliable enough for the experiments?
+# 8 statements (framing a of every topic) × 1 world (seed 100, not one of the
+# experiment seeds) on Watts–Strogatz, 30 steps = 8 runs. Judged on failures, valid
+# JSON and coherent messages only, never on how the opinions moved.
+#   run on INDACO by scripts/indaco/run_all.sh
+name: pilot_qwen25_7b
+base: ../base.yaml
+grids:
+  - seed: [100]
+    dynamics.statement:
+      - "Taxes on the wealthiest people should be raised."  # P1a
+      - "Countries should accept more immigrants."  # P2a
+      - "It is morally acceptable for a terminally ill adult to end their life with a doctor's help."  # M1a
+      - "Eating meat is morally acceptable."  # M2a
+      - "Human activity is the main cause of the global warming observed since the mid-20th century."  # F1a
+      - "Humans use virtually all of their brain."  # F2a
+      - "Pineapple is a good pizza topping."  # T1a
+      - "Cats make better pets than dogs."  # T2a
+    dynamics.models:
+      - - {name: hosted_vllm/Qwen/Qwen2.5-7B-Instruct, api_base: "http://127.0.0.1:8000/v1",
+          temperature: 0.7, top_p: 0.9, top_k: 40, think: false}

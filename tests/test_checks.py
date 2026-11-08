@@ -86,6 +86,10 @@ def test_numeric_epsilon_and_interactions():
         "dynamics": {"type": "llm", "models": [], "interactions": {"min": 4, "max": 5}},
     }
     assert "dynamics.interactions.min" in [c["field"] for c in raw_checks(raw)]
+    raw["dynamics"]["interactions"] = {"min": 0, "max": 0}  # the no-interaction control
+    out = raw_checks(raw)
+    assert [c["field"] for c in out] == ["dynamics.interactions.max"]
+    assert out[0]["level"] == "warning"
 
 
 def test_raw_checks_reports_invalid_sections_as_errors():

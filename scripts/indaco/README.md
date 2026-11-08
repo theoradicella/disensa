@@ -1,66 +1,88 @@
-# Running disensa on INDACO
+# Running the disensa experiments on INDACO
 
-INDACO is the University of Milan HPC cluster. There, models are served by
-[vLLM](https://docs.vllm.ai) on a GPU node instead of Ollama, and sweeps run as SLURM job
-arrays. **Untested until INDACO access works**: everything marked *CHECK WITH INDACO* is a
-placeholder.
+Everything happens on the INDACO login node, in three steps. The jobs check themselves,
+wait for each other, requeue themselves at the time limit, and pack the results at the end:
+nothing needs watching.
 
-## To check with INDACO
-
-- [ ] the GPU partition name, and the `--gres` syntax for one GPU
-- [ ] GPU memory: an 8B model in 16-bit needs ~16 GB for the weights plus room for the KV
-      cache; a 70B model needs several GPUs (`vllm serve ... --tensor-parallel-size N`)
-- [ ] the time limit of the partition (`--time`)
-- [ ] the scratch filesystem path (`$SCRATCH`) and its quota
-- [ ] module names (CUDA, Python), and whether compute nodes can download from Hugging Face
-      (if not, download the weights on a login node into `$HF_HOME` first)
-
-## Model strings
-
-vLLM speaks the OpenAI request format, but in a disensa config a vLLM model is written
-`hosted_vllm/<model>` with `api_base: http://localhost:8000/v1`, **not** `openai/<model>`:
-LiteLLM's `openai/` connector refuses to send a request without an OpenAI API key, so every
-call would fail (disensa stops such a config). `<model>` is the name given to `vllm serve`.
-See `configs/indaco_example.yaml`.
-
-```yaml
-models:
-  - name: hosted_vllm/meta-llama/Llama-3.1-8B-Instruct
-    api_base: http://localhost:8000/v1
-max_concurrency: 48   # vLLM batches requests: raise this to ~32–64
-```
-
-`max_concurrency` is the number of requests disensa keeps in flight. Ollama on a Mac queues
-them anyway, so 4 is plenty there; vLLM batches them on the GPU, so 32–64 keeps it busy.
-
-## Submitting a sweep
+## 1. Install (once, ~1 hour, mostly downloading)
 
 ```bash
-mkdir -p logs
-disensa sweep configs/sweeps/topics_core.yaml --dry-run      # how many runs and LLM calls
-sbatch --array=1-4 scripts/indaco/sweep.slurm configs/sweeps/topics_core.yaml
+git clone disensa.bundle disensa        # or the repository link Theo sends
+cd disensa
+scripts/indaco/setup.sh
 ```
 
-Task *i* of the array runs shard *i/N* of the sweep (1-based; `--array=0-3` would be wrong),
-each with its own vLLM server and its own cache folder under `$SCRATCH/disensa-cache/`.
-Runs that already finished are skipped, so resubmitting the same array after a timeout
-continues where it stopped. All tasks write into `runs/<sweep name>/`.
+It installs everything and downloads the models (~90 GB, no account needed). It picks a
+storage folder with enough space by itself and says which. Running it again is safe. It is
+done when it prints `setup done. Next: scripts/indaco/run_all.sh`.
 
-## Getting the runs back to the Mac
+## 2. Start the experiment (one command)
 
 ```bash
-# on the Mac, from the disensa folder
-rsync -av <user>@<indaco login host>:<path to disensa>/runs/topics_core runs/
-disensa app
+scripts/indaco/run_all.sh
 ```
 
-The lab lists every folder in `runs/`, including sweep folders, so the copied runs appear
-under *Previous runs*, grouped by sweep.
+It finds the GPU partition by itself, submits about 25 jobs and returns at once. The jobs
+run for a day or more, depending on the queue.
 
-## Never mix Ollama and vLLM runs in one comparison
+## 3. Collect the results
 
-The same model name is not the same model: Ollama usually serves 4-bit quantized weights,
-vLLM the full ones, and the two servers differ in other details too. Every run records what
-served it in `meta.json` (`serving`: Ollama's digest and quantization, or the model ids
-vLLM reported), so the two can always be told apart. Compare Ollama runs with Ollama runs
-and vLLM runs with vLLM runs.
+At any time, to see where things stand:
+
+```bash
+scripts/indaco/run_all.sh status
+```
+
+Everything is finished when the job list at the top is empty and a file
+`results/disensa_results_<date>.tar.gz` (a few GB) is listed at the bottom. Send Theo that
+file, by OneDrive or WeTransfer. It holds every run, every log and a summary.
+
+## If something went wrong
+
+**The answer is almost always: run `scripts/indaco/run_all.sh` again.** It never redoes
+finished work. It submits only what is missing and makes a new archive at the end. Some
+cases:
+
+| you see | what to do |
+|---|---|
+| `run_all: … is not downloaded` | `scripts/indaco/setup.sh` again (a download was interrupted) |
+| `no folder with 120 GB free found` | ask INDACO where large files go, then put `SCRATCH_DIR="/that/folder"` in `scripts/indaco/cluster.local.env` and run setup again |
+| `no partition with GPUs found` | put `PARTITION="<name>"` (from `sinfo -s`) in `scripts/indaco/cluster.local.env` |
+| `sbatch: error: …` (account, QOS) | put `ACCOUNT="…"` or `QOS="…"` in `scripts/indaco/cluster.local.env` (INDACO's guide says which) |
+| `run_all: files of the repository were changed` | `git status`, then `git checkout -- <file>`: the runs must match Theo's commit |
+| the summary says a model's pilot `stopped at the failure guard` | nothing: that model is left out by design. Theo will see it in the summary |
+| jobs pending for days | nothing to fix on our side; tell Theo if it is more than a week |
+| anything else | send Theo the newest `results/summary_*.txt` and the `logs/` folder |
+
+---
+
+## What the jobs do (for reference)
+
+`run_all.sh` submits a chain of SLURM jobs:
+
+| job | what | waits for |
+|---|---|---|
+| `dz-check` | reports the GPU, memory and software of a node (`logs/dz-check_*.out`) | — |
+| `dz-pilot_<model>` ×4 | 8 runs per model: is it reliable? | — |
+| `dz-core_<model>` ×4 | 240 runs per model (3 GPUs each, as an array) | its pilot succeeding |
+| `dz-control_llama31_8b` | 80 runs without interactions | the Llama pilot |
+| `dz-replicate_llama31_8b` | 240 runs, second replicate | the Llama pilot |
+| `dz-score-<sweep>` ×6 | the scorer rates every message of a sweep | that sweep |
+| `dz-pack` | summary + archive in `results/` | everything above |
+
+Every sweep job serves its model with vLLM on a free port of its node, then runs a 2-step
+**smoke run**. If the model is not served, its replies are not valid JSON, or more than 5% of
+them fail, the job stops there, within a minute, and the jobs waiting for it are cancelled.
+Otherwise it runs its share of the sweep, 4 runs side by side. 15 minutes before the time
+limit, a job puts itself back in the queue (up to 20 times). Finished runs are skipped when it
+starts again.
+
+Files: `cluster.env` (settings), `setup.sh`, `run_all.sh`, the job scripts (`sweep_job.sh`,
+`score_job.sh`, `check_node.sh`, `pack_job.sh`, sharing `lib.sh`), `preflight.py` (the
+checks) and `status.py` (the summary). The experiment itself is `configs/experiments/`:
+never edit it, so that every run is the experiment described in the thesis. Each run
+records the commit it was made with.
+
+Never mix these runs with Ollama runs made on a Mac: the same model name is not the same
+model (Ollama serves 4-bit weights, vLLM the full ones). Each run records what served it in
+`meta.json` (`serving`).

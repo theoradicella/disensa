@@ -1,0 +1,31 @@
+# NO-INTERACTION CONTROL, main model only (unsloth/Llama-3.1-8B-Instruct).
+# interactions max 0: every agent is asked for its opinion every step with the same
+# prompt, but hears nobody (Chuang et al. 2024). The network plays no part, so one
+# topology is enough; seed s gives the same starting opinions as seed s of core/.
+# 5 worlds × 16 statements = 80 runs.
+#   run on INDACO by scripts/indaco/run_all.sh
+name: control_llama31_8b
+base: ../base.yaml
+grids:
+  - seed: [1, 2, 3, 4, 5]
+    dynamics.interactions: [{min: 0, max: 0}]
+    dynamics.statement:
+      - "Taxes on the wealthiest people should be raised."  # P1a
+      - "Taxes on the wealthiest people should be lowered."  # P1b
+      - "Countries should accept more immigrants."  # P2a
+      - "Countries should accept fewer immigrants."  # P2b
+      - "It is morally acceptable for a terminally ill adult to end their life with a doctor's help."  # M1a
+      - "It is morally wrong for a terminally ill adult to end their life with a doctor's help."  # M1b
+      - "Eating meat is morally acceptable."  # M2a
+      - "Eating meat is morally wrong."  # M2b
+      - "Human activity is the main cause of the global warming observed since the mid-20th century."  # F1a
+      - "The global warming observed since the mid-20th century is mainly caused by natural factors, not by human activity."  # F1b
+      - "Humans use virtually all of their brain."  # F2a
+      - "Humans use only 10% of their brain."  # F2b
+      - "Pineapple is a good pizza topping."  # T1a
+      - "Pineapple is a bad pizza topping."  # T1b
+      - "Cats make better pets than dogs."  # T2a
+      - "Dogs make better pets than cats."  # T2b
+    dynamics.models:
+      - - {name: hosted_vllm/unsloth/Llama-3.1-8B-Instruct, api_base: "http://127.0.0.1:8000/v1",
+          temperature: 0.7, top_p: 0.9, top_k: 40, think: false}

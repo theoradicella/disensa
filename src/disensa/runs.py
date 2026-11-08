@@ -62,7 +62,9 @@ _NOT_HASHED = [
 def config_hash(cfg: ExperimentConfig) -> str:
     """Hash of what a run computes: its config without the name, folders and concurrency.
 
-    `disensa sweep` uses it to recognise a run that has already been done.
+    `disensa sweep` uses it to recognise a run that has already been done. A model's
+    `api_base` is left out too: it says where the server is, not what it computes, and on a
+    cluster each job may serve the same model on a different port.
     """
     raw = cfg.model_dump(mode="json")
     for path in _NOT_HASHED:
@@ -70,6 +72,8 @@ def config_hash(cfg: ExperimentConfig) -> str:
         for k in path[:-1]:
             obj = obj.get(k, {})
         obj.pop(path[-1], None)
+    for m in raw["dynamics"].get("models", []):
+        m.pop("api_base", None)
     return hashlib.sha256(json.dumps(raw, sort_keys=True).encode()).hexdigest()[:16]
 
 

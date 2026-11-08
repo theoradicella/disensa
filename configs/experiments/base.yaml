@@ -1,0 +1,20 @@
+# Shared by every LLM sweep in configs/experiments/. Not a run config on its own: each sweep
+# sets the model, the network, the statements and the seeds. The statement below is not a
+# real one, so a sweep that forgets to set it is refused (scripts/indaco/preflight.py, and
+# tests/test_experiments.py).
+name: experiments_base
+seed: 1
+replicate: 0
+network: {topology: watts_strogatz, n: 50, k: 6, beta: 0.1}
+opinions: {distribution: uniform}
+steps: 30                    # as Wang et al. (50 agents, 30 days)
+dynamics:
+  type: llm
+  statement: "SET BY THE SWEEP"
+  interactions: {min: 1, max: 5}
+  memory_words: 60
+  max_tokens: 400
+  max_concurrency: 64        # a step's 50 calls go to vLLM as one batch
+  max_error_rate: 0.5        # stop a run only when the server is clearly broken (more than
+                             # 25 of a step's 50 replies fail). Imperfect runs are kept: every
+                             # run reports its failures, and the analysis checks them

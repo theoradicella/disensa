@@ -11,7 +11,7 @@ dynamics:
   type: llm
   statement: Euthanasia should be legal for terminally ill adults who clearly request it.
   models:
-    - name: hosted_vllm/meta-llama/Llama-3.1-8B-Instruct
+    - name: hosted_vllm/unsloth/Llama-3.1-8B-Instruct
       api_base: http://localhost:8000/v1
   interactions: {min: 1, max: 5}
   max_concurrency: 32   # vLLM batches requests; 32-64 keeps the GPU busy
