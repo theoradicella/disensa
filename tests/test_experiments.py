@@ -123,6 +123,22 @@ def test_preflight_finds_the_one_model_and_refuses_placeholders(tmp_path):
     assert e.value.code == 1
 
 
+def test_every_topic_type_is_a_quarter_of_each_sweep():
+    """run_all.sh <type> runs one topic type at a time; together they must cover everything."""
+    preflight = _script("preflight")
+    types = ("political", "moral", "factual", "trivial")
+    assert sorted(s for t in types for s in preflight.statements_of(t)) == sorted(STATEMENTS)
+    for path in LLM_SWEEPS:
+        if path.parent.name == "pilot":
+            continue
+        _, runs = expand(path)
+        parts = [sw.select(runs, preflight.statements_of(t)) for t in types]
+        assert all(len(p) == len(runs) // 4 for p in parts), path
+        assert sorted(r.index for p in parts for r in p) == list(range(len(runs))), path
+    with pytest.raises(SystemExit):
+        preflight.statements_of("sports")
+
+
 def test_status_summarizes_a_sweep_folder(tmp_path):
     import asyncio
 

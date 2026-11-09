@@ -16,26 +16,34 @@ It installs everything and downloads the models (~90 GB, no account needed). It 
 storage folder with enough space by itself and says which. Running it again is safe. It is
 done when it prints `setup done. Next: scripts/indaco/run_all.sh`.
 
-## 1b. Small test first (optional, under an hour)
+## 1b. Small test first (about an hour)
 
 ```bash
-scripts/indaco/small_test.sh            # installs, downloads Llama 3.1 8B only, submits one job
+scripts/indaco/small_test.sh            # installs, downloads Llama 3.1 8B and the scorer, submits one job
 scripts/indaco/small_test.sh check      # once the job has ended
 ```
 
-One GPU job: Llama serves 4 runs of the real setup (`configs/experiments/small_test.yaml`).
-The check prints each run (failed replies, opinions at start and end, a message) and a list
-of `ok` / `FAIL` lines. All `ok`: start the full experiment. Any `FAIL`: send Theo that output
-and `logs/dz-small_*.out`. It does not touch the experiment's runs.
+One GPU job: Llama serves 7 runs of the real setup (`configs/experiments/small_test.yaml`:
+4 with interactions, 3 without), then the scorer rates every message. The check prints each
+run (failed replies, beliefs outside the scale, opinions at start and end, a message, the
+scorer's agreement with the agents) and a list of `ok` / `FAIL` lines. Either way, send Theo
+that output and `logs/dz-small_*.out`; he decides when the experiment starts. It does not
+touch the experiment's runs.
 
-## 2. Start the experiment (one command)
+## 2. Start the experiment, one topic type at a time
 
 ```bash
-scripts/indaco/run_all.sh
+scripts/indaco/run_all.sh political     # first: the pilots, then the political statements
+scripts/indaco/run_all.sh moral         # each next one once Theo has seen the previous
+scripts/indaco/run_all.sh factual
+scripts/indaco/run_all.sh trivial
 ```
 
-It finds the GPU partition by itself, submits about 25 jobs and returns at once. The jobs
-run for a day or more, depending on the queue.
+Each finds the GPU partition by itself, submits its jobs and returns at once. A type is a
+quarter of the work; with several GPUs free it takes a few hours. When its jobs have ended
+(`run_all.sh status`), send Theo the archive from section 3. Start the next type only after
+Theo says so. `scripts/indaco/run_all.sh` with no type runs everything that is left in one
+go; never start it while a type's jobs are still running (it would start those runs twice).
 
 ## 3. Collect the results
 

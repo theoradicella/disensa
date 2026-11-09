@@ -226,11 +226,31 @@ def parse_shard(text: str | None) -> tuple[int, int] | None:
 
 
 def shard(runs: list[PlannedRun], part: tuple[int, int] | None) -> list[PlannedRun]:
-    """Runs i-1, i-1+N, i-1+2N, … of the resolved list: disjoint shards that cover it."""
+    """Runs i-1, i-1+N, i-1+2N, … of the given list: disjoint shards that cover it."""
     if part is None:
         return runs
     i, n = part
-    return [r for r in runs if r.index % n == i - 1]
+    return [r for k, r in enumerate(runs) if k % n == i - 1]
+
+
+def select(runs: list[PlannedRun], statements: list[str] | None) -> list[PlannedRun]:
+    """Only the LLM runs on these statements (all runs if none are given).
+
+    For running a sweep in parts, e.g. one topic type at a time: the runs keep their names
+    and hashes, so a later run of the whole sweep skips the ones already finished.
+    """
+    if not statements:
+        return runs
+    unknown = set(statements) - {
+        r.config.dynamics.statement for r in runs if r.config.dynamics.type == "llm"
+    }
+    if unknown:
+        raise SweepError(f"no run of the sweep has the statement(s): {sorted(unknown)}")
+    return [
+        r
+        for r in runs
+        if r.config.dynamics.type == "llm" and r.config.dynamics.statement in statements
+    ]
 
 
 # ---------------------------------------------------------------- state on disk

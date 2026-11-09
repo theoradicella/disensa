@@ -506,7 +506,7 @@ disensa ping ollama_chat/llama3.2:3b</code></pre>
       <thead><tr><th>Opinion (rounded)</th><th>\(-2\)</th><th>\(-1\)</th><th>\(0\)</th><th>\(+1\)</th><th>\(+2\)</th></tr></thead>
       <tbody><tr><td>Label</td><td>strongly oppose</td><td>somewhat oppose</td><td>neutral / undecided</td><td>somewhat support</td><td>strongly support</td></tr></tbody>
     </table></div>
-    <p>At step 0 every agent writes a <strong>first message</strong> from that position, e.g. &ldquo;You somewhat oppose this statement (your position: \(-0.8\) on a scale from \(-2\) to \(+2\))&rdquo;. These first messages are what the agents hear at step 1. Step 0 does not change any opinion.</p>
+    <p>At step 0 every agent writes a <strong>first message</strong> from that position, e.g. &ldquo;You somewhat oppose this statement (your position: \(-0.8\))&rdquo;, followed by the five labels of the scale. These first messages are what the agents hear at step 1. Step 0 does not change any opinion.</p>
     <div class="note"><strong>The starting opinion is given, not chosen.</strong> The model does not pick its own starting position. This keeps LLM and numeric runs comparable, since both start from the same opinions. The cost is that a model&rsquo;s own leaning on the statement is hidden at the start, and can only show up later.</div>
     <details class="example">
       <summary>Prompt: first message</summary>
@@ -518,7 +518,8 @@ Think and speak as this person would, in plain everyday language.
 [user]
 Topic: "{statement}"
 
-You {label} this statement (your position: {value} on a scale from -2 = strongly oppose to +2 = strongly support).
+You {label} this statement (your position: {value}).
+The scale: -2 strongly oppose, -1 somewhat oppose, 0 neutral, +1 somewhat support, +2 strongly support. -2 and +2 are its ends: no position lies beyond them.
 
 Write a short message (1-3 sentences) stating your view.
 Respond ONLY with JSON: {"message": "&lt;your message&gt;"}</code></pre>
@@ -542,7 +543,7 @@ Respond ONLY with JSON: {"message": "&lt;your message&gt;"}</code></pre>
       </div>
       <figcaption>One step for one LLM agent. All agents do this from the same step \(t-1\) state.</figcaption>
     </figure>
-    <p>The prompt gives the agent its current position (label and value), its memory and its interactions, and asks it to reflect on them &ldquo;as the person you are&rdquo;: it may keep, soften, strengthen or change its position. It must reply with JSON holding four fields:</p>
+    <p>The prompt gives the agent its current position (label and value), its memory and its interactions, and asks it to reflect on them &ldquo;as the person you are&rdquo; and give its position now. The prompt names the five points of the scale and says that \(-2\) and \(+2\) are its ends; it does not suggest which way to move. It must reply with JSON holding four fields:</p>
     <div class="table-wrap"><table>
       <thead><tr><th>Field</th><th>What it is</th><th>What happens to it</th></tr></thead>
       <tbody>
@@ -561,16 +562,17 @@ Respond ONLY with JSON: {"message": "&lt;your message&gt;"}</code></pre>
 
 What you remember from previous interactions: {memory}
 
-Your current position: you {label} the statement ({value} on a scale from -2 = strongly oppose to +2 = strongly support).
+Your current position: you {label} the statement ({value}).
+The scale: -2 strongly oppose, -1 somewhat oppose, 0 neutral, +1 somewhat support, +2 strongly support. -2 and +2 are its ends: no position lies beyond them.
 
 In this step you interacted with:
 - Agent {j} said: "{message}"
 - ...
 
-Reflect on these interactions, as the person you are. You may keep, soften, strengthen or change your position.
+Reflect on these interactions, as the person you are, and give your position now.
 Respond ONLY with JSON:
 {"reasoning": "&lt;2-4 sentences: how these interactions affect your view&gt;",
- "belief": &lt;number from -2 to 2&gt;,
+ "belief": &lt;a number from -2 to 2, decimals allowed&gt;,
  "message": "&lt;your new message, 1-3 sentences&gt;",
  "memory": "&lt;updated summary of what you have heard and thought so far, at most {memory_words} words&gt;"}</code></pre>
         <p>The system prompt is the same as for the first message. At step 1 the memory is &ldquo;(nothing yet)&rdquo;; an agent with no interactions sees &ldquo;(nobody in this step)&rdquo; and can still reconsider on its own.</p>

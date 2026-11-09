@@ -71,6 +71,9 @@ def sweep(
     file: Path,
     dry_run: bool = typer.Option(False, "--dry-run", help="list the runs, run nothing"),
     shard: str = typer.Option(None, help="run share i of N (1-based), e.g. 2/4"),
+    statement: list[str] = typer.Option(  # noqa: B008  (typer reads its options from defaults)
+        None, "--statement", help="only the runs on this statement (repeatable)"
+    ),
     cache_dir: str = typer.Option(None, help="override dynamics.cache_dir for every run"),
     api_base: str = typer.Option(
         None, help="override every model's api_base, e.g. http://127.0.0.1:8123/v1"
@@ -83,14 +86,16 @@ def sweep(
         spec, base = sw.load_sweep(file)
         runs = sw.expand(spec, base, Path(cache_dir) if cache_dir else None, api_base)
         part = sw.parse_shard(shard)
+        chosen = sw.select(runs, statement)
     except sw.SweepError as e:
         typer.secho(f"error: {e}", fg="red", err=True)
         raise typer.Exit(2) from None
-    todo = sw.shard(runs, part)
+    todo = sw.shard(chosen, part)
     sw.refresh(runs, spec.output_dir / spec.name)
     left = [r for r in todo if r.status != "finished"]
     llm = sum(r.config.dynamics.type == "llm" for r in todo)
-    where = f", shard {part[0]}/{part[1]}" if part else ""
+    where = f", {len(chosen)} on the chosen statements" if statement else ""
+    where += f", shard {part[0]}/{part[1]}" if part else ""
     typer.echo(
         f"{spec.name}: {len(runs)} runs{where}: {len(todo)} here ({llm} LLM), "
         f"{len(todo) - len(left)} already finished, {len(left)} to run"

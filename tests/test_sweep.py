@@ -112,6 +112,34 @@ def test_shards_are_disjoint_and_complete(tmp_path, base):
             sw.parse_shard(bad)
 
 
+def test_select_keeps_statements_and_shards_cover_the_selection(tmp_path, base):
+    statements = ["One.", "Two.", "Three."]
+    _, runs = plan(
+        write_sweep(tmp_path, base, [{"seed": [1, 2, 3, 4], "dynamics.statement": statements}])
+    )
+    chosen = sw.select(runs, ["Two.", "Three."])
+    assert len(chosen) == 8 and {r.config.dynamics.statement for r in chosen} == {"Two.", "Three."}
+    assert sw.select(runs, None) == runs
+    parts = [sw.shard(chosen, (i, 3)) for i in (1, 2, 3)]
+    assert sorted(r.index for p in parts for r in p) == sorted(r.index for r in chosen)
+    with pytest.raises(sw.SweepError):
+        sw.select(runs, ["Not in the sweep."])
+
+
+def test_cli_runs_only_the_chosen_statements(tmp_path, base):
+    path = write_sweep(tmp_path, base, [{"seed": [1, 2], "dynamics.statement": ["One.", "Two."]}])
+    res = run_cli(path, "--dry-run", "--statement", "Two.", "--shard", "1/2")
+    assert res.exit_code == 0, res.output
+    assert "s: 4 runs, 2 on the chosen statements, shard 1/2: 1 here (1 LLM)" in res.output
+    res = run_cli(path, "--statement", "Two.")
+    assert res.exit_code == 0, res.output
+    doc = json.loads((tmp_path / "runs" / "s" / "sweep.json").read_text())
+    done = {r["name"]: r["status"] for r in doc["runs"]}
+    assert sorted(done.values()) == ["finished", "finished", "pending", "pending"]
+    res = run_cli(path)  # the whole sweep afterwards: only the other statement is left
+    assert "2 already finished, 2 to run" in res.output
+
+
 def test_cache_dir_does_not_change_what_a_run_is(tmp_path, base):
     path = write_sweep(tmp_path, base, [{"seed": [1, 2]}])
     _, a = plan(path)

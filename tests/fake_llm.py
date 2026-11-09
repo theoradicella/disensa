@@ -45,7 +45,7 @@ BEHAVIOURS = {  # name: (mu, epsilon)
 DEFAULT = (0.3, 1.5)
 
 _POSITION_IN_MESSAGE = re.compile(r"position is ([-+]?\d+(?:\.\d+)?)")
-_OWN_POSITION = re.compile(r"\(([-+]?\d+(?:\.\d+)?) on a scale")
+_OWN_POSITION = re.compile(r"the statement \(([-+]?\d+(?:\.\d+)?)\)")
 _INITIAL_POSITION = re.compile(r"your position: ([-+]?\d+(?:\.\d+)?)")
 
 

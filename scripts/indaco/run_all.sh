@@ -2,7 +2,14 @@
 # The whole thesis experiment on INDACO, in one command (on the login node):
 #
 #   scripts/indaco/run_all.sh           submit everything that is not done or queued yet
+#   scripts/indaco/run_all.sh <type>    the same, but core/ and main/ only on the statements
+#                                       of one topic type: political, moral, factual or
+#                                       trivial (topics.csv). The pilots always run whole.
 #   scripts/indaco/run_all.sh status    what is queued, running and done
+#
+# One type at a time: run `run_all.sh political`, look at the results, then the next type
+# once its jobs have ended. The runs are the same as in the whole sweep (same names, same
+# hashes), so a later `run_all.sh` without a type skips every run already finished.
 #
 # It submits a chain of SLURM jobs that wait for each other, then returns at once:
 #
@@ -38,7 +45,10 @@ E=configs/experiments
 
 die() { echo "run_all: $*" >&2; exit 1; }
 queued_id() { squeue -h -u "$USER" -n "$1" -o %A 2> /dev/null | head -n 1; }
-state() { eval "$("$PY" scripts/indaco/preflight.py state "$1" --scorer "$SCORER")"; }
+# state <sweep file> [type]: NAME TOTAL FINISHED FAILED SCORED, on that type's runs only
+state() {
+  eval "$("$PY" scripts/indaco/preflight.py state "$1" --scorer "$SCORER" ${2:+--type "$2"})"
+}
 
 [[ -x "$PY" ]] || die "no disensa environment: run scripts/indaco/setup.sh first"
 
@@ -51,7 +61,11 @@ if [[ "${1:-}" == "status" ]]; then
   ls -1 results/*.tar.gz 2> /dev/null || true
   exit 0
 fi
-[[ $# -eq 0 ]] || die "usage: run_all.sh [status]"
+[[ $# -le 1 ]] || die "usage: run_all.sh [status | political | moral | factual | trivial]"
+TYPE="${1:-}"
+if [[ -n "$TYPE" ]]; then
+  "$PY" scripts/indaco/preflight.py statements "$TYPE" > /dev/null || die "unknown topic type $TYPE"
+fi
 
 # ---- before submitting anything: settings, weights, the repository ----------------------
 command -v sbatch > /dev/null || die "no sbatch here: run this on the INDACO login node"
@@ -71,10 +85,11 @@ gpu=()
 score_gpu=()
 [[ -n "$SCORE_GRES" ]] && score_gpu=(--gres="$SCORE_GRES")
 
-# submit_sweep <file> <tasks> <dependency or ""> : sets JOB (empty if nothing to do)
+# submit_sweep <file> <tasks> <dependency or ""> <type or ""> : sets JOB (empty if nothing to do)
 submit_sweep() {
-  local file="$1" tasks="$2" dep="$3" id
-  state "$file"
+  local file="$1" tasks="$2" dep="$3" type="$4" id
+  state "$file" "$type"
+  NAME="$NAME${type:+-$type}"
   id="$(queued_id "dz-$NAME")"
   if [[ -n "$id" ]]; then
     JOB="$id"; ALL+=("$id")
@@ -94,15 +109,17 @@ submit_sweep() {
     SB+=(--output="logs/%x_%j.out")
   fi
   [[ -n "$dep" ]] && SB+=(--dependency="$dep" --kill-on-invalid-dep=yes)
-  JOB="$(sbatch "${SB[@]}" scripts/indaco/sweep_job.sh "$file" | cut -d';' -f1)"
+  JOB="$(sbatch "${SB[@]}" scripts/indaco/sweep_job.sh "$file" $type | cut -d';' -f1)"
   ALL+=("$JOB")
   echo "  $NAME: submitted, job $JOB ($((TOTAL - FINISHED)) runs to do${dep:+, after ${dep#*:}})"
 }
 
-# submit_score <sweep file> <job id of that sweep or ""> : the scorer after the sweep
+# submit_score <sweep file> <job id of that sweep or ""> <type or ""> : the scorer after the sweep
 submit_score() {
-  local file="$1" after="$2" id
-  state "$file"
+  local file="$1" after="$2" type="$3" id folder
+  state "$file" "$type"
+  folder="runs/$NAME"
+  NAME="$NAME${type:+-$type}"
   id="$(queued_id "dz-score-$NAME")"
   if [[ -n "$id" ]]; then
     ALL+=("$id"); echo "  score_$NAME: already queued or running (job $id)"; return
@@ -114,12 +131,12 @@ submit_score() {
   SB+=(${score_gpu[@]+"${score_gpu[@]}"} --time="$TIME" --requeue --signal=B:USR1@$REQUEUE_WARN
     --job-name="dz-score-$NAME" --output="logs/%x_%j.out")
   [[ -n "$after" ]] && SB+=(--dependency="afterany:$after")
-  id="$(sbatch "${SB[@]}" scripts/indaco/score_job.sh "runs/$NAME" | cut -d';' -f1)"
+  id="$(sbatch "${SB[@]}" scripts/indaco/score_job.sh "$folder" | cut -d';' -f1)"
   ALL+=("$id")
   echo "  score_$NAME: submitted, job $id${after:+, after $after}"
 }
 
-echo "disensa $(git rev-parse --short HEAD), $(date "+%Y-%m-%d %H:%M")"
+echo "disensa $(git rev-parse --short HEAD), $(date "+%Y-%m-%d %H:%M")${TYPE:+, $TYPE topics only}"
 
 if [[ -z "$(ls logs/dz-check_*.out 2> /dev/null)" && -z "$(queued_id dz-check)" ]]; then
   sbatch_common
@@ -136,15 +153,15 @@ for m in "${MODELS[@]}"; do
     echo "  $NAME: $FAILED pilot run(s) stopped at the failure guard: this model is left out"
     continue
   fi
-  submit_sweep "$pilot" 1 ""
+  submit_sweep "$pilot" 1 "" ""
   dep="${JOB:+afterok:$JOB}"
   sweeps=("$E/core/$m.yaml")
   [[ "$m" == "$MAIN" ]] && sweeps+=("$E/main/control_$m.yaml" "$E/main/replicate_$m.yaml")
   for f in "${sweeps[@]}"; do
     tasks="$CORE_TASKS"
     [[ "$f" == *control_* ]] && tasks=1
-    submit_sweep "$f" "$tasks" "$dep"
-    submit_score "$f" "$JOB"
+    submit_sweep "$f" "$tasks" "$dep" "$TYPE"
+    submit_score "$f" "$JOB" "$TYPE"
   done
 done
 

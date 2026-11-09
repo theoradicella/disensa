@@ -7,11 +7,15 @@
 # shards (t-1)·PARALLEL+1 … t·PARALLEL. Finished runs are always skipped, so starting the
 # job again (after a requeue, or from run_all.sh) continues where it stopped.
 #
+# With a topic type as second argument (political, moral, factual, trivial) it runs only
+# the runs on the statements of that type (configs/experiments/topics.csv).
+#
 # Exit status: 0 every run of this task finished; 1 the smoke run failed, or a run stopped.
 
 set -euo pipefail
 REPO="${SLURM_SUBMIT_DIR:?submit with scripts/indaco/run_all.sh}"
-SWEEP="${1:?usage: sweep_job.sh <sweep file>}"
+SWEEP="${1:?usage: sweep_job.sh <sweep file> [topic type]}"
+TYPE="${2:-}"
 cd "$REPO"
 # shellcheck source=lib.sh
 source "$REPO/scripts/indaco/lib.sh"
@@ -27,6 +31,13 @@ start_vllm "$MODEL"
   --api-base "$API_BASE" --out runs/_smoke \
   --cache-dir "$CACHE_ROOT/_smoke/$SWEEP_NAME" --max-failed "$MAX_SMOKE_FAILED"
 
+only=()
+if [[ -n "$TYPE" ]]; then
+  statements="$("$PY" scripts/indaco/preflight.py statements "$TYPE")"
+  while IFS= read -r s; do only+=(--statement "$s"); done <<< "$statements"
+  echo "only the $TYPE topics: $((${#only[@]} / 2)) statements"
+fi
+
 TASK="${SLURM_ARRAY_TASK_ID:-1}"
 TASKS="${SLURM_ARRAY_TASK_COUNT:-1}"
 N=$((TASKS * PARALLEL))
@@ -35,7 +46,7 @@ for j in $(seq 1 "$PARALLEL"); do
   i=$(((TASK - 1) * PARALLEL + j))
   log="logs/${JOBTAG}_shard${i}of${N}.log"
   echo "shard $i/$N -> $log"
-  "$DISENSA" sweep "$SWEEP" --shard "$i/$N" --api-base "$API_BASE" \
+  "$DISENSA" sweep "$SWEEP" --shard "$i/$N" ${only[@]+"${only[@]}"} --api-base "$API_BASE" \
     --cache-dir "$CACHE_ROOT/$SWEEP_NAME/shard${i}of${N}" >> "$log" 2>&1 &
   pids+=($!)
 done

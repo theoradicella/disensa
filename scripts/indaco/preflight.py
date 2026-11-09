@@ -8,9 +8,14 @@
     python scripts/indaco/preflight.py models <sweep file>...
         The Hugging Face ids the sweeps need, one per line (setup.sh downloads them).
 
-    python scripts/indaco/preflight.py state  <sweep file> [--scorer <Hugging Face id>]
+    python scripts/indaco/preflight.py state  <sweep file> [--scorer <id>] [--type <type>]
         What is on disk: `NAME=… TOTAL=… FINISHED=… FAILED=… SCORED=…` (run_all.sh uses it
         to submit only what is left). SCORED counts finished runs fully rated by the scorer.
+        With --type, only the runs on the statements of that topic type.
+
+    python scripts/indaco/preflight.py statements <type>
+        The statements of one topic type (political, moral, factual, trivial) in
+        configs/experiments/topics.csv, one per line: run_all.sh runs one type at a time.
 
     python scripts/indaco/preflight.py smoke  <sweep file> --api-base <url> --out <folder>
         Once the server is up: asks it which models it serves, then runs the sweep's first
@@ -27,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import json
 import sys
 import urllib.request
@@ -35,6 +41,16 @@ from pathlib import Path
 from disensa import sweep as sw
 
 PLACEHOLDERS = ("PLACEHOLDER", "SET BY THE SWEEP", "TODO")
+TOPICS = Path(__file__).resolve().parents[2] / "configs" / "experiments" / "topics.csv"
+
+
+def statements_of(topic_type: str) -> list[str]:
+    with open(TOPICS, newline="") as f:
+        rows = list(csv.DictReader(f))
+    types = sorted({r["type"] for r in rows})
+    if topic_type not in types:
+        fail(f"no topic type {topic_type!r} in {TOPICS.name}: one of {', '.join(types)}", 2)
+    return [r["statement"] for r in rows if r["type"] == topic_type]
 
 
 def fail(message: str, code: int = 1):
@@ -92,6 +108,8 @@ def cmd_state(args) -> None:
     try:
         spec, base = sw.load_sweep(args.sweep)
         runs = sw.expand(spec, base)
+        if args.type:
+            runs = sw.select(runs, statements_of(args.type))
     except sw.SweepError as e:
         fail(str(e), 2)
     root = spec.output_dir / spec.name
@@ -105,6 +123,11 @@ def cmd_state(args) -> None:
         f"NAME={spec.name} TOTAL={len(runs)} FINISHED={len(finished)} "
         f"FAILED={sum(r.status == 'failed' for r in runs)} SCORED={scored}"
     )
+
+
+def cmd_statements(args) -> None:
+    for s in statements_of(args.type):
+        print(s)
 
 
 def served(api_base: str) -> list[str]:
@@ -170,6 +193,9 @@ def main() -> None:
     st = sub.add_parser("state")
     st.add_argument("sweep")
     st.add_argument("--scorer")
+    st.add_argument("--type")
+    ty = sub.add_parser("statements")
+    ty.add_argument("type")
     s = sub.add_parser("smoke")
     s.add_argument("sweep")
     s.add_argument("--api-base", required=True)
@@ -177,7 +203,13 @@ def main() -> None:
     s.add_argument("--cache-dir", default=".cache/smoke")
     s.add_argument("--max-failed", type=float, default=5.0)
     args = p.parse_args()
-    commands = {"check": cmd_check, "models": cmd_models, "state": cmd_state, "smoke": cmd_smoke}
+    commands = {
+        "check": cmd_check,
+        "models": cmd_models,
+        "state": cmd_state,
+        "statements": cmd_statements,
+        "smoke": cmd_smoke,
+    }
     commands[args.cmd](args)
 
 

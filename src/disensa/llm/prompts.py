@@ -11,7 +11,8 @@ Think and speak as this person would, in plain everyday language."""
 
 INITIAL_MESSAGE_TEMPLATE = """Topic: "{statement}"
 
-You {label} this statement (your position: {value:+.1f} on a scale from -2 = strongly oppose to +2 = strongly support).
+You {label} this statement (your position: {value:+.1f}).
+The scale: -2 strongly oppose, -1 somewhat oppose, 0 neutral, +1 somewhat support, +2 strongly support. -2 and +2 are its ends: no position lies beyond them.
 
 Write a short message (1-3 sentences) stating your view.
 Respond ONLY with JSON: {{"message": "<your message>"}}"""
@@ -20,15 +21,16 @@ UPDATE_TEMPLATE = """Topic: "{statement}"
 
 What you remember from previous interactions: {memory}
 
-Your current position: you {label} the statement ({value:+.1f} on a scale from -2 = strongly oppose to +2 = strongly support).
+Your current position: you {label} the statement ({value:+.1f}).
+The scale: -2 strongly oppose, -1 somewhat oppose, 0 neutral, +1 somewhat support, +2 strongly support. -2 and +2 are its ends: no position lies beyond them.
 
 In this step you interacted with:
 {interactions}
 
-Reflect on these interactions, as the person you are. You may keep, soften, strengthen or change your position.
+Reflect on these interactions, as the person you are, and give your position now.
 Respond ONLY with JSON:
 {{"reasoning": "<2-4 sentences: how these interactions affect your view>",
- "belief": <number from -2 to 2>,
+ "belief": <a number from -2 to 2, decimals allowed>,
  "message": "<your new message, 1-3 sentences>",
  "memory": "<updated summary of what you have heard and thought so far, at most {memory_words} words>"}}"""
 
