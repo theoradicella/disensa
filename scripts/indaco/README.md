@@ -16,6 +16,18 @@ It installs everything and downloads the models (~90 GB, no account needed). It 
 storage folder with enough space by itself and says which. Running it again is safe. It is
 done when it prints `setup done. Next: scripts/indaco/run_all.sh`.
 
+## 1b. Small test first (optional, under an hour)
+
+```bash
+scripts/indaco/small_test.sh            # installs, downloads Llama 3.1 8B only, submits one job
+scripts/indaco/small_test.sh check      # once the job has ended
+```
+
+One GPU job: Llama serves 4 runs of the real setup (`configs/experiments/small_test.yaml`).
+The check prints each run (failed replies, opinions at start and end, a message) and a list
+of `ok` / `FAIL` lines. All `ok`: start the full experiment. Any `FAIL`: send Theo that output
+and `logs/dz-small_*.out`. It does not touch the experiment's runs.
+
 ## 2. Start the experiment (one command)
 
 ```bash

@@ -1,0 +1,17 @@
+# SMALL TEST, before the full experiment: does the code run on INDACO, and are the
+# results sane? Llama 3.1 8B only, 4 runs of the real setup (50 agents, 30 steps), one world
+# (seed 100, not one of the experiment seeds). The two framings of the climate statement
+# should end on opposite sides. Not part of the analysis.
+#   run on INDACO by scripts/indaco/small_test.sh
+name: small_test
+base: base.yaml
+grids:
+  - seed: [100]
+    dynamics.statement:
+      - "Human activity is the main cause of the global warming observed since the mid-20th century."  # F1a
+      - "The global warming observed since the mid-20th century is mainly caused by natural factors, not by human activity."  # F1b
+      - "Taxes on the wealthiest people should be raised."  # P1a
+      - "Pineapple is a good pizza topping."  # T1a
+    dynamics.models:
+      - - {name: hosted_vllm/unsloth/Llama-3.1-8B-Instruct, api_base: "http://127.0.0.1:8000/v1",
+          temperature: 0.7, top_p: 0.9, top_k: 40, think: false}
