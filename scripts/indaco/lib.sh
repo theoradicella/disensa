@@ -29,11 +29,14 @@ log_env() {
 }
 
 # sbatch options shared by every job: partition, account, QOS. Add --gres yourself.
+#   sbatch_common          a GPU job: PARTITION, ACCOUNT, QOS
+#   sbatch_common cpu      a CPU job: CPU_PARTITION, CPU_ACCOUNT, CPU_QOS
 sbatch_common() {
-  local p="${1:-$PARTITION}"
+  local p="$PARTITION" a="$ACCOUNT" q="$QOS"
+  if [[ "${1:-}" == cpu ]]; then p="$CPU_PARTITION" a="$CPU_ACCOUNT" q="$CPU_QOS"; fi
   SB=(--partition="$p" --cpus-per-task="$CPUS" --mem="$MEM" --parsable --open-mode=append)
-  [[ -n "$ACCOUNT" ]] && SB+=(--account="$ACCOUNT")
-  [[ -n "$QOS" ]] && SB+=(--qos="$QOS")
+  [[ -n "$a" ]] && SB+=(--account="$a")
+  [[ -n "$q" ]] && SB+=(--qos="$q")
   return 0
 }
 

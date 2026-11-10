@@ -167,7 +167,7 @@ done
 
 old="$(queued_id dz-pack)"
 [[ -n "$old" ]] && scancel "$old"        # replaced by one that waits for every job above
-sbatch_common "$CPU_PARTITION"
+sbatch_common cpu
 SB+=(--time=02:00:00 --job-name=dz-pack --output="logs/%x_%j.out")
 [[ ${#ALL[@]} -gt 0 ]] && SB+=(--dependency="afterany:$(IFS=:; echo "${ALL[*]}")")
 [[ -n "$MAIL_USER" ]] && SB+=(--mail-type=END --mail-user="$MAIL_USER")

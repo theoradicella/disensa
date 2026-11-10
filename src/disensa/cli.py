@@ -152,27 +152,35 @@ def score(
     if model.startswith("ollama") and not api_base and (err := ollama.ensure_running()):
         raise typer.BadParameter(err)
     client = LLMClient(cache_dir, max_concurrency=max_concurrency)
-    for d in dirs:
-        if resume and load_meta(d).get("status") != "finished":
-            typer.echo(f"{d.name}: not finished, skipped")
-            continue
-        if resume and scorer.is_scored(d, model, field):
-            typer.echo(f"{d.name}: already scored, skipped")
-            continue
-        if model in scorer.agent_models(load_meta(d)):
-            typer.secho(
-                f"warning: {model} is also one of the agents' models in {d.name}: it would "
-                "be rating its own texts (self-rating bias). Prefer a scorer that is not.",
-                fg="yellow",
-                err=True,
+
+    # One event loop for every run: a new loop per run (asyncio.run in the loop) left the
+    # previous loop's HTTP connections open, and a sweep ran out of open files (INDACO,
+    # Errno 24, after ~7 runs at --max-concurrency 128).
+    async def score_all() -> None:
+        for d in dirs:
+            if resume and load_meta(d).get("status") != "finished":
+                typer.echo(f"{d.name}: not finished, skipped")
+                continue
+            if resume and scorer.is_scored(d, model, field):
+                typer.echo(f"{d.name}: already scored, skipped")
+                continue
+            if model in scorer.agent_models(load_meta(d)):
+                typer.secho(
+                    f"warning: {model} is also one of the agents' models in {d.name}: it "
+                    "would be rating its own texts (self-rating bias). Prefer a scorer that "
+                    "is not.",
+                    fg="yellow",
+                    err=True,
+                )
+            rows = await scorer.score_run(d, model, field, api_base, client)
+            ok = rows["score"].notna().sum()
+            unclear = (rows["score"].isna() & rows["error"].isna()).sum()
+            typer.echo(
+                f"{d.name}: {len(rows)} texts, {ok} scored, {unclear} unclear, "
+                f"{rows['error'].notna().sum()} failed -> scores.parquet"
             )
-        rows = asyncio.run(scorer.score_run(d, model, field, api_base, client))
-        ok = rows["score"].notna().sum()
-        unclear = (rows["score"].isna() & rows["error"].isna()).sum()
-        typer.echo(
-            f"{d.name}: {len(rows)} texts, {ok} scored, {unclear} unclear, "
-            f"{rows['error'].notna().sum()} failed -> scores.parquet"
-        )
+
+    asyncio.run(score_all())
 
 
 validation_app = typer.Typer(
