@@ -99,3 +99,49 @@ def test_run_folder_records_the_scheme_and_replicate(make_cfg):
     meta = json.loads((run_dir / "meta.json").read_text())
     assert meta["seeding"] == 2 and meta["config"]["replicate"] == 2
     assert load_run(run_dir).steps == cfg.steps
+
+
+def control(make_cfg, **dyn):
+    """A no-interaction run on the stand-in that sends every call through litellm."""
+    d = make_cfg().dynamics.model_dump(mode="json")
+    d.update(
+        models=[{"name": "ollama_chat/x", "api_base": "http://h"}],
+        interactions={"min": 0, "max": 0},
+        **dyn,
+    )
+    return make_cfg(dynamics=d, steps=3)
+
+
+def test_one_sampling_seed_freezes_an_agent_that_hears_nobody(make_cfg, litellm_kwargs):
+    """Why seed_per_step exists: with one seed, a repeated prompt is answered from the cache.
+
+    The stand-in always gives the same reply, so from step 2 every prompt repeats the one
+    before: the agents get the very same reply again (INDACO control, 2026-11-11).
+    """
+    cfg = control(make_cfg)
+    asyncio.run(run(cfg))
+    assert {k["seed"] for k in litellm_kwargs} == {sampling_seed(cfg.seed, cfg.replicate)}
+    assert len(litellm_kwargs) < cfg.network.n * (cfg.steps + 1)  # the rest came from the cache
+
+
+def test_seed_per_step_gives_every_step_a_fresh_reply(make_cfg, litellm_kwargs):
+    cfg = control(make_cfg, seed_per_step=True)
+    asyncio.run(run(cfg))
+    n = cfg.network.n
+    assert len(litellm_kwargs) == n * (cfg.steps + 1)  # nothing from the cache
+    seeds = [sampling_seed(cfg.seed, cfg.replicate, t) for t in range(cfg.steps + 1)]
+    assert seeds[0] == sampling_seed(cfg.seed, cfg.replicate)  # step 0 as without it
+    assert len(set(seeds)) == len(seeds)
+    assert sorted(k["seed"] for k in litellm_kwargs) == sorted(s for s in seeds for _ in range(n))
+
+
+def test_seed_per_step_off_keeps_the_hash_of_earlier_runs(make_cfg):
+    from disensa.runs import config_hash
+
+    cfg = make_cfg()
+    raw = cfg.model_dump(mode="json")
+    raw["dynamics"].pop("seed_per_step")
+    old = type(cfg).model_validate(raw)  # the same config, written before the field existed
+    assert config_hash(cfg) == config_hash(old)
+    on = make_cfg(dynamics={**cfg.dynamics.model_dump(mode="json"), "seed_per_step": True})
+    assert config_hash(on) != config_hash(cfg)

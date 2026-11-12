@@ -39,7 +39,15 @@ def interactions_rng(seed: int, replicate: int) -> np.random.Generator:
     return np.random.default_rng(np.random.SeedSequence([*_entropy(seed), replicate, INTERACTIONS]))
 
 
-def sampling_seed(seed: int, replicate: int) -> int:
-    """The seed sent with every LLM call of a run: a non-negative 31-bit integer."""
-    ss = np.random.SeedSequence([*_entropy(seed), replicate, SAMPLING])
+def sampling_seed(seed: int, replicate: int, step: int | None = None) -> int:
+    """The seed sent with every LLM call of a run: a non-negative 31-bit integer.
+
+    Without `step`, one seed for the whole run. With `step` (`dynamics.seed_per_step`), a
+    different seed at every step after the first; step 0 keeps the run's seed, so the
+    opening messages are the same as in a run without it.
+    """
+    key = [*_entropy(seed), replicate, SAMPLING]
+    if step:
+        key.append(step)
+    ss = np.random.SeedSequence(key)
     return int(ss.generate_state(1, dtype=np.uint32)[0] & 0x7FFFFFFF)

@@ -121,6 +121,14 @@ class LLMDynamics(BaseModel):
     max_error_rate: float = Field(
         0.2, ge=0, le=1, description="stop the run when more replies of one step fail"
     )
+    # Off: one sampling seed for the whole run. Then an agent whose prompt repeats exactly
+    # gets exactly the same reply, which happens when it hears nobody (interactions.max 0):
+    # once it writes back the same opinion and memory it is frozen for the rest of the run.
+    # On: a new seed at every step, so a repeated prompt gets a fresh reply, as a prompt that
+    # changes does. Needed for no-interaction controls (INDACO, 2026-11-11).
+    seed_per_step: bool = Field(
+        False, description="a different LLM sampling seed at every step (for controls)"
+    )
 
 
 Dynamics = Annotated[NumericDynamics | LLMDynamics, Field(discriminator="type")]

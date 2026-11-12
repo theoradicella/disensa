@@ -74,6 +74,9 @@ def config_hash(cfg: ExperimentConfig) -> str:
         obj.pop(path[-1], None)
     for m in raw["dynamics"].get("models", []):
         m.pop("api_base", None)
+    # added after the thesis experiments ran: left out while off, so their hashes stay the same
+    if raw["dynamics"].get("seed_per_step") is False:
+        raw["dynamics"].pop("seed_per_step")
     return hashlib.sha256(json.dumps(raw, sort_keys=True).encode()).hexdigest()[:16]
 
 

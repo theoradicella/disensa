@@ -6,6 +6,11 @@
 #                                       of one topic type: political, moral, factual or
 #                                       trivial (topics.csv). The pilots always run whole.
 #   scripts/indaco/run_all.sh status    what is queued, running and done
+#   scripts/indaco/run_all.sh followup  only the follow-up sweeps of configs/experiments/
+#                                       followup/ (after the experiment): the no-interaction
+#                                       controls of every model, version 2, and a small second
+#                                       replicate of the other models; then their scorer and a
+#                                       pack job that archives these runs only
 #
 # One type at a time: run `run_all.sh political`, look at the results, then the next type
 # once its jobs have ended. The runs are the same as in the whole sweep (same names, same
@@ -55,15 +60,18 @@ state() {
 if [[ "${1:-}" == "status" ]]; then
   squeue -u "$USER" -o "%.14i %.32j %.9T %.11M %R" 2> /dev/null || true
   echo
-  for f in "$E"/pilot/*.yaml "$E"/core/*.yaml "$E"/main/*.yaml; do
+  for f in "$E"/pilot/*.yaml "$E"/core/*.yaml "$E"/main/*.yaml "$E"/followup/*.yaml; do
     "$PY" scripts/indaco/preflight.py state "$f" --scorer "$SCORER"
   done
   ls -1 results/*.tar.gz 2> /dev/null || true
   exit 0
 fi
-[[ $# -le 1 ]] || die "usage: run_all.sh [status | political | moral | factual | trivial]"
+[[ $# -le 1 ]] || die "usage: run_all.sh [status | political | moral | factual | trivial | followup]"
 TYPE="${1:-}"
-if [[ -n "$TYPE" ]]; then
+FOLLOWUP=""
+if [[ "$TYPE" == followup ]]; then
+  FOLLOWUP=1 TYPE=""
+elif [[ -n "$TYPE" ]]; then
   "$PY" scripts/indaco/preflight.py statements "$TYPE" > /dev/null || die "unknown topic type $TYPE"
 fi
 
@@ -136,7 +144,7 @@ submit_score() {
   echo "  score_$NAME: submitted, job $id${after:+, after $after}"
 }
 
-echo "disensa $(git rev-parse --short HEAD), $(date "+%Y-%m-%d %H:%M")${TYPE:+, $TYPE topics only}"
+echo "disensa $(git rev-parse --short HEAD), $(date "+%Y-%m-%d %H:%M")${TYPE:+, $TYPE topics only}${FOLLOWUP:+, follow-up sweeps only}"
 
 if [[ -z "$(ls logs/dz-check_*.out 2> /dev/null)" && -z "$(queued_id dz-check)" ]]; then
   sbatch_common
@@ -145,25 +153,34 @@ if [[ -z "$(ls logs/dz-check_*.out 2> /dev/null)" && -z "$(queued_id dz-check)" 
   echo "  check: submitted (logs/dz-check_*.out: what GPU the jobs get)"
 fi
 
-for m in "${MODELS[@]}"; do
-  echo "$m"
-  pilot="$E/pilot/$m.yaml"
-  state "$pilot"
-  if [[ -z "$(queued_id "dz-$NAME")" ]] && ((FAILED > 0 && FINISHED + FAILED == TOTAL)); then
-    echo "  $NAME: $FAILED pilot run(s) stopped at the failure guard: this model is left out"
-    continue
-  fi
-  submit_sweep "$pilot" 1 "" ""
-  dep="${JOB:+afterok:$JOB}"
-  sweeps=("$E/core/$m.yaml")
-  [[ "$m" == "$MAIN" ]] && sweeps+=("$E/main/control_$m.yaml" "$E/main/replicate_$m.yaml")
-  for f in "${sweeps[@]}"; do
-    tasks="$CORE_TASKS"
-    [[ "$f" == *control_* ]] && tasks=1
-    submit_sweep "$f" "$tasks" "$dep" "$TYPE"
-    submit_score "$f" "$JOB" "$TYPE"
+if [[ -n "$FOLLOWUP" ]]; then
+  # every model passed its pilot and ran its core sweep: no dependencies, one GPU per sweep
+  for f in "$E"/followup/*.yaml; do
+    echo "$(basename "$f" .yaml)"
+    submit_sweep "$f" 1 "" ""
+    submit_score "$f" "$JOB" ""
   done
-done
+else
+  for m in "${MODELS[@]}"; do
+    echo "$m"
+    pilot="$E/pilot/$m.yaml"
+    state "$pilot"
+    if [[ -z "$(queued_id "dz-$NAME")" ]] && ((FAILED > 0 && FINISHED + FAILED == TOTAL)); then
+      echo "  $NAME: $FAILED pilot run(s) stopped at the failure guard: this model is left out"
+      continue
+    fi
+    submit_sweep "$pilot" 1 "" ""
+    dep="${JOB:+afterok:$JOB}"
+    sweeps=("$E/core/$m.yaml")
+    [[ "$m" == "$MAIN" ]] && sweeps+=("$E/main/control_$m.yaml" "$E/main/replicate_$m.yaml")
+    for f in "${sweeps[@]}"; do
+      tasks="$CORE_TASKS"
+      [[ "$f" == *control_* ]] && tasks=1
+      submit_sweep "$f" "$tasks" "$dep" "$TYPE"
+      submit_score "$f" "$JOB" "$TYPE"
+    done
+  done
+fi
 
 old="$(queued_id dz-pack)"
 [[ -n "$old" ]] && scancel "$old"        # replaced by one that waits for every job above
@@ -171,7 +188,9 @@ sbatch_common cpu
 SB+=(--time=02:00:00 --job-name=dz-pack --output="logs/%x_%j.out")
 [[ ${#ALL[@]} -gt 0 ]] && SB+=(--dependency="afterany:$(IFS=:; echo "${ALL[*]}")")
 [[ -n "$MAIL_USER" ]] && SB+=(--mail-type=END --mail-user="$MAIL_USER")
-id="$(sbatch "${SB[@]}" scripts/indaco/pack_job.sh | cut -d';' -f1)"
-echo "pack: submitted, job $id: when it ends, results/disensa_results_*.tar.gz is ready"
+id="$(sbatch "${SB[@]}" scripts/indaco/pack_job.sh ${FOLLOWUP:+followup} | cut -d';' -f1)"
+kind=results
+[[ -n "$FOLLOWUP" ]] && kind=followup
+echo "pack: submitted, job $id: when it ends, results/disensa_${kind}_*.tar.gz is ready"
 echo
 echo "Nothing else to do now. Check with: scripts/indaco/run_all.sh status"

@@ -92,6 +92,7 @@ class LLMAgents:
         self.models = assign_models(cfg.models, self.n, seed)  # the world: seed only
         self.state = [TextState() for _ in range(self.n)]
         self.rng = interactions_rng(seed, replicate)  # whom each agent interacts with
+        self.replicate = replicate
         self.sampling_seed = sampling_seed(seed, replicate)  # sent with every model call
         self.client = LLMClient(cfg.cache_dir, cfg.max_concurrency)
         # called after every reply with (step, agent, error or None); used for live progress
@@ -102,8 +103,14 @@ class LLMAgents:
 
     # ---------------------------------------------------------------- one model call
 
-    async def ask(self, i: int, user: str) -> Reply:
-        """One model call. Never raises for bad model output or a failing server."""
+    def seed_at(self, t: int) -> int:
+        """The sampling seed of step t: the run's own, or a new one per step (seed_per_step)."""
+        if self.cfg.seed_per_step:
+            return sampling_seed(self.seed, self.replicate, t)
+        return self.sampling_seed
+
+    async def ask(self, i: int, user: str, t: int = 0) -> Reply:
+        """One model call at step t. Never raises for bad model output or a failing server."""
         m = self.models[i]
         messages = [
             {"role": "system", "content": system_prompt(i)},
@@ -119,7 +126,7 @@ class LLMAgents:
                 think=m.think,
                 max_tokens=self.cfg.max_tokens,
                 api_base=m.api_base,
-                seed=self.sampling_seed,
+                seed=self.seed_at(t),
             )
             return Reply(obj, raw, info=info)
         except LLMCallError as e:  # malformed JSON after repair, or the server failed
@@ -131,7 +138,7 @@ class LLMAgents:
         """Ask every agent concurrently; report each reply to `on_reply` as it arrives."""
 
         async def one(i: int, p: str) -> Reply:
-            reply = await self.ask(i, p)
+            reply = await self.ask(i, p, t)
             if self.on_reply:
                 self.on_reply(t, i, reply.error)
             return reply

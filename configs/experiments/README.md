@@ -12,6 +12,8 @@ recognised by its config hash, so a changed file makes new runs.
 | `core/<model>.yaml` | 5 worlds (seeds 1–5) × 3 topologies × 16 statements | 240 each |
 | `main/control_<model>.yaml` | main model, no interactions (`interactions.max: 0`), 5 worlds × 16 statements | 80 |
 | `main/replicate_<model>.yaml` | main model, the core grid again with replicate 1 | 240 |
+| `followup/control_v2_<model>.yaml` | every model, no interactions, as `main/control_*` but with a new sampling seed at every step (`dynamics.seed_per_step`): with one seed per run, an agent that hears nobody gets the same prompt again and so the very same reply, and every agent of the first control was frozen from about step 5 | 80 each |
+| `followup/replicate_<model>.yaml` | the three other models, a small second replicate: world 1 × 3 topologies × 16 statements, replicate 1, so each model has its own replicate floor | 48 each |
 | `numeric_baselines.yaml` | DeGroot, bounded confidence, Friedkin–Johnsen on the core worlds (Mac) | 45 |
 
 Topologies, all with 50 agents and mean degree ≈ 6: Watts–Strogatz (k = 6, β = 0.1),
@@ -35,7 +37,10 @@ Meta's (checked 2026-11-08). Its licence is still Meta's Llama 3.1 Community Lic
 Every model whose pilot passes (its smoke run and all 8 pilot runs finish) runs the core
 grid; the pilot judges reliability only, never how the opinions moved. `main/` (control
 and second replicate) is for `llama31_8b`, the main model. `scripts/indaco/run_all.sh`
-submits all of it as one chain of jobs, the scorer included.
+submits all of it as one chain of jobs, the scorer included. The follow-up sweeps were added
+after the experiment had run (2026-11-11) and go with `run_all.sh followup`; they use the
+experiment's worlds, so every follow-up run is paired with core runs. For the analysis,
+`control_v2_llama31_8b` replaces `main/control_llama31_8b`, which is kept only to show why.
 
 `tests/test_experiments.py` checks that every sweep uses only these statements, one vLLM
 model with these sampling settings, and the same worlds.

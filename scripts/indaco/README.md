@@ -45,6 +45,20 @@ quarter of the work; with several GPUs free it takes a few hours. When its jobs 
 Theo says so. `scripts/indaco/run_all.sh` with no type runs everything that is left in one
 go; never start it while a type's jobs are still running (it would start those runs twice).
 
+## 2b. Follow-up runs (after the experiment)
+
+Seven more sweeps, 464 runs, about 12 GPU-hours: a new no-interaction control for each of
+the four models and a small second replicate for Qwen, Mistral and OLMo
+(`configs/experiments/followup/`). Nothing done before is run again.
+
+```bash
+git pull
+scripts/indaco/run_all.sh followup
+```
+
+Each sweep gets one GPU, then the scorer, then a pack job that archives only these runs:
+`results/disensa_followup_<date>.tar.gz` (much smaller than the first archive).
+
 ## 3. Collect the results
 
 At any time, to see where things stand:
@@ -89,6 +103,8 @@ cases:
 | `dz-replicate_llama31_8b` | 240 runs, second replicate | the Llama pilot |
 | `dz-score-<sweep>` ×6 | the scorer rates every message of a sweep | that sweep |
 | `dz-pack` | summary + archive in `results/` | everything above |
+| `dz-control_v2_<model>` ×4 | follow-up: 80 runs without interactions, a new sampling seed every step | — (`run_all.sh followup`) |
+| `dz-replicate_<model>` ×3 | follow-up: 48 runs, a second replicate of world 1 (not Llama) | — (`run_all.sh followup`) |
 
 Every sweep job serves its model with vLLM on a free port of its node, then runs a 2-step
 **smoke run**. If the model is not served, its replies are not valid JSON, or more than 5% of

@@ -16,7 +16,7 @@ ROOT = Path("configs/experiments")
 TOPICS = list(csv.DictReader(open(ROOT / "topics.csv", encoding="utf-8")))
 STATEMENTS = [t["statement"] for t in TOPICS]
 SWEEPS = sorted(p for p in ROOT.rglob("*.yaml") if p.name != "base.yaml")
-LLM_SWEEPS = [p for p in SWEEPS if p.parent.name in ("pilot", "core", "main")]
+LLM_SWEEPS = [p for p in SWEEPS if p.parent.name in ("pilot", "core", "main", "followup")]
 SAMPLING = {"temperature": 0.7, "top_p": 0.9, "top_k": 40, "think": False}
 
 
@@ -71,10 +71,20 @@ def test_the_grids_cover_every_statement_world_and_topology():
             assert {r.config.seed for r in runs} == {100}  # never one of the experiment worlds
             continue
         assert used == set(STATEMENTS)
-        assert {r.config.seed for r in runs} == {1, 2, 3, 4, 5}
         topologies = {r.config.network.topology for r in runs}
+        if path.parent.name == "followup" and path.stem.startswith("replicate"):
+            assert {r.config.seed for r in runs} == {1}  # one world: a small second replicate
+            assert {r.config.replicate for r in runs} == {1}
+            assert topologies == {"watts_strogatz", "barabasi_albert", "erdos_renyi"}
+            assert len(runs) == 3 * 16
+            continue
+        assert {r.config.seed for r in runs} == {1, 2, 3, 4, 5}
+        # only the controls of followup/ draw a new sampling seed at every step
+        per_step = {r.config.dynamics.seed_per_step for r in runs}
+        assert per_step == {path.parent.name == "followup"}
         if path.stem.startswith("control"):
             assert {r.config.dynamics.interactions.max for r in runs} == {0}
+            assert len(runs) == 5 * 16
         else:
             assert topologies == {"watts_strogatz", "barabasi_albert", "erdos_renyi"}
             assert len(runs) == 5 * 3 * 16
@@ -89,6 +99,50 @@ def test_every_core_sweep_has_the_same_runs_apart_from_the_model():
 
     keys = [sorted(map(key, expand(p)[1])) for p in LLM_SWEEPS if p.parent.name == "core"]
     assert len(keys) >= 3 and all(k == keys[0] for k in keys)
+
+
+def _paired(r):
+    """What pairs two runs: everything but the model, the replicate and the names."""
+    c = r.config.model_dump(mode="json")
+    c["dynamics"].pop("models")
+    for k in ("name", "output_dir", "replicate"):
+        c.pop(k)
+    return str(c)
+
+
+def test_every_followup_sweep_pairs_with_core_runs_of_its_model():
+    """A control is a core run without interactions; a replicate, the core run again."""
+    for path in sorted((ROOT / "followup").glob("*.yaml")):
+        model = path.stem.removeprefix("control_v2_").removeprefix("replicate_")
+        _, runs = expand(path)
+        _, core = expand(ROOT / "core" / f"{model}.yaml")
+        assert {m.name for r in runs for m in r.config.dynamics.models} == {
+            m.name for r in core for m in r.config.dynamics.models
+        }
+        if path.stem.startswith("replicate"):
+            assert {_paired(r) for r in runs} <= {_paired(r) for r in core}
+        else:  # same worlds and statements as core's Watts-Strogatz runs (the network is unused)
+            ws = {
+                (r.config.seed, r.config.dynamics.statement)
+                for r in core
+                if r.config.network.topology == "watts_strogatz"
+            }
+            assert {(r.config.seed, r.config.dynamics.statement) for r in runs} == ws
+    assert len(list((ROOT / "followup").glob("control_v2_*.yaml"))) == 4
+
+
+def test_the_experiment_runs_keep_their_hashes():
+    """Hashes of runs done on INDACO (archive of 2026-11-11). A change that alters them would
+    make run_all.sh see every finished run as new and run the whole experiment again."""
+    done = {
+        "pilot/llama31_8b.yaml": {0: "0989c1804a08e02c", 7: "0ea522b5a19b9916"},
+        "core/mistral03_7b.yaml": {0: "59cf80a27dd08d1c", 239: "094be6f319be2704"},
+        "main/control_llama31_8b.yaml": {0: "c586ca5cd733db9a", 79: "bfaee060859cbf85"},
+        "main/replicate_llama31_8b.yaml": {0: "2a38cda34709ce09", 239: "9839b8ec1055fb0e"},
+    }
+    for file, hashes in done.items():
+        _, runs = expand(ROOT / file)
+        assert {i: runs[i].hash for i in hashes} == hashes, file
 
 
 def test_numeric_baselines_share_the_worlds():

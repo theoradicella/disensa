@@ -201,10 +201,11 @@ disensa ping ollama_chat/llama3.2:3b</code></pre>
         <tr><td>the starting opinions \(x(0)\)</td><td><code>seed</code></td></tr>
         <tr><td>which agent gets which model</td><td><code>seed</code></td></tr>
         <tr><td>who interacts with whom, at every step</td><td><code>seed</code> and <code>replicate</code></td></tr>
-        <tr><td>the sampling seed of the model calls</td><td><code>seed</code> and <code>replicate</code></td></tr>
+        <tr><td>the sampling seed of the model calls</td><td><code>seed</code> and <code>replicate</code> (and the step, with <code>seed_per_step</code>)</td></tr>
       </tbody>
     </table></div>
     <p>This split gives the two comparisons the experiments need. <strong>Same seed, different dynamics:</strong> an LLM run and a numeric run with the same seed start from exactly the same network and opinions, so the numeric rules are baselines for that very LLM run. <strong>Same seed, different replicate:</strong> two LLM runs on the same world differ only in the dynamics&rsquo; own randomness, so how much their outcomes differ measures how much of an outcome is chance rather than the world. Numeric rules are deterministic and ignore <code>replicate</code>; setting it on a numeric run gives a warning. A run with a replicate other than \(0\) has <code>_r&lt;replicate&gt;</code> at the end of its folder name.</p>
+    <p>By default the sampling seed is the same for every call of a run. A model given the same prompt with the same seed answers the same way, so an agent that hears nobody (<code>interactions.max</code> \(0\)) and writes back the same opinion and memory gets exactly the same prompt, and the same reply, at every later step: it is frozen. With <code>dynamics.seed_per_step: true</code> every step after the first has its own sampling seed, so a repeated prompt gets a fresh reply, as it would in a run with interactions, where the prompt changes every step. No-interaction controls need it.</p>
     <p>Each draw has its own random stream, derived from the two numbers with NumPy&rsquo;s <code>SeedSequence</code> (<code>seeding.py</code>), so no two draws share random numbers. <code>meta.json</code> records <code>"seeding": 2</code>. Runs made before disensa 0.3 used a single stream for opinions and interactions, have no <code>seeding</code> key, and cannot be reproduced exactly with the current code.</p>
 
     <h3 id="run-step">One step</h3>
