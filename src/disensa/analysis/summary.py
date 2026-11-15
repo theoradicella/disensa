@@ -1,10 +1,14 @@
 """Per-run summaries. Every function takes plain arrays, so it works on any run or simulation.
 
 clusters          sort the final opinions and split wherever two neighbours are more than
-                  δ apart. Default δ = 0.5: LLM beliefs move in steps of 0.5 (whole and
-                  half numbers), so two clusters must be more than one half-step apart to
-                  count as two. Numeric clusters are point masses: pass a small δ (e.g.
-                  0.05) to count them exactly, as the bounded-confidence figure does.
+                  δ apart. Default δ = 0.5, half a point of the five-point scale:
+                  opinions closer than that count as the same position. In 30 steps on
+                  sparse networks neither LLM nor numeric agents settle at exactly the same
+                  number (bounded confidence still drifts, Friedkin–Johnsen keeps each agent
+                  at its own value), so the same δ is used for both when they are compared
+                  (fit.py). Only a numeric run long enough to converge ends in point masses,
+                  which a small δ (e.g. 0.05) counts exactly, as the bounded-confidence
+                  figure does.
 convergence_step  the first step after which no opinion changes by `tol` or more
 drift             final mean − initial mean
 moved             at each step, the share of agents whose opinion changed
